@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'leaflet/dist/leaflet.css';
+
+@layer base {
+  * {
+    @apply border-gray-300;
+  }
+  
+  body {
+    @apply bg-white text-black m-0 min-h-screen;
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply bg-black text-white hover:bg-gray-800 active:bg-gray-900;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-black border border-black hover:bg-gray-50 active:bg-gray-100;
+  }
+  
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
+  }
+  
+  .btn-success {
+    @apply bg-green-600 text-white hover:bg-green-700 active:bg-green-800;
+  }
+  
+  .input {
+    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent;
+  }
+  
+  .card {
+    @apply bg-white border border-gray-200 rounded-lg shadow-sm p-6;
+  }
+  
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4;
+  }
+  
+  .modal-content {
+    @apply bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-y-auto;
+  }
+  
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200;
+  }
+  
+  .sidebar-link-active {
+    @apply bg-black text-white;
+  }
+  
+  .sidebar-link-inactive {
+    @apply text-gray-700 hover:bg-gray-100;
+  }
+}
+
+/* Toast Notification Styles */
+.Toastify__toast {
+  @apply rounded-lg shadow-lg;
+}
+
+.Toastify__toast--success {
+  @apply bg-green-600;
+}
+
+.Toastify__toast--error {
+  @apply bg-red-600;
+}
+
+.Toastify__toast--warning {
+  @apply bg-yellow-500;
+}
+
+.Toastify__toast--info {
+  @apply bg-blue-600;
+}
