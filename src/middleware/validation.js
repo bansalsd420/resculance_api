@@ -25,11 +25,23 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Password is required')
 ];
 
+const changePasswordValidation = [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters long')
+];
+
 // Organization validation rules
 const createOrganizationValidation = [
   body('name').trim().notEmpty().withMessage('Organization name is required'),
-  body('type').isIn(['HOSPITAL', 'FLEET_OWNER']).withMessage('Invalid organization type'),
-  body('email').optional().isEmail().normalizeEmail().withMessage('Please provide a valid email')
+  body('type')
+    .notEmpty()
+    .withMessage('Organization type is required')
+    .isIn(['hospital', 'fleet_owner', 'HOSPITAL', 'FLEET_OWNER'])
+    .withMessage('Invalid organization type. Must be hospital or fleet_owner')
+    .customSanitizer(value => value.toLowerCase()),
+  body('email').optional().isEmail().withMessage('Please provide a valid email').normalizeEmail(),
+  body('phone').optional().trim(),
+  body('address').optional().trim()
 ];
 
 // Ambulance validation rules
@@ -73,6 +85,7 @@ module.exports = {
   validate,
   registerValidation,
   loginValidation,
+  changePasswordValidation,
   createOrganizationValidation,
   createAmbulanceValidation,
   createPatientValidation,

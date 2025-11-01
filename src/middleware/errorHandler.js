@@ -7,12 +7,21 @@ const errorHandler = (err, req, res, next) => {
 
   // Log error for debugging
   if (process.env.NODE_ENV === 'development') {
-    console.error('Error:', err);
+    console.error('Error Stack:', err.stack);
+  } else {
+    // In production, log only essential info (use proper logging service)
+    console.error('Error:', {
+      message: err.message,
+      statusCode: error.statusCode,
+      path: req.path,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
   }
 
   // MySQL duplicate key error
   if (err.code === 'ER_DUP_ENTRY') {
-    const field = err.sqlMessage.match(/for key '(\w+)'/)?.[1] || 'field';
+    const field = err.sqlMessage?.match(/for key '(\w+)'/)?.[1] || 'field';
     error = new AppError(`Duplicate value for ${field}. Please use another value.`, 400);
   }
 
@@ -41,11 +50,19 @@ const errorHandler = (err, req, res, next) => {
     error = new AppError('Your token has expired. Please log in again.', 401);
   }
 
+  // Don't expose internal error details in production
+  const message = error.statusCode >= 500 && process.env.NODE_ENV === 'production'
+    ? 'Internal Server Error'
+    : error.message || 'Internal Server Error';
+
   // Send error response
   res.status(error.statusCode || 500).json({
     success: false,
-    error: error.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: message,
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      details: err 
+    })
   });
 };
 

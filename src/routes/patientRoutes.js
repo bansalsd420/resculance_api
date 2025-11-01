@@ -82,7 +82,7 @@ router.post(
 );
 
 router.patch(
-  '/:patientId/offboard',
+  '/sessions/:sessionId/offboard',
   authorize(
     ROLES.SUPERADMIN,
     ROLES.HOSPITAL_ADMIN,
@@ -97,8 +97,8 @@ router.patch(
   PatientController.offboard
 );
 
-router.get('/:patientId/sessions', PatientController.getSessions);
-router.get('/:patientId/sessions/:sessionId', PatientController.getSession);
+router.get('/sessions', PatientController.getSessions);
+router.get('/sessions/:sessionId', PatientController.getSession);
 
 router.post(
   '/:patientId/vital-signs',

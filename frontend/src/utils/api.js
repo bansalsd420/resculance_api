@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+// Default to 5001 if env not provided to match backend
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -62,6 +63,7 @@ api.interceptors.response.use(
       if (!refreshToken) {
         localStorage.clear();
         window.location.href = '/login';
+        toast.error('Session expired. Please login again.');
         return Promise.reject(error);
       }
 
@@ -81,15 +83,18 @@ api.interceptors.response.use(
         processQueue(refreshError, null);
         localStorage.clear();
         window.location.href = '/login';
+        toast.error('Session expired. Please login again.');
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
 
-    // Show error toast
-    const message = error.response?.data?.message || 'An error occurred';
-    toast.error(message);
+    // Show error toast only for non-401 errors
+    if (error.response?.status !== 401) {
+      const message = error.response?.data?.error || error.response?.data?.message || error.message || 'An error occurred';
+      toast.error(message);
+    }
 
     return Promise.reject(error);
   }

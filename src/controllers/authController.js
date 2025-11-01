@@ -196,8 +196,20 @@ class AuthController {
     try {
       const { currentPassword, newPassword } = req.body;
 
+      if (!currentPassword || !newPassword) {
+        return next(new AppError('Current password and new password are required', 400));
+      }
+
+      if (newPassword.length < 6) {
+        return next(new AppError('New password must be at least 6 characters long', 400));
+      }
+
       const user = await UserModel.findById(req.user.id);
       
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+
       // Verify current password
       const isValid = await UserModel.comparePassword(currentPassword, user.password);
       if (!isValid) {
@@ -210,38 +222,6 @@ class AuthController {
       res.json({
         success: true,
         message: 'Password changed successfully'
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  static async refreshToken(req, res, next) {
-    try {
-      const { refreshToken } = req.body;
-
-      if (!refreshToken) {
-        return next(new AppError('Refresh token is required', 400));
-      }
-
-      // Verify refresh token
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-
-      const user = await UserModel.findById(decoded.id);
-      if (!user || user.status !== 'active') {
-        return next(new AppError('Invalid refresh token', 401));
-      }
-
-      // Generate new access token
-      const accessToken = jwt.sign(
-        { id: user.id, role: user.role, organizationId: user.organization_id },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE || '7d' }
-      );
-
-      res.json({
-        success: true,
-        data: { accessToken }
       });
     } catch (error) {
       next(error);

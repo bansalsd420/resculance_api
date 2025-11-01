@@ -17,13 +17,34 @@ export const authService = {
 };
 
 export const organizationService = {
-  getAll: async () => {
-    const response = await api.get('/organizations');
+  getAll: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/organizations${queryString ? '?' + queryString : ''}`);
     return response.data;
   },
 
   create: async (data) => {
     const response = await api.post('/organizations', data);
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/organizations/${id}`, data);
+    return response.data;
+  },
+
+  suspend: async (id) => {
+    const response = await api.patch(`/organizations/${id}/suspend`);
+    return response.data;
+  },
+
+  activate: async (id) => {
+    const response = await api.patch(`/organizations/${id}/activate`);
+    return response.data;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/organizations/${id}`);
     return response.data;
   },
 
@@ -34,8 +55,9 @@ export const organizationService = {
 };
 
 export const userService = {
-  getAll: async () => {
-    const response = await api.get('/users');
+  getAll: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/users${queryString ? '?' + queryString : ''}`);
     return response.data;
   },
 
@@ -49,8 +71,18 @@ export const userService = {
     return response.data;
   },
 
-  reject: async (id) => {
-    const response = await api.patch(`/users/${id}/reject`);
+  suspend: async (id) => {
+    const response = await api.patch(`/users/${id}/suspend`);
+    return response.data;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/users/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/users/${id}`);
     return response.data;
   },
 
@@ -61,8 +93,14 @@ export const userService = {
 };
 
 export const ambulanceService = {
-  getAll: async () => {
-    const response = await api.get('/ambulances');
+  getAll: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/ambulances${queryString ? '?' + queryString : ''}`);
+    return response.data;
+  },
+
+  getMyAmbulances: async () => {
+    const response = await api.get('/ambulances/my-ambulances');
     return response.data;
   },
 
@@ -76,18 +114,33 @@ export const ambulanceService = {
     return response.data;
   },
 
-  assignStaff: async (id, data) => {
-    const response = await api.post(`/ambulances/${id}/assign-staff`, data);
+  assignUser: async (id, userId) => {
+    const response = await api.post(`/ambulances/${id}/assign`, { userId });
+    return response.data;
+  },
+
+  unassignUser: async (id, userId) => {
+    const response = await api.delete(`/ambulances/${id}/unassign/${userId}`);
+    return response.data;
+  },
+
+  getAssignedUsers: async (id) => {
+    const response = await api.get(`/ambulances/${id}/assigned-users`);
     return response.data;
   },
 
   updateLocation: async (id, latitude, longitude) => {
-    const response = await api.patch(`/ambulances/${id}/location`, { latitude, longitude });
+    const response = await api.post(`/ambulances/${id}/location`, { latitude, longitude });
     return response.data;
   },
 
-  updateStatus: async (id, status) => {
-    const response = await api.patch(`/ambulances/${id}/status`, { status });
+  update: async (id, data) => {
+    const response = await api.put(`/ambulances/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/ambulances/${id}`);
     return response.data;
   },
 
@@ -98,8 +151,9 @@ export const ambulanceService = {
 };
 
 export const patientService = {
-  getAll: async () => {
-    const response = await api.get('/patients');
+  getAll: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/patients${queryString ? '?' + queryString : ''}`);
     return response.data;
   },
 
@@ -108,8 +162,39 @@ export const patientService = {
     return response.data;
   },
 
+  update: async (id, data) => {
+    const response = await api.put(`/patients/${id}`, data);
+    return response.data;
+  },
+
+  hideData: async (id) => {
+    const response = await api.patch(`/patients/${id}/hide-data`);
+    return response.data;
+  },
+
+  unhideData: async (id) => {
+    const response = await api.patch(`/patients/${id}/unhide-data`);
+    return response.data;
+  },
+
   onboard: async (patientId, data) => {
     const response = await api.post(`/patients/${patientId}/onboard`, data);
+    return response.data;
+  },
+
+  offboard: async (sessionId, data) => {
+    const response = await api.patch(`/patients/sessions/${sessionId}/offboard`, data);
+    return response.data;
+  },
+
+  getSessions: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/patients/sessions${queryString ? '?' + queryString : ''}`);
+    return response.data;
+  },
+
+  getSession: async (sessionId) => {
+    const response = await api.get(`/patients/sessions/${sessionId}`);
     return response.data;
   },
 
@@ -128,6 +213,11 @@ export const patientService = {
     return response.data;
   },
 
+  getByCode: async (code) => {
+    const response = await api.get(`/patients/code/${code}`);
+    return response.data;
+  },
+
   getById: async (id) => {
     const response = await api.get(`/patients/${id}`);
     return response.data;
@@ -135,8 +225,9 @@ export const patientService = {
 };
 
 export const collaborationService = {
-  getAll: async () => {
-    const response = await api.get('/collaborations');
+  getAll: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const response = await api.get(`/collaborations${queryString ? '?' + queryString : ''}`);
     return response.data;
   },
 
@@ -145,13 +236,23 @@ export const collaborationService = {
     return response.data;
   },
 
-  updateStatus: async (id, status) => {
-    const response = await api.patch(`/collaborations/${id}/status`, { status });
+  accept: async (id, responseMessage) => {
+    const response = await api.patch(`/collaborations/${id}/accept`, { responseMessage });
     return response.data;
   },
 
-  assignAmbulance: async (id, ambulanceId) => {
-    const response = await api.patch(`/collaborations/${id}/assign-ambulance`, { ambulanceId });
+  reject: async (id, responseMessage) => {
+    const response = await api.patch(`/collaborations/${id}/reject`, { responseMessage });
+    return response.data;
+  },
+
+  cancel: async (id) => {
+    const response = await api.patch(`/collaborations/${id}/cancel`);
+    return response.data;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/collaborations/${id}`);
     return response.data;
   },
 };

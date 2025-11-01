@@ -1,1238 +1,620 @@
-# 🚑 RESCULANCE INDIA - Emergency Medical Response System# RESCULANCE - Smart Ambulance Management Platform 🚑# RESCULANCE - Smart Ambulance Management Platform
+# RESCULANCE - Smart Ambulance Management Platform 🚑# RESCULANCE - Smart Ambulance Management Platform
 
 
 
-> **Modern Medical Dashboard for Real-Time Ambulance Management & Patient Care**
+[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
+
+[![MySQL](https://img.shields.io/badge/MySQL-8.0+-blue.svg)](https://www.mysql.com/)[![MySQL](https://img.shields.io/badge/MySQL-8.0+-blue.svg)](https://www.mysql.com/)
+
+[![React](https://img.shields.io/badge/React-19+-blue.svg)](https://reactjs.org/)[![React](https://img.shields.io/badge/React-19+-blue.svg)](https://reactjs.org/)
+
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-4.6+-black.svg)](https://socket.io/)[![License](https://img.shields.io/badge/License-ISC-yellow.svg)](LICENSE)
 
 
 
-A comprehensive healthcare platform connecting ambulances, hospitals, and fleet owners for efficient emergency response. Built with React, Node.js, and MySQL.[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
+> **RESCULANCE** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time for faster emergency response.**RESCULANCE** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time.
 
 
 
----[![MySQL](https://img.shields.io/badge/MySQL-8.0+-blue.svg)](https://www.mysql.com/)[![MySQL](https://img.shields.io/badge/MySQL-8.0+-blue.svg)](https://www.mysql.com/)
+---## 🚀 Quick Start
 
 
 
-## 🎯 **Core Features**[![React](https://img.shields.io/badge/React-19+-blue.svg)](https://reactjs.org/)[![React](https://img.shields.io/badge/React-19+-blue.svg)](https://reactjs.org/)
+## 📑 Table of Contents### Prerequisites
 
+- Node.js >= 16.0.0
 
+- [Quick Start](#-quick-start)- MySQL >= 8.0
 
-### **🏥 Organization Management**[![Socket.IO](https://img.shields.io/badge/Socket.IO-4.6+-black.svg)](https://socket.io/)[![License](https://img.shields.io/badge/License-ISC-yellow.svg)](LICENSE)
+- [Features](#-features)- npm >= 8.0.0
 
-- Multi-type organization support (Hospitals & Fleet Owners)
+- [Installation](#-installation)
 
-- Organization collaboration and networking
+- [Configuration](#-configuration)### Backend Setup
 
-- Real-time status tracking (Active/Suspended)
+- [API Documentation](#-api-documentation)```bash
 
-- Advanced filtering and search capabilities> **RESCULANCE** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time for faster emergency response.**RESCULANCE** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time.
+- [WebSocket Events](#-websocket-events)# Install dependencies
 
+- [User Roles](#-user-roles--permissions)npm install
 
+- [Database Schema](#-database-schema)
 
-### **🚑 Ambulance Fleet Management**
+- [Frontend Application](#-frontend-application)# Configure environment
 
-- Real-time GPS tracking with map integration
+- [Security](#-security-features)cp .env.example .env
 
-- Device status monitoring (Stethoscope, Ventilator, Defibrillator, etc.)---## 🚀 Quick Start
+- [Testing](#-testing)# Edit .env with your database credentials
 
-- Ambulance availability and assignment tracking
-
-- Equipment inventory management
-
-
-
-### **👤 Patient Management**## 📑 Table of Contents### Prerequisites
-
-- Patient registration and session tracking
-
-- Vital signs monitoring (Heart Rate, SpO2, BP, Temperature)- Node.js >= 16.0.0
-
-- Medical history and emergency contacts
-
-- Real-time patient status updates- [Quick Start](#-quick-start)- MySQL >= 8.0
-
-
-
-### **🤝 Collaboration System**- [Features](#-features)- npm >= 8.0.0
-
-- Inter-organization collaboration requests
-
-- Hospital network integration- [Installation](#-installation)
-
-- Emergency response coordination
-
-- Communication channels (Chat, Video, CCTV feeds)- [Configuration](#-configuration)### Backend Setup
-
-
-
-### **👥 User Management**- [API Documentation](#-api-documentation)```bash
-
-- Role-based access control (Superadmin, Hospital Admin, Fleet Owner, Driver, Paramedic)
-
-- User authentication with JWT tokens- [WebSocket Events](#-websocket-events)# Install dependencies
-
-- Audit logging for all user actions
-
-- User status management- [User Roles](#-user-roles--permissions)npm install
-
-
-
----- [Database Schema](#-database-schema)
-
-
-
-## 🚀 **Quick Start**- [Frontend Application](#-frontend-application)# Configure environment
-
-
-
-### **Prerequisites**- [Security](#-security-features)cp .env.example .env
-
-```bash
-
-Node.js >= 16.x- [Testing](#-testing)# Edit .env with your database credentials
-
-MySQL >= 8.0
-
-npm >= 8.x- [Deployment](#-deployment)
-
-```
+- [Deployment](#-deployment)
 
 - [Troubleshooting](#-troubleshooting)# Run migrations and seed data
 
-### **1. Clone & Install**
+npm run migrate
 
-```bashnpm run migrate
-
-git clone <repository-url>
-
-cd resculance_api---npm run seed
+---npm run seed
 
 
-
-# Install backend dependencies
-
-npm install
 
 ## 🚀 Quick Start# Start development server
 
-# Install frontend dependencies
+npm run dev
 
-cd frontendnpm run dev
-
-npm install
-
-cd ..```bash```
-
-```
+```bash```
 
 # 1. Install backend dependencies
 
-### **2. Database Setup**
-
-```bashnpm installBackend runs at: **http://localhost:5001**
-
-# Configure MySQL connection in src/config/database.js
-
-# Default credentials: root / Shreshthra@432
+npm installBackend runs at: **http://localhost:5001**
 
 
 
-# Run migrations# 2. Setup environment### Frontend Setup
-
-npm run migrate
+# 2. Setup environment### Frontend Setup
 
 cp .env.example .env```bash
 
-# Seed default data (creates superadmin user)
-
-npm run seed# Edit .env with your database credentialscd frontend
-
-```
+# Edit .env with your database credentialscd frontend
 
 npm install
-
-### **3. Start Servers**
 
 # 3. Create database and run migrations
 
-**Backend (Port 5001):**
+npm run migrate# Configure environment
 
-```bashnpm run migrate# Configure environment
+npm run seedcp .env.example .env
 
-PORT=5001 node src/server.js
+# Edit .env with API URL
 
-```npm run seedcp .env.example .env
+# 4. Start backend server
 
-
-
-**Frontend (Port 5173):**# Edit .env with API URL
-
-```bash
-
-cd frontend# 4. Start backend server
-
-npm run dev
-
-```npm run devnpm run dev
-
-
-
-### **4. Default Login**```
+npm run devnpm run dev
 
 ```
 
-Email: superadmin@resculance.com# 5. In a new terminal, setup frontend
+# 5. In a new terminal, setup frontend
 
-Password: Admin@123
-
-```cd frontendFrontend runs at: **http://localhost:5173**
-
-
-
----npm install
-
-
-
-## 📡 **API Endpoints**cp .env.example .env### Default Login
-
-
-
-### **Authentication**npm run dev- **Email:** `superadmin@resculance.com`
-
-```http
-
-POST   /api/auth/login           # User login```- **Password:** `Admin@123`
-
-POST   /api/auth/logout          # User logout
-
-GET    /api/auth/me              # Get current user
-
-POST   /api/auth/refresh-token   # Refresh JWT token
-
-```**Default Login:**## 📚 Documentation
-
-
-
-### **Users**- **Email:** `superadmin@resculance.com`
-
-```http
-
-GET    /api/users                # List all users- **Password:** `Admin@123`For complete API documentation, setup guides, and deployment instructions, see:
-
-POST   /api/users                # Create new user
-
-GET    /api/users/:id            # Get user by ID
-
-PUT    /api/users/:id            # Update user
-
-DELETE /api/users/:id            # Delete user**Servers:****[API_DOCUMENTATION.md](./API_DOCUMENTATION.md)** - Comprehensive guide covering:
-
-PATCH  /api/users/:id/status     # Suspend/Activate user
-
-```- **Backend:** http://localhost:5001- All API endpoints with examples
-
-
-
-### **Organizations**- **Frontend:** http://localhost:5173- WebSocket events
-
-```http
-
-GET    /api/organizations        # List all organizations- Database schema
-
-POST   /api/organizations        # Create organization
-
-GET    /api/organizations/:id    # Get organization details---- Frontend integration
-
-PUT    /api/organizations/:id    # Update organization
-
-DELETE /api/organizations/:id    # Delete organization- Deployment guide
-
-PATCH  /api/organizations/:id/status  # Suspend/Activate
-
-```## ✨ Features- Troubleshooting
-
-
-
-### **Ambulances**
-
-```http
-
-GET    /api/ambulances           # List all ambulances### Core Capabilities## ✨ Key Features
-
-POST   /api/ambulances           # Register ambulance
-
-GET    /api/ambulances/:id       # Get ambulance details- 🏥 **Multi-Organization Management** - Separate workflows for Hospitals and Fleet Owners
-
-PUT    /api/ambulances/:id       # Update ambulance
-
-DELETE /api/ambulances/:id       # Delete ambulance- 👥 **Role-Based Access Control** - 9 distinct roles with granular permissions- **Multi-Organization Management** - Hospitals & Fleet Owners
-
-PATCH  /api/ambulances/:id/availability  # Set availability
-
-```- 🚑 **Ambulance Fleet Management** - Complete lifecycle management with approval workflows- **Role-Based Access Control** - 9 distinct user roles
-
-
-
-### **Patients**- 📊 **Real-Time Patient Monitoring** - Live vital signs tracking (Heart Rate, BP, SpO2, Temp)- **Real-Time Patient Monitoring** - Vital signs tracking via WebSocket
-
-```http
-
-GET    /api/patients             # List all patients- 📍 **GPS Tracking** - Real-time ambulance location updates- **GPS Ambulance Tracking** - Live location updates
-
-POST   /api/patients             # Register patient
-
-GET    /api/patients/:id         # Get patient details- 🤝 **Collaboration System** - Fleet owners can provide ambulances to hospitals- **Collaboration System** - Hospital-Fleet owner coordination
-
-PUT    /api/patients/:id         # Update patient
-
-DELETE /api/patients/:id         # Delete patient- 💬 **Communication Hub** - Text, audio, and video communication between doctors and paramedics- **Audit Logging** - Complete compliance tracking
-
-POST   /api/patients/:id/session # Create patient session
-
-GET    /api/patients/sessions/:sessionId  # Get session details- 🔐 **Data Privacy** - Selective data hiding for sensitive patient information
-
-POST   /api/patients/sessions/:sessionId/vitals  # Add vital signs
-
-```- 📝 **Audit Logging** - Complete activity tracking for compliance## 🏗️ Architecture
-
-
-
-### **Collaborations**- 🔄 **Session Management** - Patient onboarding, monitoring, and offboarding workflows
-
-```http
-
-GET    /api/collaborations       # List collaborations### Backend
-
-POST   /api/collaborations       # Create collaboration request
-
-GET    /api/collaborations/:id   # Get collaboration details### Technical Features- **Framework:** Node.js + Express.js
-
-PATCH  /api/collaborations/:id/status  # Approve/Reject/Cancel
-
-```- RESTful API with 49+ endpoints- **Database:** MySQL 8.0+
-
-
-
----- WebSocket support via Socket.IO for real-time updates- **Real-time:** Socket.IO
-
-
-
-## 🎨 **Medical Dashboard Design**- JWT authentication with access and refresh tokens- **Authentication:** JWT (Access & Refresh tokens)
-
-
-
-### **Color Palette**- Input validation using express-validator- **Security:** bcrypt, helmet, rate limiting
-
-```css
-
-Primary:   #0ea5e9 (Cyan)    - Actions, links, active states- Rate limiting (100 req/15 min)
-
-Slate:     #1e293b → #94a3b8 - Base colors, backgrounds
-
-Success:   #22c55e            - Success states, active status- CORS protection with configurable origins### Frontend
-
-Warning:   #f97316            - Warning states, pending actions
-
-Danger:    #ef4444            - Error states, critical alerts- SQL injection prevention via parameterized queries- **Framework:** React 19+ with Vite
-
-Info:      #3b82f6            - Information, neutral states
-
-```- **Styling:** Tailwind CSS
-
-
-
-### **Design Features**---- **State Management:** Context API
-
-- **Dark Mode Support** - Automatic theme switching with localStorage
-
-- **Pulse Animations** - Live status indicators with smooth animations- **Routing:** React Router v7
-
-- **Gradient Cards** - Medical metric cards with gradient backgrounds
-
-- **Status Badges** - Color-coded badges for various states## 📋 System Requirements- **API Client:** Axios with interceptors
-
-- **Responsive Tables** - Mobile-friendly data tables
-
-- **Modal Dialogs** - Smooth modal animations- **Real-time:** Socket.IO Client
-
-- **Loading States** - Skeleton loaders and spinners
-
-- **Empty States** - Informative empty state designs### Prerequisites
-
-
-
-### **UI Components**- **Node.js** >= 16.0.0## 🗂️ Project Structure
-
-- Clean medical-themed buttons (Primary, Secondary, Success, Danger, Warning)
-
-- Form inputs with validation states- **npm** >= 8.0.0
-
-- Data tables with hover effects and sorting
-
-- Modal dialogs with backdrop blur- **MySQL** >= 8.0```
-
-- Status badges with pulse animations
-
-- Metric cards with icons and gradientsresculance_api/
-
-- Sidebar navigation with active states
-
-- Loading overlays and spinners---├── src/                        # Backend source code
-
-
-
----│   ├── config/                 # Configuration files
-
-
-
-## 🗄️ **Database Schema**## 📦 Installation│   ├── controllers/            # Request handlers
-
-
-
-### **Core Tables**│   ├── middleware/             # Auth, validation, error handling
-
-
-
-**users** - System users### Backend Setup│   ├── models/                 # Database models
-
-```sql
-
-id, organizationId, email, password, firstName, lastName, │   ├── routes/                 # API routes
-
-phoneNumber, role, status, createdAt, updatedAt
-
-``````bash│   ├── socket/                 # WebSocket handlers
-
-
-
-**organizations** - Hospitals & Fleet Owners# Install dependencies│   ├── database/               # Migrations & seeds
-
-```sql
-
-id, name, type, address, phoneNumber, email, licenseNumber,npm install│   └── server.js               # Entry point
-
-status, createdAt, updatedAt
-
-```├── frontend/                   # React application
-
-
-
-**ambulances** - Ambulance fleet# Dependencies installed:│   ├── src/
-
-```sql
-
-id, organizationId, vehicleNumber, driverName, driverPhone,# - express (v4.18.2) - Web framework│   │   ├── components/         # Reusable UI components
-
-deviceStatus, gpsEnabled, availability, status, createdAt
-
-```# - mysql2 (v3.6.0) - MySQL client│   │   ├── contexts/           # React Context providers
-
-
-
-**patients** - Patient records# - socket.io (v4.6.0) - WebSocket support│   │   ├── pages/              # Route pages
-
-```sql
-
-id, firstName, lastName, dob, gender, bloodGroup, phoneNumber,# - jsonwebtoken (v9.0.2) - JWT authentication│   │   ├── services/           # API & Socket services
-
-emergencyContact, address, status, createdAt
-
-```# - bcrypt (v5.1.1) - Password hashing│   │   └── utils/              # Helper functions
-
-
-
-**patient_sessions** - Active patient sessions# - express-validator (v7.0.1) - Input validation│   └── public/                 # Static assets
-
-```sql
-
-id, patientId, ambulanceId, pickupLocation, dropLocation,# - helmet (v7.1.0) - Security headers├── .env.example               # Environment template
-
-sessionStatus, startTime, endTime, createdAt
-
-```# - cors (v2.8.5) - CORS middleware├── package.json               # Backend dependencies
-
-
-
-**vital_signs** - Patient vitals```└── API_DOCUMENTATION.md       # Complete API docs
-
-```sql
-
-id, sessionId, heartRate, bloodPressure, oxygenLevel, ```
-
-temperature, recordedAt, recordedBy
-
-```### Frontend Setup
-
-
-
-**collaboration_requests** - Organization collaborations## 🔐 User Roles
-
-```sql
-
-id, requestingOrgId, targetOrgId, collaborationType,```bash
-
-status, requestedAt, respondedAt
-
-```cd frontend| Role | Organization | Permissions |
-
-
-
-### **Relationships**npm install|------|-------------|-------------|
-
-```
-
-users → organizations (Many-to-One)| `superadmin` | System | Full system access |
-
-ambulances → organizations (Many-to-One)
-
-patient_sessions → patients (Many-to-One)# Dependencies installed:| `hospital_admin` | Hospital | Manage hospital & staff |
-
-patient_sessions → ambulances (Many-to-One)
-
-vital_signs → patient_sessions (Many-to-One)# - react (v19.1.0) - UI library| `hospital_staff` | Hospital | Limited operations |
-
-collaboration_requests → organizations (Many-to-Many)
-
-```# - vite (v7.1.3) - Build tool| `hospital_doctor` | Hospital | Patient care & monitoring |
-
-
-
----# - tailwindcss (v3.4.17) - CSS framework| `hospital_paramedic` | Hospital | Vital signs entry |
-
-
-
-## 🔐 **Security Features**# - axios (v1.13.0) - HTTP client| `fleet_admin` | Fleet | Manage fleet & staff |
-
-
-
-### **Authentication**# - socket.io-client (v4.8.1) - WebSocket client| `fleet_staff` | Fleet | Limited operations |
-
-- JWT token-based authentication
-
-- Secure password hashing with bcrypt (10 rounds)# - react-toastify (v11.0.3) - Notifications| `fleet_doctor` | Fleet | Patient care in ambulance |
-
-- Token refresh mechanism
-
-- Protected route middleware```| `fleet_paramedic` | Fleet | Ambulance operations |
-
-
-
-### **Authorization**
-
-- Role-based access control (RBAC)
-
-- Organization-level data isolation---## 🛠️ Development Scripts
-
-- User action auditing
-
-- Status-based access restrictions
-
-
-
-### **Validation**## ⚙️ Configuration### Backend
-
-- Input sanitization with express-validator
-
-- SQL injection prevention```bash
-
-- XSS protection
-
-- Request rate limiting### Backend Environment Variablesnpm run dev        # Start with nodemon (auto-reload)
-
-
-
-### **Audit Trail**npm start          # Start production server
-
-- User action logging
-
-- IP address trackingCreate `.env` file in the project root:npm run migrate    # Run database migrations
-
-- Timestamp recording
-
-- Change historynpm run seed       # Seed initial data
-
-
-
----```env```
-
-
-
-## 🧪 **Testing**# Server Configuration
-
-
-
-### **API Testing**NODE_ENV=development### Frontend
-
-Import `RESCULANCE_API.postman_collection.json` into Postman for complete API testing.
-
-PORT=5001```bash
-
-**Test Scenarios:**
-
-1. Login with superadmin credentialsnpm run dev        # Start dev server (Vite HMR)
-
-2. Create hospital organization
-
-3. Create fleet owner organization# Database Configurationnpm run build      # Build for production
-
-4. Register ambulance under fleet owner
-
-5. Create patient recordDB_HOST=localhostnpm run preview    # Preview production build
-
-6. Start patient session
-
-7. Record vital signsDB_PORT=3306npm run lint       # Run ESLint
-
-8. Create collaboration request
-
-9. Approve/reject collaborationDB_USER=root```
-
-
-
-### **Manual Testing**DB_PASSWORD=your_mysql_password
-
-```bash
-
-# Test backend healthDB_NAME=resculance_db## 📡 API Endpoints Overview
-
-curl http://localhost:5001/api/
-
-
-
-# Test login
-
-curl -X POST http://localhost:5001/api/auth/login \# JWT Configuration### Authentication
-
-  -H "Content-Type: application/json" \
-
-  -d '{"email":"superadmin@resculance.com","password":"Admin@123"}'JWT_SECRET=your_super_secret_jwt_key_change_this_32_chars_minimum- `POST /api/v1/auth/register` - Register new user
-
-```
-
-JWT_REFRESH_SECRET=your_refresh_token_secret_32_chars_minimum- `POST /api/v1/auth/login` - User login
-
----
-
-JWT_EXPIRE=7d- `POST /api/v1/auth/refresh-token` - Refresh access token
-
-## 📦 **Tech Stack**
-
-JWT_REFRESH_EXPIRE=30d- `GET /api/v1/auth/profile` - Get user profile
-
-### **Backend**
-
-- **Node.js 16+** - Runtime environment- `PUT /api/v1/auth/change-password` - Change password
-
-- **Express.js 4.18** - Web framework
-
-- **MySQL 8.0** - Database# CORS Configuration
-
-- **JWT** - Authentication
-
-- **bcrypt** - Password hashingCORS_ORIGIN=http://localhost:5173### Organizations (49 total endpoints)
-
-- **express-validator** - Input validation
-
-- **Socket.IO** - Real-time communication- CRUD operations for hospitals & fleet owners
-
-
-
-### **Frontend**# Rate Limiting- User management within organizations
-
-- **React 19.1** - UI library
-
-- **Vite 7.1** - Build toolRATE_LIMIT_WINDOW_MS=900000- Ambulance fleet management
-
-- **Tailwind CSS 3.4** - Styling framework
-
-- **React Router 7.1** - NavigationRATE_LIMIT_MAX_REQUESTS=100- Patient records & sessions
-
-- **Axios** - HTTP client
-
-- **Leaflet** - Map integration```- Real-time vital signs monitoring
-
-- **Socket.IO Client** - WebSocket client
-
-- Collaboration requests
-
----
-
-### Frontend Environment Variables
-
-## 🌐 **Real-Time Features**
-
-**See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for complete endpoint reference.**
-
-### **WebSocket Events**
-
-```javascriptCreate `.env` file in the `frontend` directory:
-
-// Patient Session Updates
-
-socket.on('session:created', (data) => {})## 🌐 WebSocket Events
-
-socket.on('session:updated', (data) => {})
-
-socket.on('vitals:updated', (data) => {})```env
-
-
-
-// Ambulance Tracking# API ConfigurationReal-time communication for:
-
-socket.on('ambulance:location', (data) => {})
-
-socket.on('ambulance:status', (data) => {})VITE_API_BASE_URL=http://localhost:5001/api/v1- Location tracking (`location_update`)
-
-
-
-// Collaboration UpdatesVITE_SOCKET_URL=http://localhost:5001- Vital signs (`vital_update`)
-
-socket.on('collaboration:request', (data) => {})
-
-socket.on('collaboration:response', (data) => {})```- Messaging (`message`)
-
-```
-
-- Audio/Video calls (`call_request`, `video_request`)
-
-### **Live Dashboard Features**
-
-- Real-time ambulance GPS tracking on map---- Emergency alerts (`emergency_alert`)
-
-- Live vital signs monitoring
-
-- CCTV feed integration (4 camera grids)- Patient status (`patient_onboarded`, `patient_offboarded`)
-
-- Hospital network status
-
-- Communication channels (Chat + Video)## 🗄️ Database Setup
-
-- Device status indicators
-
-## 🚀 Deployment
-
----
-
-### Step 1: Create Database
-
-## 📱 **Frontend Pages**
-
-### Production Build
-
-### **/login** - Authentication
-
-- Email/password login form```sql
-
-- Remember me checkbox
-
-- JWT token storage-- Connect to MySQL**Backend:**
-
-- Redirect to dashboard on success
-
-mysql -u root -p```bash
-
-### **/dashboard** - Main Dashboard
-
-- Statistics cards (Total organizations, ambulances, active sessions)npm install --production
-
-- Recent activity timeline
-
-- Quick actions-- Create databaseNODE_ENV=production node src/server.js
-
-- System health indicators
-
-CREATE DATABASE resculance_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;```
-
-### **/organizations** - Organization Management
-
-- List view with filters (Type, Status, Search)```
-
-- Create/Edit/Delete operations
-
-- Suspend/Activate toggle**Frontend:**
-
-- Collaboration initiation
-
-### Step 2: Run Migrations```bash
-
-### **/users** - User Management
-
-- User list with role filterscd frontend
-
-- Create/Edit/Delete users
-
-- Role assignment```bashnpm run build
-
-- Status management
-
-npm run migrate# Serve the 'dist' folder with Nginx/Apache
-
-### **/ambulances** - Fleet Management
-
-- Ambulance list with availability filters``````
-
-- Device status indicators
-
-- GPS tracking
-
-- Assignment management
-
-This creates 12+ tables including organizations, users, ambulances, patients, patient_sessions, vital_signs, communications, collaboration_requests, audit_logs, and refresh_tokens.### Environment Variables
-
-### **/patients** - Patient Records
-
-- Patient list with search
-
-- Session history
-
-- Vital signs chart### Step 3: Seed Initial Data**Backend:**
-
-- Emergency contacts
-
-- `NODE_ENV=production`
-
-### **/collaborations** - Collaboration Requests
-
-- Pending requests```bash- `JWT_SECRET` - Strong secret (32+ characters)
-
-- Approved collaborations
-
-- Request/Approve/Reject actionsnpm run seed- `DB_HOST`, `DB_USER`, `DB_PASSWORD` - Production database
-
-- Collaboration history
-
-```- `CORS_ORIGIN` - Production frontend URL
-
----
-
-
-
-## 🔧 **Configuration**
-
-Creates superadmin user:**Frontend:**
-
-### **Environment Variables**
-
-Create `.env` file in root:- Email: `superadmin@resculance.com`- `VITE_API_BASE_URL` - Production API URL
-
-```env
-
-PORT=5001- Password: `Admin@123`- `VITE_SOCKET_URL` - Production Socket.IO URL
-
-NODE_ENV=development
-
-- ⚠️ **Change immediately after first login!**
-
-# Database
-
-DB_HOST=localhost**See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for complete deployment guide.**
-
-DB_USER=root
-
-DB_PASSWORD=Shreshthra@432---
-
-DB_NAME=resculance_db
-
-## 🔒 Security Features
-
-# JWT
-
-JWT_SECRET=your-secret-key-here## 🎬 Running the Application
-
-JWT_EXPIRY=24h
-
-JWT_REFRESH_EXPIRY=7d- ✅ JWT-based authentication with refresh tokens
-
-
-
-# Frontend URL (for CORS)### Development Mode- ✅ Password hashing with bcrypt
-
-FRONTEND_URL=http://localhost:5173
-
-```- ✅ Role-based access control (RBAC)
-
-
-
-### **Database Configuration****Backend (with auto-reload):**- ✅ Rate limiting (100 requests/15 minutes)
-
-Edit `src/config/database.js`:
-
-```javascript```bash- ✅ CORS protection
-
-const pool = mysql.createPool({
-
-  host: process.env.DB_HOST || 'localhost',npm run dev- ✅ SQL injection prevention (parameterized queries)
-
-  user: process.env.DB_USER || 'root',
-
-  password: process.env.DB_PASSWORD,# Server runs at http://localhost:5001- ✅ Helmet.js security headers
-
-  database: process.env.DB_NAME || 'resculance_db',
-
-  waitForConnections: true,```- ✅ Input validation & sanitization
-
-  connectionLimit: 10,
-
-  queueLimit: 0- ✅ Audit logging for compliance
-
-});
-
-```**Frontend (with HMR):**
-
-
-
----```bash## 📊 Database
-
-
-
-## 📊 **User Roles & Permissions**cd frontend
-
-
-
-### **Superadmin**npm run dev**MySQL 8.0+** with the following tables:
-
-- Full system access
-
-- Manage all organizations# App runs at http://localhost:5173- Organizations
-
-- Manage all users
-
-- View all data```- Users
-
-- System configuration
-
-- Ambulances
-
-### **Hospital Admin**
-
-- Manage own organization### Production Mode- Patients
-
-- Manage organization users
-
-- View collaboration requests- Patient Sessions
-
-- Access patient records
-
-- Communication access**Backend:**- Vital Signs
-
-
-
-### **Fleet Owner**```bash- Communications
-
-- Manage own organization
-
-- Manage ambulancesNODE_ENV=production npm start- Collaboration Requests
-
-- Assign drivers/paramedics
-
-- Track ambulance locations```- Audit Logs
-
-- View assigned sessions
-
-
-
-### **Driver**
-
-- View assigned ambulance**Frontend:****See [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) for complete schema reference.**
-
-- Update ambulance location
-
-- Update device status```bash
-
-- View assigned sessions
-
-- Basic patient infocd frontend## 🤝 Contributing
-
-
-
-### **Paramedic**npm run build
-
-- View patient sessions
-
-- Record vital signs# Serve the 'dist' folder with Nginx/Apache1. Fork the repository
-
-- Update patient status
-
-- Communication access```2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-
-- Device management
-
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-
----
-
----4. Push to the branch (`git push origin feature/amazing-feature`)
-
-## 🐛 **Troubleshooting**
-
-5. Open a Pull Request
-
-### **Backend Issues**
-
-## 📡 API Documentation
-
-**Server won't start:**
-
-```bash## 🐛 Troubleshooting
-
-# Check if port 5001 is in use
-
-lsof -i :5001### Base URL
-
-# Kill process if needed
-
-kill -9 <PID>```Common issues and solutions are documented in [API_DOCUMENTATION.md](./API_DOCUMENTATION.md#troubleshooting).
-
-```
-
-http://localhost:5001/api/v1
-
-**Database connection error:**
-
-```bash```## 📝 License
-
-# Verify MySQL is running
-
-mysql -u root -p
-
-# Check database exists
-
-SHOW DATABASES;### AuthenticationISC License - See LICENSE file for details
-
-# Re-run migrations if needed
-
-npm run migrateInclude JWT token in the Authorization header:
-
-```
-
-## 👥 Team
-
-### **Frontend Issues**
-
-```http
-
-**Build errors:**
-
-```bashAuthorization: Bearer <your_access_token>**RESCULANCE Team** - Emergency Response Management System
-
-cd frontend
-
-rm -rf node_modules package-lock.json```
+cd frontendFrontend runs at: **http://localhost:5173**
 
 npm install
 
-```## 📞 Support
+cp .env.example .env### Default Login
+
+npm run dev- **Email:** `superadmin@resculance.com`
+
+```- **Password:** `Admin@123`
 
 
 
-**API connection issues:**### Main Endpoint Categories
+**Default Login:**## 📚 Documentation
 
-- Verify backend is running on port 5001
+- **Email:** `superadmin@resculance.com`
 
-- Check browser console for CORS errorsFor issues or questions:
-
-- Ensure `frontend/src/utils/api.js` has correct base URL
-
-#### 1. Authentication (`/auth`)- Open an issue on GitHub
-
-### **Common Errors**
-
-- `POST /auth/register` - Register new user- Check [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
-
-**"ValidationError: .withMessage() after sanitizer"**
-
-- Fixed in `src/middleware/validation.js`- `POST /auth/login` - User login- Review existing documentation files
-
-- Ensure .withMessage() is before .normalizeEmail()
-
-- `POST /auth/refresh-token` - Refresh access token
-
-**"Token expired"**
-
-- Re-login to get new JWT token- `GET /auth/profile` - Get current user profile---
-
-- Check JWT_EXPIRY in configuration
-
-- `PUT /auth/change-password` - Change password
-
-**"Organization not found"**
-
-- Ensure organizations are created before other entities**Version:** 1.0.0  
-
-- Check organizationId in requests
-
-#### 2. Organizations (`/organizations`)**Last Updated:** November 2025 - Smart Ambulance Management Platform
-
----
-
-- `POST /organizations` - Create organization (Superadmin)
-
-## 🚀 **Deployment**
-
-- `GET /organizations` - List all organizationsA comprehensive Node.js REST API with real-time communication capabilities for managing ambulance operations, connecting hospitals, fleet owners, doctors, paramedics, and patients.
-
-### **Production Build**
-
-- `GET /organizations/:id` - Get organization details
-
-**Frontend:**
-
-```bash- `PUT /organizations/:id` - Update organization## 🚀 Features
-
-cd frontend
-
-npm run build- `DELETE /organizations/:id` - Delete organization
-
-# Build output in frontend/dist
-
-```- `PATCH /organizations/:id/suspend` - Suspend organization- **Multi-Organization Support**: Hospitals and Fleet Owners with independent management
+- **Password:** `Admin@123`For complete API documentation, setup guides, and deployment instructions, see:
 
 
 
-**Backend:**- `PATCH /organizations/:id/activate` - Activate organization- **Role-Based Access Control (RBAC)**: 9 different user roles with granular permissions
+**Servers:****[API_DOCUMENTATION.md](./API_DOCUMENTATION.md)** - Comprehensive guide covering:
+
+- **Backend:** http://localhost:5001- All API endpoints with examples
+
+- **Frontend:** http://localhost:5173- WebSocket events
+
+- Database schema
+
+---- Frontend integration
+
+- Deployment guide
+
+## ✨ Features- Troubleshooting
+
+
+
+### Core Capabilities## ✨ Key Features
+
+- 🏥 **Multi-Organization Management** - Separate workflows for Hospitals and Fleet Owners
+
+- 👥 **Role-Based Access Control** - 9 distinct roles with granular permissions- **Multi-Organization Management** - Hospitals & Fleet Owners
+
+- 🚑 **Ambulance Fleet Management** - Complete lifecycle management with approval workflows- **Role-Based Access Control** - 9 distinct user roles
+
+- 📊 **Real-Time Patient Monitoring** - Live vital signs tracking (Heart Rate, BP, SpO2, Temp)- **Real-Time Patient Monitoring** - Vital signs tracking via WebSocket
+
+- 📍 **GPS Tracking** - Real-time ambulance location updates- **GPS Ambulance Tracking** - Live location updates
+
+- 🤝 **Collaboration System** - Fleet owners can provide ambulances to hospitals- **Collaboration System** - Hospital-Fleet owner coordination
+
+- 💬 **Communication Hub** - Text, audio, and video communication between doctors and paramedics- **Audit Logging** - Complete compliance tracking
+
+- 🔐 **Data Privacy** - Selective data hiding for sensitive patient information
+
+- 📝 **Audit Logging** - Complete activity tracking for compliance## 🏗️ Architecture
+
+- 🔄 **Session Management** - Patient onboarding, monitoring, and offboarding workflows
+
+### Backend
+
+### Technical Features- **Framework:** Node.js + Express.js
+
+- RESTful API with 49+ endpoints- **Database:** MySQL 8.0+
+
+- WebSocket support via Socket.IO for real-time updates- **Real-time:** Socket.IO
+
+- JWT authentication with access and refresh tokens- **Authentication:** JWT (Access & Refresh tokens)
+
+- Input validation using express-validator- **Security:** bcrypt, helmet, rate limiting
+
+- Rate limiting (100 req/15 min)
+
+- CORS protection with configurable origins### Frontend
+
+- SQL injection prevention via parameterized queries- **Framework:** React 19+ with Vite
+
+- **Styling:** Tailwind CSS
+
+---- **State Management:** Context API
+
+- **Routing:** React Router v7
+
+## 📋 System Requirements- **API Client:** Axios with interceptors
+
+- **Real-time:** Socket.IO Client
+
+### Prerequisites
+
+- **Node.js** >= 16.0.0## 🗂️ Project Structure
+
+- **npm** >= 8.0.0
+
+- **MySQL** >= 8.0```
+
+resculance_api/
+
+---├── src/                        # Backend source code
+
+│   ├── config/                 # Configuration files
+
+## 📦 Installation│   ├── controllers/            # Request handlers
+
+│   ├── middleware/             # Auth, validation, error handling
+
+### Backend Setup│   ├── models/                 # Database models
+
+│   ├── routes/                 # API routes
+
+```bash│   ├── socket/                 # WebSocket handlers
+
+# Install dependencies│   ├── database/               # Migrations & seeds
+
+npm install│   └── server.js               # Entry point
+
+├── frontend/                   # React application
+
+# Dependencies installed:│   ├── src/
+
+# - express (v4.18.2) - Web framework│   │   ├── components/         # Reusable UI components
+
+# - mysql2 (v3.6.0) - MySQL client│   │   ├── contexts/           # React Context providers
+
+# - socket.io (v4.6.0) - WebSocket support│   │   ├── pages/              # Route pages
+
+# - jsonwebtoken (v9.0.2) - JWT authentication│   │   ├── services/           # API & Socket services
+
+# - bcrypt (v5.1.1) - Password hashing│   │   └── utils/              # Helper functions
+
+# - express-validator (v7.0.1) - Input validation│   └── public/                 # Static assets
+
+# - helmet (v7.1.0) - Security headers├── .env.example               # Environment template
+
+# - cors (v2.8.5) - CORS middleware├── package.json               # Backend dependencies
+
+```└── API_DOCUMENTATION.md       # Complete API docs
+
+```
+
+### Frontend Setup
+
+## 🔐 User Roles
 
 ```bash
 
-# Set NODE_ENV to production- **Ambulance Management**: Complete lifecycle management with approval workflows
+cd frontend| Role | Organization | Permissions |
 
-export NODE_ENV=production
+npm install|------|-------------|-------------|
 
-# Use PM2 for process management#### 3. Users (`/users`)- **Patient Sessions**: Real-time patient onboarding, monitoring, and offboarding
+| `superadmin` | System | Full system access |
 
-npm install -g pm2
+# Dependencies installed:| `hospital_admin` | Hospital | Manage hospital & staff |
 
-pm2 start src/server.js --name resculance-api- `POST /users` - Create user (Admins)- **Smart Device Integration**: Support for medical devices (ECG, BP monitors, pulse oximeters, etc.)
+# - react (v19.1.0) - UI library| `hospital_staff` | Hospital | Limited operations |
+
+# - vite (v7.1.3) - Build tool| `hospital_doctor` | Hospital | Patient care & monitoring |
+
+# - tailwindcss (v3.4.17) - CSS framework| `hospital_paramedic` | Hospital | Vital signs entry |
+
+# - axios (v1.13.0) - HTTP client| `fleet_admin` | Fleet | Manage fleet & staff |
+
+# - socket.io-client (v4.8.1) - WebSocket client| `fleet_staff` | Fleet | Limited operations |
+
+# - react-toastify (v11.0.3) - Notifications| `fleet_doctor` | Fleet | Patient care in ambulance |
+
+```| `fleet_paramedic` | Fleet | Ambulance operations |
+
+
+
+---## 🛠️ Development Scripts
+
+
+
+## ⚙️ Configuration### Backend
+
+```bash
+
+### Backend Environment Variablesnpm run dev        # Start with nodemon (auto-reload)
+
+npm start          # Start production server
+
+Create `.env` file in the project root:npm run migrate    # Run database migrations
+
+npm run seed       # Seed initial data
+
+```env```
+
+# Server Configuration
+
+NODE_ENV=development### Frontend
+
+PORT=5001```bash
+
+npm run dev        # Start dev server (Vite HMR)
+
+# Database Configurationnpm run build      # Build for production
+
+DB_HOST=localhostnpm run preview    # Preview production build
+
+DB_PORT=3306npm run lint       # Run ESLint
+
+DB_USER=root```
+
+DB_PASSWORD=your_mysql_password
+
+DB_NAME=resculance_db## 📡 API Endpoints Overview
+
+
+
+# JWT Configuration### Authentication
+
+JWT_SECRET=your_super_secret_jwt_key_change_this_32_chars_minimum- `POST /api/v1/auth/register` - Register new user
+
+JWT_REFRESH_SECRET=your_refresh_token_secret_32_chars_minimum- `POST /api/v1/auth/login` - User login
+
+JWT_EXPIRE=7d- `POST /api/v1/auth/refresh-token` - Refresh access token
+
+JWT_REFRESH_EXPIRE=30d- `GET /api/v1/auth/profile` - Get user profile
+
+- `PUT /api/v1/auth/change-password` - Change password
+
+# CORS Configuration
+
+CORS_ORIGIN=http://localhost:5173### Organizations (49 total endpoints)
+
+- CRUD operations for hospitals & fleet owners
+
+# Rate Limiting- User management within organizations
+
+RATE_LIMIT_WINDOW_MS=900000- Ambulance fleet management
+
+RATE_LIMIT_MAX_REQUESTS=100- Patient records & sessions
+
+```- Real-time vital signs monitoring
+
+- Collaboration requests
+
+### Frontend Environment Variables
+
+**See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for complete endpoint reference.**
+
+Create `.env` file in the `frontend` directory:
+
+## 🌐 WebSocket Events
+
+```env
+
+# API ConfigurationReal-time communication for:
+
+VITE_API_BASE_URL=http://localhost:5001/api/v1- Location tracking (`location_update`)
+
+VITE_SOCKET_URL=http://localhost:5001- Vital signs (`vital_update`)
+
+```- Messaging (`message`)
+
+- Audio/Video calls (`call_request`, `video_request`)
+
+---- Emergency alerts (`emergency_alert`)
+
+- Patient status (`patient_onboarded`, `patient_offboarded`)
+
+## 🗄️ Database Setup
+
+## 🚀 Deployment
+
+### Step 1: Create Database
+
+### Production Build
+
+```sql
+
+-- Connect to MySQL**Backend:**
+
+mysql -u root -p```bash
+
+npm install --production
+
+-- Create databaseNODE_ENV=production node src/server.js
+
+CREATE DATABASE resculance_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;```
 
 ```
+
+**Frontend:**
+
+### Step 2: Run Migrations```bash
+
+cd frontend
+
+```bashnpm run build
+
+npm run migrate# Serve the 'dist' folder with Nginx/Apache
+
+``````
+
+
+
+This creates 12+ tables including organizations, users, ambulances, patients, patient_sessions, vital_signs, communications, collaboration_requests, audit_logs, and refresh_tokens.### Environment Variables
+
+
+
+### Step 3: Seed Initial Data**Backend:**
+
+- `NODE_ENV=production`
+
+```bash- `JWT_SECRET` - Strong secret (32+ characters)
+
+npm run seed- `DB_HOST`, `DB_USER`, `DB_PASSWORD` - Production database
+
+```- `CORS_ORIGIN` - Production frontend URL
+
+
+
+Creates superadmin user:**Frontend:**
+
+- Email: `superadmin@resculance.com`- `VITE_API_BASE_URL` - Production API URL
+
+- Password: `Admin@123`- `VITE_SOCKET_URL` - Production Socket.IO URL
+
+- ⚠️ **Change immediately after first login!**
+
+**See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for complete deployment guide.**
+
+---
+
+## 🔒 Security Features
+
+## 🎬 Running the Application
+
+- ✅ JWT-based authentication with refresh tokens
+
+### Development Mode- ✅ Password hashing with bcrypt
+
+- ✅ Role-based access control (RBAC)
+
+**Backend (with auto-reload):**- ✅ Rate limiting (100 requests/15 minutes)
+
+```bash- ✅ CORS protection
+
+npm run dev- ✅ SQL injection prevention (parameterized queries)
+
+# Server runs at http://localhost:5001- ✅ Helmet.js security headers
+
+```- ✅ Input validation & sanitization
+
+- ✅ Audit logging for compliance
+
+**Frontend (with HMR):**
+
+```bash## 📊 Database
+
+cd frontend
+
+npm run dev**MySQL 8.0+** with the following tables:
+
+# App runs at http://localhost:5173- Organizations
+
+```- Users
+
+- Ambulances
+
+### Production Mode- Patients
+
+- Patient Sessions
+
+**Backend:**- Vital Signs
+
+```bash- Communications
+
+NODE_ENV=production npm start- Collaboration Requests
+
+```- Audit Logs
+
+
+
+**Frontend:****See [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) for complete schema reference.**
+
+```bash
+
+cd frontend## 🤝 Contributing
+
+npm run build
+
+# Serve the 'dist' folder with Nginx/Apache1. Fork the repository
+
+```2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+
+---4. Push to the branch (`git push origin feature/amazing-feature`)
+
+5. Open a Pull Request
+
+## 📡 API Documentation
+
+## 🐛 Troubleshooting
+
+### Base URL
+
+```Common issues and solutions are documented in [API_DOCUMENTATION.md](./API_DOCUMENTATION.md#troubleshooting).
+
+http://localhost:5001/api/v1
+
+```## 📝 License
+
+
+
+### AuthenticationISC License - See LICENSE file for details
+
+Include JWT token in the Authorization header:
+
+## 👥 Team
+
+```http
+
+Authorization: Bearer <your_access_token>**RESCULANCE Team** - Emergency Response Management System
+
+```
+
+## 📞 Support
+
+### Main Endpoint Categories
+
+For issues or questions:
+
+#### 1. Authentication (`/auth`)- Open an issue on GitHub
+
+- `POST /auth/register` - Register new user- Check [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+
+- `POST /auth/login` - User login- Review existing documentation files
+
+- `POST /auth/refresh-token` - Refresh access token
+
+- `GET /auth/profile` - Get current user profile---
+
+- `PUT /auth/change-password` - Change password
+
+**Version:** 1.0.0  
+
+#### 2. Organizations (`/organizations`)**Last Updated:** November 2025 - Smart Ambulance Management Platform
+
+- `POST /organizations` - Create organization (Superadmin)
+
+- `GET /organizations` - List all organizationsA comprehensive Node.js REST API with real-time communication capabilities for managing ambulance operations, connecting hospitals, fleet owners, doctors, paramedics, and patients.
+
+- `GET /organizations/:id` - Get organization details
+
+- `PUT /organizations/:id` - Update organization## 🚀 Features
+
+- `DELETE /organizations/:id` - Delete organization
+
+- `PATCH /organizations/:id/suspend` - Suspend organization- **Multi-Organization Support**: Hospitals and Fleet Owners with independent management
+
+- `PATCH /organizations/:id/activate` - Activate organization- **Role-Based Access Control (RBAC)**: 9 different user roles with granular permissions
+
+- **Ambulance Management**: Complete lifecycle management with approval workflows
+
+#### 3. Users (`/users`)- **Patient Sessions**: Real-time patient onboarding, monitoring, and offboarding
+
+- `POST /users` - Create user (Admins)- **Smart Device Integration**: Support for medical devices (ECG, BP monitors, pulse oximeters, etc.)
 
 - `GET /users` - List users- **Real-Time Dashboard**: Socket.IO powered live updates for vital signs and location
 
-### **Nginx Configuration**
+- `GET /users/:id` - Get user details- **Communication Hub**: Text, audio, and video communication between doctors and paramedics
 
-```nginx- `GET /users/:id` - Get user details- **Communication Hub**: Text, audio, and video communication between doctors and paramedics
-
-server {
-
-    listen 80;- `PUT /users/:id` - Update user- **Collaboration System**: Fleet owners can provide ambulances to hospitals
-
-    server_name your-domain.com;
+- `PUT /users/:id` - Update user- **Collaboration System**: Fleet owners can provide ambulances to hospitals
 
 - `PATCH /users/:id/approve` - Approve user- **Audit Logging**: Complete activity tracking for accountability
 
-    # Frontend
+- `PATCH /users/:id/reject` - Reject user- **Data Privacy**: Selective data hiding for sensitive patient information
 
-    location / {- `PATCH /users/:id/reject` - Reject user- **Data Privacy**: Selective data hiding for sensitive patient information
-
-        root /var/www/resculance/frontend/dist;
-
-        try_files $uri /index.html;- `PATCH /users/:id/suspend` - Suspend user
-
-    }
+- `PATCH /users/:id/suspend` - Suspend user
 
 - `DELETE /users/:id` - Delete user## 📋 Prerequisites
 
-    # Backend API
 
-    location /api {
 
-        proxy_pass http://localhost:5001;
+#### 4. Ambulances (`/ambulances`)Before you begin, ensure you have the following installed:
 
-        proxy_http_version 1.1;#### 4. Ambulances (`/ambulances`)Before you begin, ensure you have the following installed:
+- `POST /ambulances` - Create ambulance- **Node.js** (v16.0.0 or higher)
 
-        proxy_set_header Upgrade $http_upgrade;
-
-        proxy_set_header Connection 'upgrade';- `POST /ambulances` - Create ambulance- **Node.js** (v16.0.0 or higher)
-
-        proxy_set_header Host $host;
-
-        proxy_cache_bypass $http_upgrade;- `GET /ambulances` - List ambulances- **npm** (v8.0.0 or higher)
-
-    }
+- `GET /ambulances` - List ambulances- **npm** (v8.0.0 or higher)
 
 - `GET /ambulances/my-ambulances` - Get user's ambulances- **MySQL** (v8.0 or higher)
 
-    # WebSocket
+- `GET /ambulances/:id` - Get ambulance details
 
-    location /socket.io {- `GET /ambulances/:id` - Get ambulance details
+- `PUT /ambulances/:id` - Update ambulance## 🛠️ Installation
 
-        proxy_pass http://localhost:5001;
+- `PATCH /ambulances/:id/approve` - Approve ambulance (Superadmin)
 
-        proxy_http_version 1.1;- `PUT /ambulances/:id` - Update ambulance## 🛠️ Installation
-
-        proxy_set_header Upgrade $http_upgrade;
-
-        proxy_set_header Connection "upgrade";- `PATCH /ambulances/:id/approve` - Approve ambulance (Superadmin)
-
-    }
-
-}- `POST /ambulances/:id/assign-user` - Assign staff### 1. Clone the repository (or navigate to project directory)
-
-```
+- `POST /ambulances/:id/assign-user` - Assign staff### 1. Clone the repository (or navigate to project directory)
 
 - `DELETE /ambulances/:id/unassign-user/:userId` - Unassign staff
 
----
-
 - `PATCH /ambulances/:id/location` - Update location```powershell
-
-## 📄 **License**
 
 cd "d:\Projects\RESCULANCE API"
 
-Copyright © 2025 Resculance India. All rights reserved.
-
 #### 5. Patients (`/patients`)```
-
----
 
 - `POST /patients` - Create patient
 
-## 👥 **Support**
-
 - `GET /patients` - List patients### 2. Install dependencies
 
-For issues and feature requests:
-
-- Email: support@resculance.com- `GET /patients/code/:code` - Get patient by code
-
-- Documentation: See individual API endpoint documentation in Postman collection
+- `GET /patients/code/:code` - Get patient by code
 
 - `GET /patients/:id` - Get patient details```powershell
 
----
-
 - `PUT /patients/:id` - Update patientnpm install
-
-## 🔄 **Version History**
 
 - `PATCH /patients/:id/hide-data` - Hide patient data```
 
-### **v1.0.0** - Current
+- `PATCH /patients/:id/unhide-data` - Unhide patient data
 
-- ✅ Complete CRUD for all entities- `PATCH /patients/:id/unhide-data` - Unhide patient data
+### 3. Set up environment variables
 
-- ✅ Real-time WebSocket communication
+#### 6. Patient Sessions (`/patients/*`)
 
-- ✅ Medical dashboard UI theme### 3. Set up environment variables
-
-- ✅ Dark mode support
-
-- ✅ Role-based access control#### 6. Patient Sessions (`/patients/*`)
-
-- ✅ Audit logging
-
-- ✅ Mobile-responsive design- `POST /patients/onboard` - Onboard patient to ambulanceCopy the `.env.example` file to create your `.env` file:
-
-- ✅ API documentation in Postman
+- `POST /patients/onboard` - Onboard patient to ambulanceCopy the `.env.example` file to create your `.env` file:
 
 - `PATCH /sessions/:sessionId/offboard` - Offboard patient
 
----
-
 - `GET /sessions` - List sessions```powershell
-
-**Built with ❤️ for Emergency Medical Services in India**
 
 - `GET /sessions/:sessionId` - Get session detailsCopy-Item .env.example .env
 

@@ -57,8 +57,8 @@ router.post(
   AmbulanceController.assignUser
 );
 
-router.post(
-  '/:id/unassign',
+router.delete(
+  '/:id/unassign/:userId',
   authorize(
     ROLES.SUPERADMIN,
     ROLES.HOSPITAL_ADMIN,
