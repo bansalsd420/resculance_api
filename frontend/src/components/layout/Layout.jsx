@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { Button } from '../components/common/Button';
+import { useAuth } from '../../contexts/AuthContext';
+import { Button } from '../common/Button';
 
 export const Layout = () => {
   const { user, logout } = useAuth();
@@ -56,14 +56,25 @@ export const Layout = () => {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-2xl font-bold">RESCULANCE</h1>
-          <p className="text-sm text-gray-600 mt-1">{user?.role?.replace('_', ' ').toUpperCase()}</p>
+      {/* Dark Sidebar */}
+      <aside className="sidebar w-72 flex flex-col">
+        {/* Logo Section */}
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <div className="sidebar-logo-icon">
+              <span>🚑</span>
+            </div>
+            <div>
+              <h1 className="sidebar-title">RESCULANCE</h1>
+            </div>
+          </div>
+          <div className="sidebar-badge">
+            {user?.role?.replace('_', ' ')}
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
+        {/* Navigation */}
+        <nav className="sidebar-nav flex-1 overflow-y-auto">
           {getNavigationItems().map((item) => (
             <NavLink
               key={item.path}
@@ -78,20 +89,33 @@ export const Layout = () => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-gray-200">
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm font-medium">{user?.name}</p>
-            <p className="text-xs text-gray-600">{user?.email}</p>
+        {/* User Section */}
+        <div className="sidebar-footer">
+          <div className="sidebar-user-card">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="sidebar-user-avatar">
+                {user?.name?.charAt(0)?.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
+                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+              </div>
+            </div>
           </div>
-          <Button onClick={handleLogout} variant="secondary" className="w-full">
-            Logout
+          <Button 
+            onClick={handleLogout} 
+            variant="secondary" 
+            className="w-full justify-center !bg-white/10 !border-white/20 !text-white hover:!bg-white/20"
+          >
+            <span>🚪</span>
+            <span>Logout</span>
           </Button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
+        <div className="p-8 max-w-[1600px] mx-auto">
           <Outlet />
         </div>
       </main>

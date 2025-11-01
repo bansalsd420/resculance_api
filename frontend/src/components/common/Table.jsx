@@ -1,38 +1,39 @@
 export const Table = ({ columns, data, onRowClick }) => {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            {columns.map((column) => (
-              <th
-                key={column.key}
-                className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"
-              >
-                {column.title}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row, rowIndex) => (
-            <tr
-              key={rowIndex}
-              onClick={() => onRowClick?.(row)}
-              className={onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''}
-            >
+    <div className="table-container">
+      <div className="table-wrapper">
+        <table className="table">
+          <thead>
+            <tr>
               {columns.map((column) => (
-                <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {column.render ? column.render(row[column.key], row) : row[column.key]}
-                </td>
+                <th key={column.key}>
+                  {column.title}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((row, rowIndex) => (
+              <tr
+                key={rowIndex}
+                onClick={() => onRowClick?.(row)}
+                className={onRowClick ? 'cursor-pointer' : ''}
+              >
+                {columns.map((column) => (
+                  <td key={column.key}>
+                    {column.render ? column.render(row[column.key], row) : row[column.key]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {data.length === 0 && (
-        <div className="text-center py-8 text-gray-500">
-          No data available
+        <div className="empty-state">
+          <div className="empty-state-icon">📋</div>
+          <div className="empty-state-title">No Data Available</div>
+          <div className="empty-state-description">There are no records to display at this time.</div>
         </div>
       )}
     </div>

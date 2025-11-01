@@ -1,18 +1,18 @@
 export const Input = ({ label, error, ...props }) => {
   return (
-    <div className="mb-4">
+    <div className="form-group">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="label">
           {label}
           {props.required && <span className="text-red-600 ml-1">*</span>}
         </label>
       )}
       <input
-        className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
+        className={`input ${error ? 'input-error' : ''}`}
         {...props}
       />
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="form-error">{error}</p>
       )}
     </div>
   );
@@ -20,18 +20,18 @@ export const Input = ({ label, error, ...props }) => {
 
 export const Select = ({ label, error, options, ...props }) => {
   return (
-    <div className="mb-4">
+    <div className="form-group">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="label">
           {label}
           {props.required && <span className="text-red-600 ml-1">*</span>}
         </label>
       )}
       <select
-        className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
+        className={`select ${error ? 'input-error' : ''}`}
         {...props}
       >
-        <option value="">Select...</option>
+        <option value="">Select an option...</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
@@ -39,7 +39,7 @@ export const Select = ({ label, error, options, ...props }) => {
         ))}
       </select>
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="form-error">{error}</p>
       )}
     </div>
   );
@@ -47,20 +47,20 @@ export const Select = ({ label, error, options, ...props }) => {
 
 export const Textarea = ({ label, error, ...props }) => {
   return (
-    <div className="mb-4">
+    <div className="form-group">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="label">
           {label}
           {props.required && <span className="text-red-600 ml-1">*</span>}
         </label>
       )}
       <textarea
-        className={`input ${error ? 'border-red-500 focus:ring-red-500' : ''}`}
+        className={`textarea ${error ? 'input-error' : ''}`}
         rows={4}
         {...props}
       />
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="form-error">{error}</p>
       )}
     </div>
   );

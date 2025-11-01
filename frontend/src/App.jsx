@@ -40,6 +40,7 @@ function App() {
               </div>
             </div>
           } />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
       
