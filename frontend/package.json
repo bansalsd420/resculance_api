@@ -1,39 +1,33 @@
 {
-  "name": "frontend",
+  "name": "resculance-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.13.1",
-    "date-fns": "^4.1.0",
-    "leaflet": "^1.9.4",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "react-hook-form": "^7.65.0",
-    "react-leaflet": "^5.0.0",
-    "react-router-dom": "^7.9.5",
-    "react-toastify": "^11.0.5",
-    "socket.io-client": "^4.8.1"
+    "@hookform/resolvers": "^3.9.1",
+    "axios": "^1.7.9",
+    "framer-motion": "^11.14.4",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.54.0",
+    "react-router-dom": "^7.0.2",
+    "recharts": "^2.15.0",
+    "yup": "^1.6.0",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.36.0",
-    "@types/leaflet": "^1.9.21",
-    "@types/react": "^19.1.16",
-    "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.4",
-    "autoprefixer": "^10.4.21",
-    "eslint": "^9.36.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.22",
-    "globals": "^16.4.0",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.16",
-    "vite": "^7.1.7"
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^7.1.12"
   }
 }

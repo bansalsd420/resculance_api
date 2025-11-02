@@ -99,6 +99,7 @@ router.patch(
 
 router.get('/sessions', PatientController.getSessions);
 router.get('/sessions/:sessionId', PatientController.getSession);
+router.get('/:patientId/sessions', PatientController.getPatientSessions);
 
 router.post(
   '/:patientId/vital-signs',

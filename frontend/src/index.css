@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-text font-sans antialiased;
+  }
+
+  * {
+    @apply border-border;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-2xl font-medium transition-all duration-200 hover:scale-[1.03] active:scale-[0.98];
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white hover:shadow-hover;
+  }
+
+  .btn-secondary {
+    @apply bg-background-card text-text border border-border hover:border-primary;
+  }
+
+  .card {
+    @apply bg-background-card rounded-2xl shadow-soft p-6 transition-shadow duration-200 hover:shadow-hover;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
+  }
+
+  .table-container {
+    @apply bg-background-card rounded-2xl overflow-hidden shadow-soft;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-200 hover:bg-background-card cursor-pointer;
+  }
+
+  .sidebar-link-active {
+    @apply bg-primary text-white;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

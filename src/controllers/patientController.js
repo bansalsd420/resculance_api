@@ -6,6 +6,30 @@ const CommunicationModel = require('../models/Communication');
 const { AppError } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
+// Helper function to map snake_case to camelCase
+const mapPatientFields = (patient) => {
+  if (!patient) return null;
+  return {
+    ...patient,
+    firstName: patient.first_name,
+    lastName: patient.last_name,
+    dateOfBirth: patient.date_of_birth,
+    bloodGroup: patient.blood_group,
+    contactPhone: patient.contact_phone,
+    emergencyContactName: patient.emergency_contact_name,
+    emergencyContactPhone: patient.emergency_contact_phone,
+    emergencyContactRelation: patient.emergency_contact_relation,
+    medicalHistory: patient.medical_history,
+    currentMedications: patient.current_medications,
+    isDataHidden: patient.is_data_hidden,
+    hiddenBy: patient.hidden_by,
+    hiddenAt: patient.hidden_at,
+    createdAt: patient.created_at,
+    updatedAt: patient.updated_at,
+    patientCode: patient.patient_code
+  };
+};
+
 class PatientController {
   static async create(req, res, next) {
     try {
@@ -51,10 +75,13 @@ class PatientController {
       const patients = await PatientModel.findAll(filters);
       const total = await PatientModel.count({ search });
 
+      // Map snake_case to camelCase for frontend
+      const mappedPatients = patients.map(mapPatientFields);
+
       res.json({
         success: true,
         data: {
-          patients,
+          patients: mappedPatients,
           pagination: {
             total,
             limit: parseInt(limit),
@@ -84,7 +111,7 @@ class PatientController {
 
       res.json({
         success: true,
-        data: { patient }
+        data: { patient: mapPatientFields(patient) }
       });
     } catch (error) {
       next(error);
@@ -146,9 +173,10 @@ class PatientController {
     try {
       const { patientId } = req.params; // Get from URL parameter
       const {
-        ambulanceId, assignedDoctorId, assignedParamedicId,
-        pickupLocation, pickupLat, pickupLng, destinationLocation,
-        destinationLat, destinationLng, destinationHospitalId, chiefComplaint, initialAssessment
+        ambulanceId,
+        pickupLocation, pickupLatitude, pickupLongitude,
+        destinationLocation, destinationLatitude, destinationLongitude,
+        destinationHospitalId, chiefComplaint, initialAssessment
       } = req.body;
 
       // Check if ambulance is available
@@ -157,7 +185,7 @@ class PatientController {
         return next(new AppError('Ambulance not found', 404));
       }
 
-      if (ambulance.status !== 'active') {
+      if (!['active', 'available'].includes(ambulance.status)) {
         return next(new AppError('Ambulance is not available', 400));
       }
 
@@ -173,16 +201,14 @@ class PatientController {
         sessionCode,
         patientId,
         ambulanceId,
-        hospitalId: destinationHospitalId || req.user.organizationId,
-        fleetOwnerId: ambulance.organization_type === 'fleet_owner' ? ambulance.organization_id : null,
-        assignedDoctorId,
-        assignedParamedicId,
+        organizationId: req.user.organizationId, // The hospital initiating the trip
+        destinationHospitalId: destinationHospitalId || req.user.organizationId,
         pickupLocation,
-        pickupLat,
-        pickupLng,
+        pickupLatitude,
+        pickupLongitude,
         destinationLocation,
-        destinationLat,
-        destinationLng,
+        destinationLatitude,
+        destinationLongitude,
         chiefComplaint,
         initialAssessment,
         onboardedBy: req.user.id,
@@ -191,7 +217,7 @@ class PatientController {
 
       // Update ambulance status
       await AmbulanceModel.update(ambulanceId, {
-        status: 'en_route',
+        status: 'active',
         current_hospital_id: req.user.organizationId
       });
 
@@ -277,14 +303,22 @@ class PatientController {
       const { status, limit = 50, offset = 0 } = req.query;
 
       const filters = {
-        hospitalId: req.user.organizationId,
         status,
         limit,
         offset
       };
 
+      // Superadmin sees all sessions, others see only their organization's sessions
+      if (req.user.role !== 'superadmin') {
+        filters.organizationId = req.user.organizationId;
+      }
+
       const sessions = await PatientSessionModel.findAll(filters);
-      const total = await PatientSessionModel.count({ hospitalId: req.user.organizationId, status });
+      const countFilters = { status };
+      if (req.user.role !== 'superadmin') {
+        countFilters.organizationId = req.user.organizationId;
+      }
+      const total = await PatientSessionModel.count(countFilters);
 
       res.json({
         success: true,
@@ -388,6 +422,26 @@ class PatientController {
         success: true,
         message: 'Communication logged successfully',
         data: { communicationId }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getPatientSessions(req, res, next) {
+    try {
+      const { patientId } = req.params;
+      
+      const patient = await PatientModel.findById(patientId);
+      if (!patient) {
+        return next(new AppError('Patient not found', 404));
+      }
+
+      const sessions = await PatientSessionModel.findByPatient(patientId);
+
+      res.json({
+        success: true,
+        data: sessions
       });
     } catch (error) {
       next(error);

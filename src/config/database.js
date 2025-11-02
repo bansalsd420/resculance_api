@@ -11,7 +11,9 @@ const pool = mysql.createPool({
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
-  timezone: '+00:00'
+  timezone: '+00:00',
+  // Allow executing multiple SQL statements per query (needed for migrations)
+  multipleStatements: true
 });
 
 // Test connection

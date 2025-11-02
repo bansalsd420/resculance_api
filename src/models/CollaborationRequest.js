@@ -3,14 +3,15 @@ const db = require('../config/database');
 class CollaborationRequestModel {
   static async create(data) {
     const [result] = await db.query(
-      `INSERT INTO collaboration_requests (hospital_id, fleet_owner_id, ambulance_id, requested_by, request_message, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO collaboration_requests (hospital_id, fleet_id, request_type, message, terms, requested_by, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         data.hospitalId,
-        data.fleetOwnerId,
-        data.ambulanceId,
+        data.fleetId,
+        data.requestType || 'partnership',
+        data.message,
+        data.terms,
         data.requestedBy,
-        data.requestMessage,
         data.status || 'pending'
       ]
     );
@@ -19,15 +20,16 @@ class CollaborationRequestModel {
 
   static async findById(id) {
     const [rows] = await db.query(
-      `SELECT cr.*, h.name as hospital_name, h.code as hospital_code,
-              f.name as fleet_owner_name, f.code as fleet_owner_code,
-              a.ambulance_code, a.registration_number,
-              u.first_name as requester_first_name, u.last_name as requester_last_name
+      `SELECT cr.*, 
+              h.name as hospital_name, h.code as hospital_code,
+              f.name as fleet_name, f.code as fleet_code,
+              u.first_name as requester_first_name, u.last_name as requester_last_name,
+              approver.first_name as approver_first_name, approver.last_name as approver_last_name
        FROM collaboration_requests cr
        JOIN organizations h ON cr.hospital_id = h.id
-       JOIN organizations f ON cr.fleet_owner_id = f.id
-       JOIN ambulances a ON cr.ambulance_id = a.id
+       JOIN organizations f ON cr.fleet_id = f.id
        JOIN users u ON cr.requested_by = u.id
+       LEFT JOIN users approver ON cr.approved_by = approver.id
        WHERE cr.id = ?`,
       [id]
     );
@@ -35,13 +37,12 @@ class CollaborationRequestModel {
   }
 
   static async findAll(filters = {}) {
-    let query = `SELECT cr.*, h.name as hospital_name, h.code as hospital_code,
-                        f.name as fleet_owner_name, f.code as fleet_owner_code,
-                        a.ambulance_code
+    let query = `SELECT cr.*, 
+                        h.name as hospital_name, h.code as hospital_code,
+                        f.name as fleet_name, f.code as fleet_code
                  FROM collaboration_requests cr
                  JOIN organizations h ON cr.hospital_id = h.id
-                 JOIN organizations f ON cr.fleet_owner_id = f.id
-                 JOIN ambulances a ON cr.ambulance_id = a.id
+                 JOIN organizations f ON cr.fleet_id = f.id
                  WHERE 1=1`;
     const params = [];
 
@@ -50,9 +51,9 @@ class CollaborationRequestModel {
       params.push(filters.hospitalId);
     }
 
-    if (filters.fleetOwnerId) {
-      query += ' AND cr.fleet_owner_id = ?';
-      params.push(filters.fleetOwnerId);
+    if (filters.fleetId) {
+      query += ' AND cr.fleet_id = ?';
+      params.push(filters.fleetId);
     }
 
     if (filters.status) {
@@ -65,6 +66,8 @@ class CollaborationRequestModel {
     if (filters.limit) {
       query += ' LIMIT ?';
       params.push(parseInt(filters.limit));
+    } else {
+      query += ' LIMIT 50';
     }
 
     if (filters.offset) {
@@ -76,20 +79,22 @@ class CollaborationRequestModel {
     return rows;
   }
 
-  static async accept(id, respondedBy, responseMessage) {
+  static async accept(id, approvedBy, rejectedReason = null) {
     const [result] = await db.query(
-      `UPDATE collaboration_requests SET status = 'accepted', responded_by = ?, responded_at = NOW(), response_message = ?
+      `UPDATE collaboration_requests 
+       SET status = 'approved', approved_by = ?, approved_at = NOW(), rejected_reason = ?
        WHERE id = ?`,
-      [respondedBy, responseMessage, id]
+      [approvedBy, rejectedReason, id]
     );
     return result.affectedRows > 0;
   }
 
-  static async reject(id, respondedBy, responseMessage) {
+  static async reject(id, approvedBy, rejectedReason) {
     const [result] = await db.query(
-      `UPDATE collaboration_requests SET status = 'rejected', responded_by = ?, responded_at = NOW(), response_message = ?
+      `UPDATE collaboration_requests 
+       SET status = 'rejected', approved_by = ?, approved_at = NOW(), rejected_reason = ?
        WHERE id = ?`,
-      [respondedBy, responseMessage, id]
+      [approvedBy, rejectedReason, id]
     );
     return result.affectedRows > 0;
   }
@@ -111,9 +116,9 @@ class CollaborationRequestModel {
       params.push(filters.hospitalId);
     }
 
-    if (filters.fleetOwnerId) {
-      query += ' AND fleet_owner_id = ?';
-      params.push(filters.fleetOwnerId);
+    if (filters.fleetId) {
+      query += ' AND fleet_id = ?';
+      params.push(filters.fleetId);
     }
 
     if (filters.status) {

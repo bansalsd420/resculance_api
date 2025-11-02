@@ -6,8 +6,14 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "node src/database/migrate.js",
-    "seed": "node src/database/seed.js"
+    "migrate": "node src/database/migrate-all.js",
+    "migrate:legacy": "node src/database/migrate.js",
+    "seed": "node src/database/seed-all.js",
+    "seed:legacy": "node src/database/seed.js",
+    "seed:comprehensive": "node src/database/seed-all.js",
+    "db:reset": "node src/database/reset.js",
+    "db:setup": "npm run db:reset && npm run migrate && npm run seed",
+    "db:setup:ci": "npm run db:reset && npm run migrate && npm run seed"
   },
   "keywords": [
     "ambulance",
@@ -18,19 +24,20 @@
   "author": "RESCULANCE Team",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
-    "mysql2": "^3.6.5",
+    "axios": "^1.13.1",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "dotenv": "^16.3.1",
+    "compression": "^1.7.4",
     "cors": "^2.8.5",
-    "helmet": "^7.1.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
-    "socket.io": "^4.6.0",
-    "uuid": "^9.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
-    "compression": "^1.7.4"
+    "mysql2": "^3.6.5",
+    "socket.io": "^4.6.0",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

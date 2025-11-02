@@ -3,25 +3,23 @@ const db = require('../config/database');
 class PatientSessionModel {
   static async create(data) {
     const [result] = await db.query(
-      `INSERT INTO patient_sessions (session_code, patient_id, ambulance_id, hospital_id, fleet_owner_id,
-                                      assigned_doctor_id, assigned_paramedic_id, pickup_location, pickup_lat, pickup_lng,
-                                      destination_location, destination_lat, destination_lng, chief_complaint, 
-                                      initial_assessment, onboarded_by, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO patient_sessions (session_code, patient_id, ambulance_id, organization_id,
+                                      pickup_location, pickup_latitude, pickup_longitude,
+                                      destination_hospital_id, destination_location, destination_latitude, destination_longitude,
+                                      chief_complaint, initial_assessment, onboarded_by, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.sessionCode,
         data.patientId,
         data.ambulanceId,
-        data.hospitalId,
-        data.fleetOwnerId,
-        data.assignedDoctorId,
-        data.assignedParamedicId,
+        data.organizationId || data.hospitalId, // Support both field names for compatibility
         data.pickupLocation,
-        data.pickupLat,
-        data.pickupLng,
+        data.pickupLat || data.pickupLatitude,
+        data.pickupLng || data.pickupLongitude,
+        data.destinationHospitalId,
         data.destinationLocation,
-        data.destinationLat,
-        data.destinationLng,
+        data.destinationLat || data.destinationLatitude,
+        data.destinationLng || data.destinationLongitude,
         data.chiefComplaint,
         data.initialAssessment,
         data.onboardedBy,
@@ -33,18 +31,17 @@ class PatientSessionModel {
 
   static async findById(id) {
     const [rows] = await db.query(
-      `SELECT ps.*, p.first_name as patient_first_name, p.last_name as patient_last_name,
+      `SELECT ps.*, 
+              p.first_name as patient_first_name, p.last_name as patient_last_name,
               p.age, p.gender, p.blood_group, p.medical_history, p.allergies, p.current_medications,
               a.ambulance_code, a.registration_number,
-              h.name as hospital_name,
-              d.first_name as doctor_first_name, d.last_name as doctor_last_name,
-              pm.first_name as paramedic_first_name, pm.last_name as paramedic_last_name
+              org.name as organization_name, org.type as organization_type,
+              dest_org.name as destination_hospital_name
        FROM patient_sessions ps
        JOIN patients p ON ps.patient_id = p.id
        JOIN ambulances a ON ps.ambulance_id = a.id
-       JOIN organizations h ON ps.hospital_id = h.id
-       LEFT JOIN users d ON ps.assigned_doctor_id = d.id
-       LEFT JOIN users pm ON ps.assigned_paramedic_id = pm.id
+       JOIN organizations org ON ps.organization_id = org.id
+       LEFT JOIN organizations dest_org ON ps.destination_hospital_id = dest_org.id
        WHERE ps.id = ?`,
       [id]
     );
@@ -53,12 +50,14 @@ class PatientSessionModel {
 
   static async findByCode(code) {
     const [rows] = await db.query(
-      `SELECT ps.*, p.first_name as patient_first_name, p.last_name as patient_last_name,
-              a.ambulance_code, h.name as hospital_name
+      `SELECT ps.*, 
+              p.first_name as patient_first_name, p.last_name as patient_last_name,
+              a.ambulance_code, 
+              org.name as organization_name, org.type as organization_type
        FROM patient_sessions ps
        JOIN patients p ON ps.patient_id = p.id
        JOIN ambulances a ON ps.ambulance_id = a.id
-       JOIN organizations h ON ps.hospital_id = h.id
+       JOIN organizations org ON ps.organization_id = org.id
        WHERE ps.session_code = ?`,
       [code]
     );
@@ -66,18 +65,22 @@ class PatientSessionModel {
   }
 
   static async findAll(filters = {}) {
-    let query = `SELECT ps.*, p.first_name as patient_first_name, p.last_name as patient_last_name,
-                        a.ambulance_code, h.name as hospital_name
+    let query = `SELECT ps.*, 
+                        p.first_name as patient_first_name, p.last_name as patient_last_name,
+                        a.ambulance_code, a.registration_number,
+                        org.name as organization_name, org.code as organization_code, org.type as organization_type,
+                        dest_org.name as destination_hospital_name
                  FROM patient_sessions ps
                  JOIN patients p ON ps.patient_id = p.id
                  JOIN ambulances a ON ps.ambulance_id = a.id
-                 JOIN organizations h ON ps.hospital_id = h.id
+                 JOIN organizations org ON ps.organization_id = org.id
+                 LEFT JOIN organizations dest_org ON ps.destination_hospital_id = dest_org.id
                  WHERE 1=1`;
     const params = [];
 
-    if (filters.hospitalId) {
-      query += ' AND ps.hospital_id = ?';
-      params.push(filters.hospitalId);
+    if (filters.hospitalId || filters.organizationId) {
+      query += ' AND ps.organization_id = ?';
+      params.push(filters.hospitalId || filters.organizationId);
     }
 
     if (filters.ambulanceId) {
@@ -88,16 +91,6 @@ class PatientSessionModel {
     if (filters.status) {
       query += ' AND ps.status = ?';
       params.push(filters.status);
-    }
-
-    if (filters.assignedDoctorId) {
-      query += ' AND ps.assigned_doctor_id = ?';
-      params.push(filters.assignedDoctorId);
-    }
-
-    if (filters.assignedParamedicId) {
-      query += ' AND ps.assigned_paramedic_id = ?';
-      params.push(filters.assignedParamedicId);
     }
 
     query += ' ORDER BY ps.created_at DESC';
@@ -136,6 +129,23 @@ class PatientSessionModel {
       [patientId]
     );
     return rows[0];
+  }
+
+  static async findByPatient(patientId) {
+    const [rows] = await db.query(
+      `SELECT ps.*, 
+              p.first_name as patient_first_name, p.last_name as patient_last_name,
+              a.ambulance_code, a.registration_number,
+              org.name as organization_name
+       FROM patient_sessions ps
+       JOIN patients p ON ps.patient_id = p.id
+       JOIN ambulances a ON ps.ambulance_id = a.id
+       JOIN organizations org ON ps.organization_id = org.id
+       WHERE ps.patient_id = ?
+       ORDER BY ps.created_at DESC`,
+      [patientId]
+    );
+    return rows;
   }
 
   static async update(id, data) {
@@ -182,9 +192,9 @@ class PatientSessionModel {
     let query = 'SELECT COUNT(*) as total FROM patient_sessions WHERE 1=1';
     const params = [];
 
-    if (filters.hospitalId) {
-      query += ' AND hospital_id = ?';
-      params.push(filters.hospitalId);
+    if (filters.hospitalId || filters.organizationId) {
+      query += ' AND organization_id = ?';
+      params.push(filters.hospitalId || filters.organizationId);
     }
 
     if (filters.status) {

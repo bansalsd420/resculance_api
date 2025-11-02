@@ -927,9 +927,127 @@
 						"description": "Delete ambulance (Fleet Admin only)"
 					},
 					"response": []
+				},
+				{
+					"name": "Create Device for Ambulance",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"deviceName\": \"GPS Tracker\",\n  \"deviceType\": \"GPS_TRACKER\",\n  \"deviceId\": \"GPS-001-2025\",\n  \"devicePassword\": \"Device@123\",\n  \"deviceApi\": \"https://api.gpstracker.com/v1\",\n  \"manufacturer\": \"TrackerCorp\",\n  \"model\": \"TC-2000\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ambulances/{{ambulanceId}}/devices",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ambulances",
+								"{{ambulanceId}}",
+								"devices"
+							]
+						},
+						"description": "Create device for ambulance. Device types: CAMERA, LIVE_LOCATION, ECG, VITAL_MONITOR, GPS_TRACKER"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Devices for Ambulance",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/ambulances/{{ambulanceId}}/devices",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ambulances",
+								"{{ambulanceId}}",
+								"devices"
+							]
+						},
+						"description": "Get all devices attached to an ambulance"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Device by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/ambulances/devices/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ambulances",
+								"devices",
+								"1"
+							]
+						},
+						"description": "Get specific device details by ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Device",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"deviceName\": \"GPS Tracker Pro\",\n  \"manufacturer\": \"TrackerCorp\",\n  \"model\": \"TC-3000\",\n  \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ambulances/devices/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ambulances",
+								"devices",
+								"1"
+							]
+						},
+						"description": "Update device details"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Device",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/ambulances/devices/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ambulances",
+								"devices",
+								"1"
+							]
+						},
+						"description": "Delete device from ambulance"
+					},
+					"response": []
 				}
 			],
-			"description": "Ambulance management and assignment"
+			"description": "Ambulance management, assignment, and device management"
 		},
 		{
 			"name": "5. Patients",
@@ -1095,7 +1213,7 @@
 				{
 					"name": "Offboard Patient (End Session)",
 					"request": {
-						"method": "POST",
+						"method": "PATCH",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -1107,13 +1225,14 @@
 							"raw": "{\n  \"dropoffLocation\": \"City General Hospital ER\",\n  \"dropoffLatitude\": 40.7589,\n  \"dropoffLongitude\": -73.9851,\n  \"handoverNotes\": \"Patient stable, vitals improved\",\n  \"handoverTo\": \"Dr. Smith\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/patients/{{patientId}}/offboard",
+							"raw": "{{baseUrl}}/patients/sessions/{{sessionId}}/offboard",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"patients",
-								"{{patientId}}",
+								"sessions",
+								"{{sessionId}}",
 								"offboard"
 							]
 						},
@@ -1194,6 +1313,45 @@
 							]
 						},
 						"description": "Get patient's ambulance session history"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/patients/sessions",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"patients",
+								"sessions"
+							]
+						},
+						"description": "Get all patient sessions across all patients"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Session by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/patients/sessions/{{sessionId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"patients",
+								"sessions",
+								"{{sessionId}}"
+							]
+						},
+						"description": "Get specific session details"
 					},
 					"response": []
 				},
@@ -1286,13 +1444,12 @@
 							"raw": "{\n  \"fleetOwnerId\": 2,\n  \"message\": \"We need ambulance support for our emergency department during peak hours.\",\n  \"requestType\": \"long-term\",\n  \"startDate\": \"2025-11-01\",\n  \"endDate\": \"2025-12-31\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/collaboration/requests",
+							"raw": "{{baseUrl}}/collaborations",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"collaboration",
-								"requests"
+								"collaborations"
 							]
 						},
 						"description": "Hospital creates collaboration request to fleet owner"
@@ -1305,13 +1462,12 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/collaboration/requests?status=pending",
+							"raw": "{{baseUrl}}/collaborations?status=pending",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"collaboration",
-								"requests"
+								"collaborations"
 							],
 							"query": [
 								{
@@ -1331,13 +1487,12 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/collaboration/requests/1",
+							"raw": "{{baseUrl}}/collaborations/1",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"collaboration",
-								"requests",
+								"collaborations",
 								"1"
 							]
 						},
@@ -1348,7 +1503,7 @@
 				{
 					"name": "Approve Collaboration Request",
 					"request": {
-						"method": "POST",
+						"method": "PATCH",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -1360,15 +1515,14 @@
 							"raw": "{\n  \"responseMessage\": \"We accept your collaboration request. Looking forward to working together.\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/collaboration/requests/1/approve",
+							"raw": "{{baseUrl}}/collaborations/1/accept",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"collaboration",
-								"requests",
+								"collaborations",
 								"1",
-								"approve"
+								"accept"
 							]
 						},
 						"description": "Fleet owner approves collaboration request"
@@ -1378,7 +1532,7 @@
 				{
 					"name": "Reject Collaboration Request",
 					"request": {
-						"method": "POST",
+						"method": "PATCH",
 						"header": [
 							{
 								"key": "Content-Type",
@@ -1390,13 +1544,12 @@
 							"raw": "{\n  \"responseMessage\": \"Sorry, we cannot accommodate this request at this time.\"\n}"
 						},
 						"url": {
-							"raw": "{{baseUrl}}/collaboration/requests/1/reject",
+							"raw": "{{baseUrl}}/collaborations/1/reject",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"collaboration",
-								"requests",
+								"collaborations",
 								"1",
 								"reject"
 							]
@@ -1408,16 +1561,15 @@
 				{
 					"name": "Cancel Collaboration Request",
 					"request": {
-						"method": "POST",
+						"method": "PATCH",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/collaboration/requests/1/cancel",
+							"raw": "{{baseUrl}}/collaborations/1/cancel",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
-								"collaboration",
-								"requests",
+								"collaborations",
 								"1",
 								"cancel"
 							]

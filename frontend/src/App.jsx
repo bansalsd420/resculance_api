@@ -1,64 +1,140 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import { Layout } from './components/layout/Layout';
-import { Login } from './pages/Login';
-import { Dashboard } from './pages/Dashboard';
-import { Organizations } from './pages/Organizations';
-import { Users } from './pages/Users';
-import { Ambulances } from './pages/Ambulances';
-import { Patients } from './pages/Patients';
-import { Collaborations } from './pages/Collaborations';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import './styles.css';
+import { MainLayout } from './layouts/MainLayout';
+import { ProtectedRoute } from './routes/ProtectedRoute';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { Login } from './pages/auth/Login';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { NotFound } from './pages/NotFound';
+import { Dashboard } from './pages/dashboard/Dashboard';
+import { Organizations } from './pages/organizations/Organizations';
+import { Users } from './pages/users/Users';
+import { Ambulances } from './pages/ambulances/Ambulances';
+import { Patients } from './pages/patients/Patients';
+import { Trips } from './pages/trips/Trips';
+import { TripDetail } from './pages/trips/TripDetail';
+import { Collaborations } from './pages/collaborations/Collaborations';
+import { Settings } from './pages/settings/Settings';
+import { useAuthStore } from './store/authStore';
 
 function App() {
+  const initialize = useAuthStore((state) => state.initialize);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
   return (
-    <AuthProvider>
+    <ErrorBoundary>
       <BrowserRouter>
         <Routes>
+          {/* Public Routes */}
           <Route path="/login" element={<Login />} />
-          
-          <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/organizations" element={<Organizations />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/ambulances" element={<Ambulances />} />
-              <Route path="/patients" element={<Patients />} />
-              <Route path="/collaborations" element={<Collaborations />} />
-            </Route>
-          </Route>
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          {/* Register removed - users should be created by admins only */}
 
+          {/* Protected Routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Dashboard />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/organizations"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Organizations />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Users />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/ambulances"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Ambulances />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patients"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Patients />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trips"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Trips />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/trips/:sessionId"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <TripDetail />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/collaborations"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Collaborations />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Settings />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Redirect root to dashboard */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/unauthorized" element={
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-4xl font-bold mb-4">Unauthorized</h1>
-                <p className="text-gray-600">You don't have permission to access this page.</p>
-              </div>
-            </div>
-          } />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+          {/* 404 - Catch all */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-      
-      <ToastContainer 
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
-    </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
 export default App;
-

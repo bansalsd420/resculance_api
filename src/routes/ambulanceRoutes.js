@@ -1,5 +1,6 @@
 const express = require('express');
 const AmbulanceController = require('../controllers/ambulanceController');
+const AmbulanceDeviceController = require('../controllers/ambulanceDeviceController');
 const { authenticate, authorize, canAccessAmbulance } = require('../middleware/auth');
 const { createAmbulanceValidation, validate } = require('../middleware/validation');
 const { ROLES } = require('../config/constants');
@@ -84,6 +85,46 @@ router.delete(
   '/:id',
   authorize(ROLES.SUPERADMIN, ROLES.HOSPITAL_ADMIN, ROLES.FLEET_ADMIN),
   AmbulanceController.delete
+);
+
+// Device management routes
+router.post(
+  '/:ambulanceId/devices',
+  authorize(
+    ROLES.SUPERADMIN,
+    ROLES.FLEET_ADMIN,
+    ROLES.FLEET_STAFF,
+    ROLES.HOSPITAL_ADMIN,
+    ROLES.HOSPITAL_STAFF
+  ),
+  AmbulanceDeviceController.create
+);
+
+router.get('/:ambulanceId/devices', AmbulanceDeviceController.getByAmbulance);
+router.get('/devices/:id', AmbulanceDeviceController.getById);
+
+router.post('/devices/:id/authenticate', AmbulanceDeviceController.authenticate);
+
+router.put(
+  '/devices/:id',
+  authorize(
+    ROLES.SUPERADMIN,
+    ROLES.FLEET_ADMIN,
+    ROLES.FLEET_STAFF,
+    ROLES.HOSPITAL_ADMIN,
+    ROLES.HOSPITAL_STAFF
+  ),
+  AmbulanceDeviceController.update
+);
+
+router.delete(
+  '/devices/:id',
+  authorize(
+    ROLES.SUPERADMIN,
+    ROLES.FLEET_ADMIN,
+    ROLES.HOSPITAL_ADMIN
+  ),
+  AmbulanceDeviceController.delete
 );
 
 module.exports = router;

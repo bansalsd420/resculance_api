@@ -9,6 +9,8 @@ const socketIo = require('socket.io');
 const rateLimit = require('express-rate-limit');
 
 const db = require('./config/database');
+// Optional: auto-run migrations on first boot if core tables are missing
+const { migrateAll } = require('./database/migrate-all');
 const errorHandler = require('./middleware/errorHandler');
 const routes = require('./routes');
 const socketHandler = require('./socket/socketHandler');
@@ -60,14 +62,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting
-const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use('/api/', limiter);
+// const limiter = rateLimit({
+//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60,
+//   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000000,
+//   message: 'Too many requests from this IP, please try again later.',
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+// app.use('/api/', limiter);
 
 // Trust proxy for accurate IP tracking behind reverse proxies
 if (process.env.NODE_ENV === 'production') {
@@ -106,12 +108,32 @@ app.use('*', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Database connection and server start
+// Database connection, ensure schema, and server start
 db.getConnection()
-  .then(connection => {
+  .then(async (connection) => {
     console.log('✅ Database connected successfully');
-    connection.release();
-    
+
+    try {
+      // Check if core table exists; if not, run migrations once
+      const [rows] = await connection.query(
+        `SELECT COUNT(*) as cnt FROM information_schema.tables 
+         WHERE table_schema = DATABASE() AND table_name = 'users'`
+      );
+      const hasUsersTable = rows?.[0]?.cnt > 0;
+
+      if (!hasUsersTable) {
+        console.warn('⚠️  Core table "users" not found. Running migrations now...');
+        await migrateAll();
+        console.log('✅ Migrations completed at startup');
+      }
+    } catch (checkErr) {
+      console.error('❌ Failed while checking/running migrations at startup:', checkErr.message);
+      console.error('Please run: make db-setup (or npm run db:setup) and restart.');
+      process.exit(1);
+    } finally {
+      connection.release();
+    }
+
     server.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);

@@ -1,10 +1,6 @@
-# 🚑 RESCULANCE INDIA - Emergency Medical Response System# RESCULANCE - Smart Ambulance Management Platform 🚑# RESCULANCE - Smart Ambulance Management Platform
-
-
+# 🚑 Resculance - Smart Ambulance Management Platform
 
 > **Modern Medical Dashboard for Real-Time Ambulance Management & Patient Care**
-
-
 
 A comprehensive healthcare platform connecting ambulances, hospitals, and fleet owners for efficient emergency response. Built with React, Node.js, and MySQL.[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)[![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
 
@@ -26,9 +22,9 @@ A comprehensive healthcare platform connecting ambulances, hospitals, and fleet 
 
 - Real-time status tracking (Active/Suspended)
 
-- Advanced filtering and search capabilities> **RESCULANCE** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time for faster emergency response.**RESCULANCE** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time.
+- Advanced filtering and search capabilities
 
-
+> **Resculance** is a comprehensive emergency medical services management platform that connects hospitals, fleet owners, ambulances, and medical personnel in real-time for faster emergency response.
 
 ### **🚑 Ambulance Fleet Management**
 
@@ -564,7 +560,7 @@ collaboration_requests → organizations (Many-to-Many)
 
 ### **API Testing**NODE_ENV=development### Frontend
 
-Import `RESCULANCE_API.postman_collection.json` into Postman for complete API testing.
+Import `Resculance_API.postman_collection.json` into Postman for complete API testing.
 
 PORT=5001```bash
 

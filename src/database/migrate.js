@@ -73,7 +73,31 @@ CREATE TABLE IF NOT EXISTS ambulances (
   INDEX idx_current_hospital (current_hospital_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Smart Devices Table
+-- Ambulance Devices Table (Multiple devices per ambulance - cameras, GPS, ECG, etc.)
+CREATE TABLE IF NOT EXISTS ambulance_devices (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  ambulance_id INT NOT NULL,
+  device_name VARCHAR(255) NOT NULL,
+  device_type ENUM('CAMERA', 'LIVE_LOCATION', 'ECG', 'VITAL_MONITOR', 'GPS_TRACKER') NOT NULL,
+  device_id VARCHAR(255) UNIQUE NOT NULL,
+  device_username VARCHAR(255),
+  device_password VARCHAR(255),
+  device_api TEXT,
+  jsession VARCHAR(500),
+  manufacturer VARCHAR(255),
+  model VARCHAR(255),
+  status ENUM('active', 'inactive', 'maintenance') DEFAULT 'active',
+  last_sync TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (ambulance_id) REFERENCES ambulances(id) ON DELETE CASCADE,
+  INDEX idx_ambulance (ambulance_id),
+  INDEX idx_device_type (device_type),
+  INDEX idx_device_id (device_id),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Smart Devices Table (Legacy - keeping for backwards compatibility)
 CREATE TABLE IF NOT EXISTS smart_devices (
   id INT PRIMARY KEY AUTO_INCREMENT,
   ambulance_id INT NOT NULL,

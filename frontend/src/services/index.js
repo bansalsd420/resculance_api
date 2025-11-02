@@ -1,0 +1,334 @@
+import api from './api';
+
+export const authService = {
+  login: async (email, password) => {
+    const response = await api.post('/auth/login', { email, password });
+    return response;
+  },
+
+  register: async (userData) => {
+    const response = await api.post('/auth/register', userData);
+    return response;
+  },
+
+  forgotPassword: async (email) => {
+    const response = await api.post('/auth/forgot-password', { email });
+    return response;
+  },
+
+  getProfile: async () => {
+    const response = await api.get('/auth/profile');
+    return response;
+  },
+
+  updateProfile: async (userData) => {
+    const response = await api.put('/auth/profile', userData);
+    return response;
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    const response = await api.put('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    return response;
+  },
+
+  refreshToken: async (refreshToken) => {
+    const response = await api.post('/auth/refresh-token', { refreshToken });
+    return response;
+  },
+};
+
+export const organizationService = {
+  getAll: async (params) => {
+    const response = await api.get('/organizations', { params });
+    return response;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/organizations/${id}`);
+    return response;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/organizations', data);
+    return response;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/organizations/${id}`, data);
+    return response;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/organizations/${id}`);
+    return response;
+  },
+
+  suspend: async (id) => {
+    const response = await api.patch(`/organizations/${id}/suspend`);
+    return response;
+  },
+
+  activate: async (id) => {
+    const response = await api.patch(`/organizations/${id}/activate`);
+    return response;
+  },
+};
+
+export const userService = {
+  getAll: async (params) => {
+    const response = await api.get('/users', { params });
+    return response;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/users/${id}`);
+    return response;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/users', data);
+    return response;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/users/${id}`, data);
+    return response;
+  },
+
+  approve: async (id) => {
+    const response = await api.patch(`/users/${id}/approve`);
+    return response;
+  },
+
+  suspend: async (id) => {
+    const response = await api.patch(`/users/${id}/suspend`);
+    return response;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/users/${id}`);
+    return response;
+  },
+};
+
+export const ambulanceService = {
+  getAll: async (params) => {
+    const response = await api.get('/ambulances', { params });
+    return response;
+  },
+
+  getMyAmbulances: async () => {
+    const response = await api.get('/ambulances/my-ambulances');
+    return response;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/ambulances/${id}`);
+    return response;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/ambulances', data);
+    return response;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/ambulances/${id}`, data);
+    return response;
+  },
+
+  approve: async (id) => {
+    const response = await api.patch(`/ambulances/${id}/approve`);
+    return response;
+  },
+
+  assign: async (id, userId, role) => {
+    const response = await api.post(`/ambulances/${id}/assign`, { userId, role });
+    return response;
+  },
+
+  unassign: async (id, userId) => {
+    const response = await api.delete(`/ambulances/${id}/unassign/${userId}`);
+    return response;
+  },
+
+  getAssignedUsers: async (id) => {
+    const response = await api.get(`/ambulances/${id}/assigned-users`);
+    return response;
+  },
+
+  updateLocation: async (id, latitude, longitude) => {
+    const response = await api.post(`/ambulances/${id}/location`, { latitude, longitude });
+    return response;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/ambulances/${id}`);
+    return response;
+  },
+
+  // Device management
+  getDevices: async (ambulanceId) => {
+    const response = await api.get(`/ambulances/${ambulanceId}/devices`);
+    return response;
+  },
+
+  getDeviceById: async (deviceId) => {
+    const response = await api.get(`/ambulances/devices/${deviceId}`);
+    return response;
+  },
+
+  createDevice: async (ambulanceId, data) => {
+    const response = await api.post(`/ambulances/${ambulanceId}/devices`, data);
+    return response;
+  },
+
+  updateDevice: async (deviceId, data) => {
+    const response = await api.put(`/ambulances/devices/${deviceId}`, data);
+    return response;
+  },
+
+  deleteDevice: async (deviceId) => {
+    const response = await api.delete(`/ambulances/devices/${deviceId}`);
+    return response;
+  },
+
+  authenticateDevice: async (deviceId) => {
+    const response = await api.post(`/ambulances/devices/${deviceId}/authenticate`);
+    return response;
+  },
+};
+
+export const patientService = {
+  getAll: async (params) => {
+    const response = await api.get('/patients', { params });
+    return response;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/patients/${id}`);
+    return response;
+  },
+
+  getByCode: async (code) => {
+    const response = await api.get(`/patients/code/${code}`);
+    return response;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/patients', data);
+    return response;
+  },
+
+  update: async (id, data) => {
+    const response = await api.put(`/patients/${id}`, data);
+    return response;
+  },
+
+  onboard: async (id, data) => {
+    const response = await api.post(`/patients/${id}/onboard`, data);
+    return response;
+  },
+
+  offboard: async (sessionId, data) => {
+    const response = await api.patch(`/patients/sessions/${sessionId}/offboard`, data);
+    return response;
+  },
+
+  hideData: async (id) => {
+    const response = await api.patch(`/patients/${id}/hide-data`);
+    return response;
+  },
+
+  unhideData: async (id) => {
+    const response = await api.patch(`/patients/${id}/unhide-data`);
+    return response;
+  },
+
+  addVitalSigns: async (id, data) => {
+    const response = await api.post(`/patients/${id}/vital-signs`, data);
+    return response;
+  },
+
+  getVitalSigns: async (id, params) => {
+    const response = await api.get(`/patients/${id}/vital-signs`, { params });
+    return response;
+  },
+
+  getAllSessions: async (params) => {
+    const response = await api.get('/patients/sessions', { params });
+    return response;
+  },
+
+  getSession: async (sessionId) => {
+    const response = await api.get(`/patients/sessions/${sessionId}`);
+    return response;
+  },
+
+  getSessionById: async (sessionId) => {
+    const response = await api.get(`/patients/sessions/${sessionId}`);
+    return response;
+  },
+
+  getSessions: async (id) => {
+    const response = await api.get(`/patients/${id}/sessions`);
+    return response;
+  },
+
+  addCommunication: async (id, data) => {
+    const response = await api.post(`/patients/${id}/communications`, data);
+    return response;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/patients/${id}`);
+    return response;
+  },
+};
+
+export const collaborationService = {
+  getAll: async (params) => {
+    const response = await api.get('/collaborations', { params });
+    return response;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/collaborations/${id}`);
+    return response;
+  },
+
+  create: async (data) => {
+    const response = await api.post('/collaborations', data);
+    return response;
+  },
+
+  accept: async (id, data) => {
+    const response = await api.patch(`/collaborations/${id}/accept`, data);
+    return response;
+  },
+
+  reject: async (id, data) => {
+    const response = await api.patch(`/collaborations/${id}/reject`, data);
+    return response;
+  },
+
+  cancel: async (id) => {
+    const response = await api.patch(`/collaborations/${id}/cancel`);
+    return response;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/collaborations/${id}`);
+    return response;
+  },
+};
+
+export const dashboardService = {
+  getStats: async () => {
+    const response = await api.get('/dashboard/stats');
+    return response;
+  },
+};
