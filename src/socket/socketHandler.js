@@ -44,23 +44,22 @@ const socketHandler = (io) => {
     });
 
     // Join session room (for active patient sessions)
-    socket.on('join_session', (data) => {
-      const { sessionId } = data;
-      socket.join(`session_${sessionId}`);
-      console.log(`User ${socket.user.id} joined session room: session_${sessionId}`);
-      
-      socket.emit('joined_session', { 
-        success: true, 
-        sessionId,
-        message: `Joined session ${sessionId} successfully` 
-      });
-    });
+    // NOTE: Moved this to after MESSAGE handler to avoid duplication
+    // See "Broadcast when user joins session" above for the actual implementation
 
     // Leave session room
     socket.on('leave_session', (data) => {
       const { sessionId } = data;
       socket.leave(`session_${sessionId}`);
-      console.log(`User ${socket.user.id} left session room: session_${sessionId}`);
+      
+      // Notify others in the session
+      socket.to(`session_${sessionId}`).emit('user_left', {
+        sessionId,
+        userId: socket.user.id,
+        userName: `${socket.user.firstName} ${socket.user.lastName}`
+      });
+      
+      console.log(`👋 User ${socket.user.id} left session room: session_${sessionId}`);
     });
 
     // Handle vital signs update (from paramedic device)
@@ -93,20 +92,102 @@ const socketHandler = (io) => {
       console.log(`Location updated for ambulance ${ambulanceId}`);
     });
 
-    // Handle text messages between doctor and paramedic
+    // Handle text messages between doctor and paramedic (GROUP CHAT)
     socket.on(SOCKET_EVENTS.MESSAGE, (data) => {
-      const { sessionId, message, receiverId } = data;
+      const { sessionId, message, messageType, metadata } = data;
       
-      // Broadcast to session room
+      // Broadcast to all users in session room (group chat)
       io.to(`session_${sessionId}`).emit(SOCKET_EVENTS.MESSAGE, {
         sessionId,
         senderId: socket.user.id,
+        senderFirstName: socket.user.firstName,
+        senderLastName: socket.user.lastName,
         senderRole: socket.user.role,
         message,
+        messageType: messageType || 'text',
+        metadata,
         timestamp: new Date().toISOString()
       });
 
-      console.log(`Message sent in session ${sessionId}`);
+      console.log(`💬 Message sent in session ${sessionId} by ${socket.user.firstName} ${socket.user.lastName}`);
+    });
+
+    // Handle typing indicator (group chat)
+    socket.on('typing_start', (data) => {
+      const { sessionId } = data;
+      socket.to(`session_${sessionId}`).emit('user_typing', {
+        sessionId,
+        userId: socket.user.id,
+        userName: `${socket.user.firstName} ${socket.user.lastName}`,
+        userRole: socket.user.role,
+        isTyping: true
+      });
+    });
+
+    socket.on('typing_stop', (data) => {
+      const { sessionId } = data;
+      socket.to(`session_${sessionId}`).emit('user_typing', {
+        sessionId,
+        userId: socket.user.id,
+        isTyping: false
+      });
+    });
+
+    // Handle message read receipts (group chat)
+    socket.on('message_read', (data) => {
+      const { sessionId, messageId } = data;
+      io.to(`session_${sessionId}`).emit('message_read', {
+        sessionId,
+        messageId,
+        userId: socket.user.id,
+        readAt: new Date().toISOString()
+      });
+    });
+
+    // Get online users in a session
+    socket.on('get_online_users', async (data) => {
+      const { sessionId } = data;
+      const room = io.sockets.adapter.rooms.get(`session_${sessionId}`);
+      const onlineUsers = [];
+      
+      if (room) {
+        for (const socketId of room) {
+          const userSocket = io.sockets.sockets.get(socketId);
+          if (userSocket && userSocket.user) {
+            onlineUsers.push({
+              id: userSocket.user.id,
+              firstName: userSocket.user.firstName,
+              lastName: userSocket.user.lastName,
+              role: userSocket.user.role,
+              email: userSocket.user.email
+            });
+          }
+        }
+      }
+      
+      socket.emit('online_users', { sessionId, users: onlineUsers });
+    });
+
+    // Broadcast when user joins session (for online status)
+    socket.on('join_session', (data) => {
+      const { sessionId } = data;
+      socket.join(`session_${sessionId}`);
+      
+      // Notify others in the session
+      socket.to(`session_${sessionId}`).emit('user_joined', {
+        sessionId,
+        userId: socket.user.id,
+        userName: `${socket.user.firstName} ${socket.user.lastName}`,
+        userRole: socket.user.role
+      });
+      
+      console.log(`👋 User ${socket.user.firstName} ${socket.user.lastName} joined session room: session_${sessionId}`);
+      
+      socket.emit('joined_session', { 
+        success: true, 
+        sessionId,
+        message: `Joined session ${sessionId} successfully` 
+      });
     });
 
     // Handle call request (audio call)

@@ -283,6 +283,27 @@ export const patientService = {
     return response;
   },
 
+  // Session-based group chat methods
+  getSessionMessages: async (sessionId, params) => {
+    const response = await api.get(`/patients/sessions/${sessionId}/messages`, { params });
+    return response;
+  },
+
+  sendSessionMessage: async (sessionId, data) => {
+    const response = await api.post(`/patients/sessions/${sessionId}/messages`, data);
+    return response;
+  },
+
+  markMessageAsRead: async (messageId) => {
+    const response = await api.patch(`/patients/messages/${messageId}/read`);
+    return response;
+  },
+
+  getUnreadCount: async (sessionId) => {
+    const response = await api.get(`/patients/sessions/${sessionId}/unread-count`);
+    return response;
+  },
+
   delete: async (id) => {
     const response = await api.delete(`/patients/${id}`);
     return response;

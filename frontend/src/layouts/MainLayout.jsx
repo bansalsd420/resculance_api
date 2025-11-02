@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -18,6 +18,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
+import socketService from '../services/socketService.js';
 
 const Sidebar = ({ isOpen, toggleSidebar }) => {
   const location = useLocation();
@@ -28,7 +29,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
     { path: '/users', icon: Users, label: 'Users' },
     { path: '/ambulances', icon: Ambulance, label: 'Ambulances' },
     { path: '/patients', icon: UserSquare2, label: 'Patients' },
-    { path: '/trips', icon: Activity, label: 'Trips' },
+    { path: '/onboarding', icon: Activity, label: 'Onboarding' },
     { path: '/collaborations', icon: Building2, label: 'Partnerships' },
   ];
 
@@ -141,7 +142,7 @@ const Topbar = ({ toggleSidebar }) => {
     { label: 'New User', path: '/users', icon: Users },
     { label: 'New Ambulance', path: '/ambulances', icon: Ambulance },
     { label: 'New Patient', path: '/patients', icon: UserSquare2 },
-    { label: 'New Trip', path: '/trips', icon: Activity },
+    { label: 'New Onboarding', path: '/onboarding', icon: Activity },
   ];
 
   const notifications = [
@@ -329,6 +330,20 @@ const Topbar = ({ toggleSidebar }) => {
 
 export const MainLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { token } = useAuthStore();
+
+  // Initialize socket connection when user is logged in
+  useEffect(() => {
+    if (token) {
+      socketService.connect(token);
+      console.log('Socket service initialized');
+    }
+
+    return () => {
+      // Cleanup socket on unmount
+      socketService.disconnect();
+    };
+  }, [token]);
 
   return (
     <div className="min-h-screen bg-gray-50">

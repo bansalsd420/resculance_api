@@ -128,4 +128,34 @@ router.post(
   PatientController.addCommunication
 );
 
+// Session-based group chat routes
+router.get(
+  '/sessions/:sessionId/messages',
+  PatientController.getSessionMessages
+);
+
+router.post(
+  '/sessions/:sessionId/messages',
+  authorize(
+    ROLES.HOSPITAL_PARAMEDIC,
+    ROLES.HOSPITAL_DOCTOR,
+    ROLES.HOSPITAL_STAFF,
+    ROLES.FLEET_PARAMEDIC,
+    ROLES.FLEET_DOCTOR,
+    ROLES.FLEET_STAFF,
+    ROLES.FLEET_DRIVER
+  ),
+  PatientController.sendSessionMessage
+);
+
+router.patch(
+  '/messages/:messageId/read',
+  PatientController.markMessageAsRead
+);
+
+router.get(
+  '/sessions/:sessionId/unread-count',
+  PatientController.getUnreadCount
+);
+
 module.exports = router;

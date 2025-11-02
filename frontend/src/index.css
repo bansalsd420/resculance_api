@@ -52,4 +52,8 @@
   .text-balance {
     text-wrap: balance;
   }
+  
+  .mirror {
+    transform: scaleX(-1);
+  }
 }

@@ -11,8 +11,8 @@ import { Organizations } from './pages/organizations/Organizations';
 import { Users } from './pages/users/Users';
 import { Ambulances } from './pages/ambulances/Ambulances';
 import { Patients } from './pages/patients/Patients';
-import { Trips } from './pages/trips/Trips';
-import { TripDetail } from './pages/trips/TripDetail';
+import { Onboarding } from './pages/onboarding/Onboarding';
+import { OnboardingDetail } from './pages/onboarding/OnboardingDetail';
 import { Collaborations } from './pages/collaborations/Collaborations';
 import { Settings } from './pages/settings/Settings';
 import { useAuthStore } from './store/authStore';
@@ -86,21 +86,21 @@ function App() {
             }
           />
           <Route
-            path="/trips"
+            path="/onboarding"
             element={
               <ProtectedRoute>
                 <MainLayout>
-                  <Trips />
+                  <Onboarding />
                 </MainLayout>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/trips/:sessionId"
+            path="/onboarding/:sessionId"
             element={
               <ProtectedRoute>
                 <MainLayout>
-                  <TripDetail />
+                  <OnboardingDetail />
                 </MainLayout>
               </ProtectedRoute>
             }

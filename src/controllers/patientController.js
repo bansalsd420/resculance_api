@@ -392,7 +392,7 @@ class PatientController {
   static async addCommunication(req, res, next) {
     try {
       const { patientId } = req.params;
-      const { receiverId, communicationType, message, duration } = req.body;
+      const { messageType, message, metadata } = req.body;
 
       // Find active session for patient
       const session = await PatientSessionModel.findActiveByPatient(patientId);
@@ -403,24 +403,27 @@ class PatientController {
       const communicationId = await CommunicationModel.create({
         sessionId: session.id,
         senderId: req.user.id,
-        receiverId,
-        communicationType,
+        messageType: messageType || 'text',
         message,
-        duration
+        metadata
       });
 
-      // Emit socket event
+      // Emit socket event for real-time group chat
       const io = req.app.get('io');
       io.to(`session_${session.id}`).emit('new_message', {
-        communicationId,
+        id: communicationId,
         senderId: req.user.id,
+        senderName: `${req.user.firstName} ${req.user.lastName}`,
+        senderRole: req.user.role,
         message,
-        communicationType
+        messageType: messageType || 'text',
+        metadata,
+        createdAt: new Date()
       });
 
       res.status(201).json({
         success: true,
-        message: 'Communication logged successfully',
+        message: 'Message sent successfully',
         data: { communicationId }
       });
     } catch (error) {
@@ -442,6 +445,126 @@ class PatientController {
       res.json({
         success: true,
         data: sessions
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Chat/Communication methods for trip-based group chat
+  static async getSessionMessages(req, res, next) {
+    try {
+      const { sessionId } = req.params;
+      const { limit = 100 } = req.query;
+
+      const session = await PatientSessionModel.findById(sessionId);
+      if (!session) {
+        return next(new AppError('Session not found', 404));
+      }
+
+      // Check if user has access to this session
+      if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
+        return next(new AppError('Access denied to this session', 403));
+      }
+
+      const messages = await CommunicationModel.findBySession(sessionId, parseInt(limit));
+
+      res.json({
+        success: true,
+        data: { messages }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async sendSessionMessage(req, res, next) {
+    try {
+      const { sessionId } = req.params;
+      const { messageType, message, metadata } = req.body;
+
+      const session = await PatientSessionModel.findById(sessionId);
+      if (!session) {
+        return next(new AppError('Session not found', 404));
+      }
+
+      // Check if user has access to this session
+      if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
+        return next(new AppError('Access denied to this session', 403));
+      }
+
+      const communicationId = await CommunicationModel.create({
+        sessionId,
+        senderId: req.user.id,
+        messageType: messageType || 'text',
+        message,
+        metadata
+      });
+
+      // Emit socket event for real-time group chat
+      const io = req.app.get('io');
+      io.to(`session_${sessionId}`).emit('new_message', {
+        id: communicationId,
+        sessionId,
+        senderId: req.user.id,
+        senderFirstName: req.user.firstName,
+        senderLastName: req.user.lastName,
+        senderRole: req.user.role,
+        senderEmail: req.user.email,
+        message,
+        messageType: messageType || 'text',
+        metadata,
+        createdAt: new Date()
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Message sent successfully',
+        data: { 
+          id: communicationId,
+          sessionId,
+          message,
+          messageType: messageType || 'text'
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async markMessageAsRead(req, res, next) {
+    try {
+      const { messageId } = req.params;
+      
+      const success = await CommunicationModel.markAsRead(messageId, req.user.id);
+      
+      if (!success) {
+        return next(new AppError('Message not found', 404));
+      }
+
+      res.json({
+        success: true,
+        message: 'Message marked as read'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getUnreadCount(req, res, next) {
+    try {
+      const { sessionId } = req.params;
+      
+      const session = await PatientSessionModel.findById(sessionId);
+      if (!session) {
+        return next(new AppError('Session not found', 404));
+      }
+
+      const count = await CommunicationModel.getUnreadCount(sessionId, req.user.id);
+
+      res.json({
+        success: true,
+        data: { unreadCount: count }
       });
     } catch (error) {
       next(error);

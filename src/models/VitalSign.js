@@ -24,9 +24,8 @@ class VitalSignModel {
 
   static async findBySession(sessionId, limit = 50) {
     const [rows] = await db.query(
-      `SELECT vs.*, sd.device_name, sd.device_type
+      `SELECT vs.*
        FROM vital_signs vs
-       LEFT JOIN smart_devices sd ON vs.device_id = sd.id
        WHERE vs.session_id = ?
        ORDER BY vs.recorded_at DESC
        LIMIT ?`,
@@ -37,9 +36,8 @@ class VitalSignModel {
 
   static async findLatestBySession(sessionId) {
     const [rows] = await db.query(
-      `SELECT vs.*, sd.device_name, sd.device_type
+      `SELECT vs.*
        FROM vital_signs vs
-       LEFT JOIN smart_devices sd ON vs.device_id = sd.id
        WHERE vs.session_id = ?
        ORDER BY vs.recorded_at DESC
        LIMIT 1`,

@@ -40,7 +40,7 @@ const sessionSchema = yup.object({
   initialAssessment: yup.string(),
 });
 
-export const Trips = () => {
+export const Onboarding = () => {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState([]);
   const [patients, setPatients] = useState([]);
@@ -83,7 +83,7 @@ export const Trips = () => {
       const hospitalsList = orgsRes.data?.data?.organizations || orgsRes.data?.organizations || orgsRes.data || [];
       const sessionsList = sessionsRes.data?.data?.sessions || sessionsRes.data?.sessions || sessionsRes.data || [];
       
-      console.log('Trips: Fetched data', { 
+      console.log('Onboarding: Fetched data', { 
         patients: patientsList.length, 
         ambulances: ambulancesList.length, 
         hospitals: hospitalsList.length,
@@ -96,7 +96,7 @@ export const Trips = () => {
       setSessions(sessionsList);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      toast.error('Failed to load trip data');
+      toast.error('Failed to load onboarding data');
       setSessions([]);
       setPatients([]);
       setAmbulances([]);
@@ -118,30 +118,30 @@ export const Trips = () => {
         chiefComplaint: data.chiefComplaint,
         initialAssessment: data.initialAssessment,
       });
-      toast.success('Trip created successfully');
+      toast.success('Patient onboarded successfully');
       await fetchData();
       handleCloseModal();
     } catch (error) {
-      console.error('Failed to create trip:', error);
-      toast.error('Failed to create trip');
+      console.error('Failed to onboard patient:', error);
+      toast.error('Failed to onboard patient');
     } finally {
       setLoading(false);
     }
   };
 
   const handleEndTrip = async (session) => {
-    if (window.confirm('Are you sure you want to end this trip?')) {
+    if (window.confirm('Are you sure you want to offboard this patient?')) {
       try {
         setLoading(true);
         // backend expects PATCH /patients/sessions/:sessionId/offboard with { treatmentNotes }
         await patientService.offboard(session.id, {
-          treatmentNotes: 'Trip completed'
+          treatmentNotes: 'Patient offboarded'
         });
-        toast.success('Trip ended successfully');
+        toast.success('Patient offboarded successfully');
         await fetchData();
       } catch (error) {
-        console.error('Failed to end trip:', error);
-        toast.error('Failed to end trip');
+        console.error('Failed to offboard patient:', error);
+        toast.error('Failed to offboard patient');
       } finally {
         setLoading(false);
       }
@@ -169,11 +169,11 @@ export const Trips = () => {
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
       case 'active':
-        return 'bg-green-50 text-green-700';
+        return 'bg-gray-100 text-gray-900';
       case 'completed':
-        return 'bg-blue-50 text-blue-700';
+        return 'bg-gray-200 text-gray-900';
       case 'cancelled':
-        return 'bg-red-50 text-red-700';
+        return 'bg-gray-300 text-gray-900';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -294,8 +294,8 @@ export const Trips = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate(`/trips/${session.id}`)}
-            title="View full trip details"
+            onClick={() => navigate(`/onboarding/${session.id}`)}
+            title="View full details"
           >
             <Eye className="w-4 h-4 mr-1" />
             View Details
@@ -315,7 +315,7 @@ export const Trips = () => {
                 size="sm"
                 onClick={() => handleEndTrip(session)}
               >
-                End
+                Offboard
               </Button>
             </>
           )}
@@ -331,12 +331,12 @@ export const Trips = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Trips & Dispatch</h1>
-          <p className="text-secondary">Manage ambulance trips and patient transport</p>
+          <h1 className="text-3xl font-display font-bold mb-2">Patient Onboarding</h1>
+          <p className="text-secondary">Manage patient transport and ambulance assignments</p>
         </div>
         <Button onClick={() => setShowModal(true)}>
           <Plus className="w-5 h-5 mr-2" />
-          Start New Trip
+          Onboard Patient
         </Button>
       </div>
 
@@ -344,11 +344,11 @@ export const Trips = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-50 rounded-2xl">
-              <Activity className="w-8 h-8 text-blue-600" />
+            <div className="p-3 bg-gray-100 rounded-2xl">
+              <Activity className="w-8 h-8 text-gray-900" />
             </div>
             <div>
-              <p className="text-sm text-secondary">Total Trips</p>
+              <p className="text-sm text-secondary">Total Sessions</p>
               <p className="text-2xl font-bold">{statsData.total}</p>
             </div>
           </div>
@@ -356,8 +356,8 @@ export const Trips = () => {
 
         <Card className="p-6">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-green-50 rounded-2xl">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="p-3 bg-gray-200 rounded-2xl">
+              <CheckCircle className="w-8 h-8 text-gray-900" />
             </div>
             <div>
               <p className="text-sm text-secondary">Active</p>
@@ -368,8 +368,8 @@ export const Trips = () => {
 
         <Card className="p-6">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-50 rounded-2xl">
-              <CheckCircle className="w-8 h-8 text-purple-600" />
+            <div className="p-3 bg-gray-300 rounded-2xl">
+              <CheckCircle className="w-8 h-8 text-gray-900" />
             </div>
             <div>
               <p className="text-sm text-secondary">Completed</p>
@@ -380,8 +380,8 @@ export const Trips = () => {
 
         <Card className="p-6">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-red-50 rounded-2xl">
-              <XCircle className="w-8 h-8 text-red-600" />
+            <div className="p-3 bg-gray-400 rounded-2xl">
+              <XCircle className="w-8 h-8 text-white" />
             </div>
             <div>
               <p className="text-sm text-secondary">Cancelled</p>
@@ -400,7 +400,7 @@ export const Trips = () => {
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-2 rounded-2xl font-medium transition-all ${
                 activeTab === tab
-                  ? 'bg-primary text-white'
+                  ? 'bg-black text-white'
                   : 'text-secondary hover:bg-background-card'
               }`}
             >
@@ -410,7 +410,7 @@ export const Trips = () => {
         </div>
       </Card>
 
-      {/* Trips Table */}
+      {/* Onboarding Table */}
       <Card>
         <div className="p-6">
           <Table
@@ -421,11 +421,11 @@ export const Trips = () => {
         </div>
       </Card>
 
-      {/* Start Trip Modal */}
+      {/* Onboard Patient Modal */}
       <Modal
         isOpen={showModal}
         onClose={handleCloseModal}
-        title="Start New Trip"
+        title="Onboard Patient"
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -443,7 +443,7 @@ export const Trips = () => {
               ))}
             </select>
             {errors.patientId && (
-              <p className="mt-1 text-sm text-red-600">{errors.patientId.message}</p>
+              <p className="mt-1 text-sm text-gray-900">{errors.patientId.message}</p>
             )}
           </div>
 
@@ -463,7 +463,7 @@ export const Trips = () => {
                 ))}
             </select>
             {errors.ambulanceId && (
-              <p className="mt-1 text-sm text-red-600">{errors.ambulanceId.message}</p>
+              <p className="mt-1 text-sm text-gray-900">{errors.ambulanceId.message}</p>
             )}
           </div>
 
@@ -507,7 +507,7 @@ export const Trips = () => {
               ))}
             </select>
             {errors.destinationHospitalId && (
-              <p className="mt-1 text-sm text-red-600">{errors.destinationHospitalId.message}</p>
+              <p className="mt-1 text-sm text-gray-900">{errors.destinationHospitalId.message}</p>
             )}
           </div>
 
@@ -527,7 +527,7 @@ export const Trips = () => {
               placeholder="Enter initial patient assessment..."
             />
             {errors.initialAssessment && (
-              <p className="mt-1 text-sm text-red-600">{errors.initialAssessment.message}</p>
+              <p className="mt-1 text-sm text-gray-900">{errors.initialAssessment.message}</p>
             )}
           </div>
 
@@ -536,7 +536,7 @@ export const Trips = () => {
               Cancel
             </Button>
             <Button type="submit" loading={loading}>
-              Start Trip
+              Onboard Patient
             </Button>
           </div>
         </form>

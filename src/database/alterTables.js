@@ -19,25 +19,33 @@ async function alterPatients() {
 
     // Add email if not exists
     try {
-      await db.query(`ALTER TABLE patients ADD COLUMN email VARCHAR(255) AFTER contact_phone`);
+      // Check if phone column exists first
+      const [phoneCheck] = await db.query(`SHOW COLUMNS FROM patients LIKE 'phone'`);
+      const phoneColumn = phoneCheck.length > 0 ? 'phone' : 'last_name';
+      
+      await db.query(`ALTER TABLE patients ADD COLUMN email VARCHAR(255) AFTER ${phoneColumn}`);
       console.log('✅ Added email column');
     } catch (error) {
       if (error.code === 'ER_DUP_FIELDNAME') {
         console.log('⚠️  email already exists');
       } else {
-        throw error;
+        console.log('⚠️  Could not add email:', error.message);
       }
     }
 
     // Add emergency_contact_relation if not exists
     try {
-      await db.query(`ALTER TABLE patients ADD COLUMN emergency_contact_relation VARCHAR(100) AFTER emergency_contact_phone`);
+      // Check if emergency_contact_phone exists
+      const [phoneCheck] = await db.query(`SHOW COLUMNS FROM patients LIKE 'emergency_contact_phone'`);
+      const afterColumn = phoneCheck.length > 0 ? 'emergency_contact_phone' : 'emergency_contact';
+      
+      await db.query(`ALTER TABLE patients ADD COLUMN emergency_contact_relation VARCHAR(100) AFTER ${afterColumn}`);
       console.log('✅ Added emergency_contact_relation column');
     } catch (error) {
       if (error.code === 'ER_DUP_FIELDNAME') {
         console.log('⚠️  emergency_contact_relation already exists');
       } else {
-        throw error;
+        console.log('⚠️  Could not add emergency_contact_relation:', error.message);
       }
     }
 
@@ -151,7 +159,51 @@ async function alterPatients() {
       console.log('⚠️  Could not modify ambulance_id:', error.message);
     }
 
-    console.log('\n✅ Patient table alterations completed!');
+    // Add missing columns to communications table for group chat
+    console.log('\nAltering communications table...');
+    
+    try {
+      await db.query(`ALTER TABLE communications ADD COLUMN message_type VARCHAR(50) DEFAULT 'text'`);
+      console.log('✅ Added message_type column to communications');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME') {
+        console.log('⚠️  message_type already exists');
+      } else {
+        console.log('⚠️  Could not add message_type:', error.message);
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE communications ADD COLUMN metadata TEXT`);
+      console.log('✅ Added metadata column to communications');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME') {
+        console.log('⚠️  metadata already exists');
+      } else {
+        console.log('⚠️  Could not add metadata:', error.message);
+      }
+    }
+
+    try {
+      await db.query(`ALTER TABLE communications ADD COLUMN read_by JSON`);
+      console.log('✅ Added read_by column to communications');
+    } catch (error) {
+      if (error.code === 'ER_DUP_FIELDNAME') {
+        console.log('⚠️  read_by already exists');
+      } else {
+        console.log('⚠️  Could not add read_by:', error.message);
+      }
+    }
+
+    // Migrate data from communication_type to message_type if needed
+    try {
+      await db.query(`UPDATE communications SET message_type = communication_type WHERE message_type IS NULL OR message_type = 'text'`);
+      console.log('✅ Migrated data from communication_type to message_type');
+    } catch (error) {
+      console.log('⚠️  Could not migrate communication_type data:', error.message);
+    }
+
+    console.log('\n✅ All table alterations completed!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Alteration failed:', error.message);
