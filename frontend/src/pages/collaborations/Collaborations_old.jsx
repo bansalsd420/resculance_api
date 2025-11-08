@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 
@@ -17,6 +18,8 @@ import {
 } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
+import { useToast } from '../../hooks/useToast';
+import getErrorMessage from '../../utils/getErrorMessage';
 import { collaborationService, organizationService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 
@@ -102,7 +105,7 @@ const Modal = ({ isOpen, onClose, title, children, footer, size = 'md' }) => {
 // --- Validation Schema ---
 
 const collaborationSchema = yup.object({
-  fleetOwnerId: yup.number().typeError('Fleet owner is required').required('Fleet owner is required'),
+  fleetId: yup.number().typeError('Fleet owner is required').required('Fleet owner is required'),
   terms: yup.string().required('Terms are required'),
   duration: yup.number().typeError('Duration must be a number').required('Duration is required').positive('Duration must be positive'),
 });
@@ -113,6 +116,7 @@ const Collaborations = () => {
   const [collaborations, setCollaborations] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { toasts, toast, removeToast } = useToast();
   const [showModal, setShowModal] = useState(false); // For Create Modal
   
   // State for the Action Confirmation Modal
@@ -129,6 +133,7 @@ const Collaborations = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -170,6 +175,8 @@ const Collaborations = () => {
       handleCloseModal();
     } catch (error) {
       console.error('Failed to create collaboration:', error);
+      const msg = getErrorMessage(error, 'Failed to create collaboration');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -213,6 +220,8 @@ const Collaborations = () => {
       closeActionModal();
     } catch (error) {
       console.error(`Failed to ${type} collaboration:`, error);
+      const msg = getErrorMessage(error, `Failed to ${type} collaboration`);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -258,7 +267,7 @@ const Collaborations = () => {
     const matchesTab = activeTab === 'all' || collab.status?.toLowerCase() === activeTab;
     const matchesSearch =
       collab.hospitalName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (organizations.find(o => o.id === collab.fleetOwnerId)?.name || 'N/A').toLowerCase().includes(searchTerm.toLowerCase());
+      (organizations.find(o => o.id === collab.fleetId)?.name || 'N/A').toLowerCase().includes(searchTerm.toLowerCase());
     return matchesTab && matchesSearch;
   });
 
@@ -289,7 +298,7 @@ const Collaborations = () => {
       header: 'Fleet Owner',
       accessor: 'fleet',
       render: (collab) => {
-        const fleet = organizations.find((o) => o.id === collab.fleetOwnerId);
+  const fleet = organizations.find((o) => o.id === collab.fleetId);
         return (
           <div>
             <div className="font-medium text-gray-900">{fleet?.name || 'N/A'}</div>
@@ -373,7 +382,7 @@ const Collaborations = () => {
         className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2 bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-display font-bold mt-5 mb-2 bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
             Partnership Management
           </h1>
           <p className="text-gray-600">Manage hospital-fleet collaborations and partnerships</p>
@@ -529,19 +538,26 @@ const Collaborations = () => {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Fleet Owner
             </label>
-            <select
-              {...register('fleetOwnerId')}
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500"
-            >
-              <option value="">Select Fleet Owner</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name} - {org.city}
-                </option>
-              ))}
-            </select>
-            {errors.fleetOwnerId && (
-              <p className="mt-1 text-sm text-red-500">{errors.fleetOwnerId.message}</p>
+            <Controller
+              name="fleetId"
+              control={control}
+              defaultValue={''}
+              render={({ field }) => {
+                const options = organizations.map(o => ({ value: o.id, label: `${o.name} - ${o.city}` }));
+                const value = options.find(o => o.value === field.value) || null;
+                return (
+                  <Select
+                    classNamePrefix="react-select"
+                    options={options}
+                    value={value}
+                    onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                    placeholder="Select Fleet Owner"
+                  />
+                );
+              }}
+            />
+            {errors.fleetId && (
+              <p className="mt-1 text-sm text-red-500">{errors.fleetId.message}</p>
             )}
           </div>
           

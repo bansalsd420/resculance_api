@@ -86,8 +86,8 @@ class DashboardController {
 
         const [[{ totalCollaborations }]] = await db.query(
           `SELECT COUNT(*) as totalCollaborations FROM collaboration_requests 
-           WHERE (hospital_id = ? OR fleet_owner_id = ?) AND status = ?`,
-          [organizationId, organizationId, 'accepted']
+           WHERE (hospital_id = ? OR fleet_id = ?) AND status = ?`,
+          [organizationId, organizationId, 'approved']
         );
 
         stats = {

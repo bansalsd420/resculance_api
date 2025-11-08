@@ -1,0 +1,10 @@
+﻿{
+    "success":  true,
+    "message":  "Organization created successfully",
+    "data":  {
+                 "id":  11,
+                 "code":  "FLEET-6872",
+                 "name":  "TEST ORG API",
+                 "type":  "hospital"
+             }
+}

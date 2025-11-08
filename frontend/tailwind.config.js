@@ -4,30 +4,30 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#14b8a6', // teal-500
-          light: '#5eead4',
-          dark: '#0f766e',
-        },
-        secondary: {
-          DEFAULT: '#555555',
-          light: '#888888',
+          DEFAULT: 'rgb(var(--color-primary) / <alpha-value>)',
+          hover: 'rgb(var(--color-primary-hover) / <alpha-value>)',
         },
         background: {
-          DEFAULT: '#f9fafb', // gray-50
-          card: '#ffffff',
-          dark: '#0a0a0a',
-        },
-        border: {
-          DEFAULT: '#e5e7eb', // gray-200
+          DEFAULT: 'rgb(var(--color-background) / <alpha-value>)',
+          card: 'rgb(var(--color-background-card) / <alpha-value>)',
         },
         text: {
-          DEFAULT: '#111827', // gray-900
-          secondary: '#6b7280', // gray-500
+          DEFAULT: 'rgb(var(--color-text) / <alpha-value>)',
+          secondary: 'rgb(var(--color-text-secondary) / <alpha-value>)',
         },
+        border: {
+          DEFAULT: 'rgb(var(--color-border) / <alpha-value>)',
+          hover: 'rgb(var(--color-border-hover) / <alpha-value>)',
+        },
+        success: 'rgb(var(--color-success) / <alpha-value>)',
+        warning: 'rgb(var(--color-warning) / <alpha-value>)',
+        error: 'rgb(var(--color-error) / <alpha-value>)',
+        info: 'rgb(var(--color-info) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

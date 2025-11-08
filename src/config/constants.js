@@ -15,6 +15,13 @@ module.exports = {
   // Organization types
   ORG_TYPES: {
     HOSPITAL: 'hospital',
+    FLEET_OWNER: 'fleet_owner',
+    SUPERADMIN: 'superadmin'
+  },
+
+  // Organization types available for selection (excludes superadmin)
+  ORG_TYPES_SELECTABLE: {
+    HOSPITAL: 'hospital',
     FLEET_OWNER: 'fleet_owner'
   },
 
@@ -25,7 +32,11 @@ module.exports = {
     INACTIVE: 'inactive',
     EN_ROUTE: 'en_route',
     MAINTENANCE: 'maintenance',
-    SUSPENDED: 'suspended'
+    SUSPENDED: 'suspended',
+    AVAILABLE: 'available',
+    ON_TRIP: 'on_trip',
+    EMERGENCY: 'emergency',
+    DISABLED: 'disabled'
   },
 
   // Patient session statuses
@@ -85,5 +96,32 @@ module.exports = {
     VIDEO_REQUEST: 'video_request',
     VIDEO_ANSWER: 'video_answer',
     VIDEO_END: 'video_end'
+  },
+
+  // Activity types for audit logging
+  ACTIVITY_TYPES: {
+    ORG_CREATED: 'organization_created',
+    ORG_DEACTIVATED: 'organization_deactivated',
+    ORG_ACTIVATED: 'organization_activated',
+    ORG_UPDATED: 'organization_updated',
+    PARTNERSHIP_REQUESTED: 'partnership_requested',
+    PARTNERSHIP_ACCEPTED: 'partnership_accepted',
+    PARTNERSHIP_REJECTED: 'partnership_rejected',
+    PARTNERSHIP_CANCELLED: 'partnership_cancelled',
+    USER_CREATED: 'user_created',
+    USER_UPDATED: 'user_updated',
+    USER_APPROVED: 'user_approved',
+    USER_SUSPENDED: 'user_suspended',
+    USER_ACTIVATED: 'user_activated',
+    AMBULANCE_CREATED: 'ambulance_created',
+    AMBULANCE_UPDATED: 'ambulance_updated',
+    AMBULANCE_DISABLED: 'ambulance_disabled',
+    AMBULANCE_ACTIVATED: 'ambulance_activated',
+    PATIENT_CREATED: 'patient_created',
+    PATIENT_UPDATED: 'patient_updated',
+    PATIENT_DEACTIVATED: 'patient_deactivated',
+    PATIENT_ACTIVATED: 'patient_activated',
+    PATIENT_ONBOARDED: 'patient_onboarded',
+    PATIENT_OFFBOARDED: 'patient_offboarded'
   }
 };

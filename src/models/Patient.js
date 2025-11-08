@@ -2,24 +2,30 @@ const db = require('../config/database');
 
 class PatientModel {
   static async create(data) {
+    // allow organizationId to be provided; if omitted insert NULL
     const [result] = await db.query(
-      `INSERT INTO patients (patient_code, first_name, last_name, age, gender, blood_group, contact_phone, 
-                             emergency_contact_name, emergency_contact_phone, address, medical_history, allergies, current_medications)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO patients (
+         organization_id, patient_code, first_name, last_name, date_of_birth, age, gender, blood_group, phone,
+         emergency_contact_name, emergency_contact_phone, emergency_contact_relation, address, medical_history, allergies, current_medications, created_by
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        data.organizationId || null,
         data.patientCode,
         data.firstName,
         data.lastName,
-        data.age,
-        data.gender,
-        data.bloodGroup,
-        data.contactPhone,
-        data.emergencyContactName,
-        data.emergencyContactPhone,
-        data.address,
-        data.medicalHistory,
-        data.allergies,
-        data.currentMedications
+        data.dateOfBirth || null,
+        data.age || null,
+        data.gender || null,
+        data.bloodGroup || null,
+        data.phone || null,
+        data.emergencyContactName || null,
+        data.emergencyContactPhone || null,
+        data.emergencyContactRelation || null,
+        data.address || null,
+        data.medicalHistory || null,
+        data.allergies || null,
+        data.currentMedications || null,
+        data.createdBy || null
       ]
     );
     return result.insertId;
@@ -43,6 +49,11 @@ class PatientModel {
       query += ' AND (first_name LIKE ? OR last_name LIKE ? OR patient_code LIKE ?)';
       const searchTerm = `%${filters.search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    if (filters.organizationId) {
+      query += ' AND organization_id = ?';
+      params.push(filters.organizationId);
     }
 
     query += ' ORDER BY created_at DESC';
@@ -113,6 +124,11 @@ class PatientModel {
       query += ' AND (first_name LIKE ? OR last_name LIKE ? OR patient_code LIKE ?)';
       const searchTerm = `%${filters.search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    if (filters.organizationId) {
+      query += ' AND organization_id = ?';
+      params.push(filters.organizationId);
     }
 
     const [rows] = await db.query(query, params);

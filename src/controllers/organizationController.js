@@ -1,32 +1,66 @@
 const OrganizationModel = require('../models/Organization');
 const { AppError } = require('../middleware/auth');
-const { v4: uuidv4 } = require('uuid');
+const ActivityLogService = require('../services/activityLogService');
+const { ORG_TYPES } = require('../config/constants');
+const db = require('../config/database');
 
 class OrganizationController {
   static async create(req, res, next) {
     try {
-      const { name, type, address, city, state, zipCode, country, phone, email, licenseNumber } = req.body;
+      const { name, type, address, city, state, zipCode, country, phone, email, licenseNumber, contactPerson } = req.body;
+
+      // contact person is required
+      const contactPersonValue = contactPerson || req.body.contact_person;
+      if (!contactPersonValue) {
+        return next(new AppError('Contact person is required', 400));
+      }
+
+      // Validate organization type (should not be superadmin)
+      const orgType = (type || '').toUpperCase();
+      if (orgType === 'SUPERADMIN') {
+        return next(new AppError('Cannot create superadmin organization type via this endpoint', 400));
+      }
+
+      // email uniqueness check
+      if (email) {
+        const existing = await OrganizationModel.findByEmail(email);
+        if (existing) return next(new AppError('Organization email already in use', 409));
+      }
 
       // Auto-generate organization code
-      const prefix = type === 'HOSPITAL' ? 'HOSP' : 'FLEET';
+      const prefix = orgType === 'HOSPITAL' ? 'HOSP' : 'FLEET';
       const random = Math.floor(Math.random() * 9000) + 1000;
       const code = `${prefix}-${random}`;
 
       const orgId = await OrganizationModel.create({
         name,
         code,
-        type: type.toLowerCase(),
+        type: orgType,
         address,
-        contactPerson: null,
-        contactEmail: email,
-        contactPhone: phone,
-        status: 'active'
+        city,
+        state,
+        // support both postalCode and pincode naming
+        postalCode: zipCode || req.body.postalCode || null,
+        pincode: zipCode || req.body.postalCode || null,
+        contactPerson: contactPersonValue,
+        // include both canonical and legacy contact keys so DB mapping picks the right one
+        email,
+        phone,
+        contact_email: email,
+        contact_phone: phone,
+        licenseNumber,
+        status: 'active',
+        is_active: true
       });
+
+      // Log activity
+      const newOrg = await OrganizationModel.findById(orgId);
+      await ActivityLogService.logOrgCreated(req.user, newOrg, req);
 
       res.status(201).json({
         success: true,
         message: 'Organization created successfully',
-        data: { id: orgId, code, name, type }
+        data: { id: orgId, code, name, type: orgType }
       });
     } catch (error) {
       next(error);
@@ -35,11 +69,36 @@ class OrganizationController {
 
   static async getAll(req, res, next) {
     try {
-      const { type, status, limit = 50, offset = 0 } = req.query;
+      const { type, status, limit = 50, offset = 0, is_active } = req.query;
 
-      const filters = { type, status, limit, offset };
+      // If user is not superadmin, only return their own organization
+      let filters = { type, status, limit, offset, is_active };
+      
+      if (req.user.role !== 'superadmin') {
+        // Non-superadmin users can only see their own organization
+        const userOrg = await OrganizationModel.findById(req.user.organizationId);
+        if (!userOrg) {
+          return res.json({
+            success: true,
+            data: {
+              organizations: [],
+              pagination: { total: 0, limit: parseInt(limit), offset: parseInt(offset), hasMore: false }
+            }
+          });
+        }
+        
+        return res.json({
+          success: true,
+          data: {
+            organizations: [userOrg],
+            pagination: { total: 1, limit: parseInt(limit), offset: parseInt(offset), hasMore: false }
+          }
+        });
+      }
+
+      // Superadmin sees all organizations
       const organizations = await OrganizationModel.findAll(filters);
-      const total = await OrganizationModel.count({ type, status });
+      const total = await OrganizationModel.count({ type, status, is_active });
 
       res.json({
         success: true,
@@ -67,6 +126,11 @@ class OrganizationController {
         return next(new AppError('Organization not found', 404));
       }
 
+      // If user is not superadmin, they can only view their own organization
+      if (req.user.role !== 'superadmin' && organization.id !== req.user.organizationId) {
+        return next(new AppError('You do not have permission to view this organization', 403));
+      }
+
       res.json({
         success: true,
         data: { organization }
@@ -79,7 +143,22 @@ class OrganizationController {
   static async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, address, contactPerson, contactEmail, contactPhone, status } = req.body;
+      const { name, address, contactPerson, contactEmail, contactPhone, status, city, state, zipCode, licenseNumber } = req.body;
+
+      // contact person is required on update as well
+      const contactPersonValue = contactPerson || req.body.contact_person;
+      if (!contactPersonValue) {
+        return next(new AppError('Contact person is required', 400));
+      }
+
+      // email uniqueness check (exclude current org)
+      const emailToCheck = contactEmail || req.body.email || req.body.contact_email;
+      if (emailToCheck) {
+        const existing = await OrganizationModel.findByEmail(emailToCheck);
+        if (existing && existing.id !== parseInt(id)) {
+          return next(new AppError('Organization email already in use', 409));
+        }
+      }
 
       const organization = await OrganizationModel.findById(id);
       if (!organization) {
@@ -89,11 +168,24 @@ class OrganizationController {
       await OrganizationModel.update(id, {
         name,
         address,
-        contact_person: contactPerson,
+        city,
+        state,
+        // update both postal_code and pincode variants via model mapping
+        postal_code: zipCode || req.body.postalCode || null,
+        pincode: zipCode || req.body.postalCode || null,
+        license_number: licenseNumber,
+        contact_person: contactPersonValue,
+        // include both naming variants
+        email: contactEmail,
+        phone: contactPhone,
         contact_email: contactEmail,
         contact_phone: contactPhone,
         status
       });
+
+      // Log activity
+      const updatedOrg = await OrganizationModel.findById(id);
+      await ActivityLogService.logOrgUpdated(req.user, updatedOrg, { name, address, city, state }, req);
 
       res.json({
         success: true,
@@ -113,11 +205,125 @@ class OrganizationController {
         return next(new AppError('Organization not found', 404));
       }
 
-      await OrganizationModel.delete(id);
+      // Prevent deletion of superadmin organizations
+      if (organization.type === 'superadmin' || organization.type === 'SUPERADMIN') {
+        return next(new AppError('Cannot delete superadmin organization', 403));
+      }
+
+      // Soft delete: set is_active to false instead of actual deletion
+      await OrganizationModel.update(id, { is_active: false });
+
+      // Log activity
+      await ActivityLogService.logOrgDeactivated(req.user, organization, req);
 
       res.json({
         success: true,
-        message: 'Organization deleted successfully'
+        message: 'Organization deactivated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Deactivate an organization and cascade changes
+   * - Set is_active = false
+   * - Set all ambulances status to disabled
+   * - Set all users status to suspended
+   * - Cancel all partnerships
+   * - Offboard all patients
+   */
+  static async deactivate(req, res, next) {
+    const connection = await db.getConnection();
+    
+    try {
+      const { id } = req.params;
+
+      const organization = await OrganizationModel.findById(id);
+      if (!organization) {
+        return next(new AppError('Organization not found', 404));
+      }
+
+      // Prevent deactivation of superadmin organizations
+      if (organization.type === 'superadmin' || organization.type === 'SUPERADMIN') {
+        return next(new AppError('Cannot deactivate superadmin organization', 403));
+      }
+
+      // Start transaction for atomic operations
+      await connection.beginTransaction();
+
+      // 1. Deactivate organization
+      await connection.query(
+        'UPDATE organizations SET is_active = FALSE WHERE id = ?',
+        [id]
+      );
+
+      // 2. Disable all ambulances
+      await connection.query(
+        'UPDATE ambulances SET status = ? WHERE organization_id = ?',
+        ['disabled', id]
+      );
+
+      // 3. Suspend all users
+      await connection.query(
+        'UPDATE users SET status = ? WHERE organization_id = ?',
+        ['suspended', id]
+      );
+
+      // 4. Cancel all partnerships (where org is fleet or hospital)
+      await connection.query(
+        'UPDATE partnerships SET status = ? WHERE fleet_id = ? OR hospital_id = ?',
+        ['inactive', id, id]
+      );
+
+      // 5. Offboard all patients by ending active sessions
+      await connection.query(
+        `UPDATE patient_sessions 
+         SET status = 'offboarded', offboarded_at = NOW(), offboard_time = NOW() 
+         WHERE organization_id = ? AND status IN ('onboarded', 'in_transit')`,
+        [id]
+      );
+
+      await connection.commit();
+
+      // Log activity
+      await ActivityLogService.logOrgDeactivated(req.user, organization, req);
+
+      res.json({
+        success: true,
+        message: 'Organization deactivated successfully. All ambulances disabled, users suspended, partnerships cancelled, and patients offboarded.'
+      });
+    } catch (error) {
+      await connection.rollback();
+      next(error);
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Activate/reactivate an organization
+   */
+  static async activate(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const organization = await OrganizationModel.findById(id);
+      if (!organization) {
+        return next(new AppError('Organization not found', 404));
+      }
+
+      await OrganizationModel.update(id, { 
+        status: 'active',
+        is_active: true
+      });
+
+      // Log activity
+      await ActivityLogService.logOrgActivated(req.user, organization, req);
+
+      res.json({
+        success: true,
+        message: 'Organization activated successfully. Please manually review ambulances, users, and partnerships for reactivation.'
       });
     } catch (error) {
       next(error);
@@ -133,21 +339,6 @@ class OrganizationController {
       res.json({
         success: true,
         message: 'Organization suspended successfully'
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  static async activate(req, res, next) {
-    try {
-      const { id } = req.params;
-
-      await OrganizationModel.update(id, { status: 'active' });
-
-      res.json({
-        success: true,
-        message: 'Organization activated successfully'
       });
     } catch (error) {
       next(error);

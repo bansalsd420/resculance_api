@@ -5,6 +5,7 @@ const VitalSignModel = require('../models/VitalSign');
 const CommunicationModel = require('../models/Communication');
 const { AppError } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
+const NotificationService = require('../services/notificationService');
 
 // Helper function to map snake_case to camelCase
 const mapPatientFields = (patient) => {
@@ -15,7 +16,7 @@ const mapPatientFields = (patient) => {
     lastName: patient.last_name,
     dateOfBirth: patient.date_of_birth,
     bloodGroup: patient.blood_group,
-    contactPhone: patient.contact_phone,
+    phone: patient.phone || patient.contact_phone,
     emergencyContactName: patient.emergency_contact_name,
     emergencyContactPhone: patient.emergency_contact_phone,
     emergencyContactRelation: patient.emergency_contact_relation,
@@ -34,27 +35,40 @@ class PatientController {
   static async create(req, res, next) {
     try {
       const {
-        firstName, lastName, age, gender, bloodGroup, contactPhone,
-        emergencyContactName, emergencyContactPhone, address,
+        firstName, lastName, age, gender, bloodGroup, phone,
+          emergencyContactName, emergencyContactPhone, address,
         medicalHistory, allergies, currentMedications
       } = req.body;
 
       const patientCode = `PAT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
+      // Associate patient with the caller's organization by default.
+      // If the caller is a superadmin they may provide an explicit organizationId in the body.
+      let organizationId = null;
+      if (req.user.role === 'superadmin') {
+        organizationId = req.body.organizationId || null;
+      } else {
+        organizationId = req.user.organizationId;
+      }
+
       const patientId = await PatientModel.create({
+        organizationId,
         patientCode,
         firstName,
         lastName,
+        dateOfBirth: req.body.dateOfBirth || null,
         age,
         gender,
         bloodGroup,
-        contactPhone,
+        phone,
         emergencyContactName,
         emergencyContactPhone,
+        emergencyContactRelation: req.body.emergencyContactRelation || null,
         address,
         medicalHistory,
         allergies,
-        currentMedications
+        currentMedications,
+        createdBy: req.user && req.user.id ? req.user.id : null
       });
 
       res.status(201).json({
@@ -71,9 +85,16 @@ class PatientController {
     try {
       const { search, limit = 50, offset = 0 } = req.query;
 
+      // Scope patient listing by organization for non-superadmins. Superadmin may pass organizationId to scope.
       const filters = { search, limit, offset };
-      const patients = await PatientModel.findAll(filters);
-      const total = await PatientModel.count({ search });
+      if (req.user.role === 'superadmin') {
+        if (req.query.organizationId) filters.organizationId = req.query.organizationId;
+        // if superadmin does not pass organizationId, we allow listing across all orgs
+      } else {
+        filters.organizationId = req.user.organizationId;
+      }
+  const patients = await PatientModel.findAll(filters);
+  const total = await PatientModel.count({ search, organizationId: filters.organizationId });
 
       // Map snake_case to camelCase for frontend
       const mappedPatients = patients.map(mapPatientFields);
@@ -224,6 +245,21 @@ class PatientController {
       // Emit socket event
       const io = req.app.get('io');
       io.to(`ambulance_${ambulanceId}`).emit('patient_onboarded', { sessionId, sessionCode });
+
+      // Notify ambulance crew about patient onboarding
+      const patient = await PatientModel.findById(patientId);
+      if (patient) {
+        await NotificationService.notifyAmbulanceCrewPatientOnboarded(
+          ambulanceId,
+          {
+            sessionId,
+            sessionCode,
+            patientId,
+            firstName: patient.first_name,
+            lastName: patient.last_name
+          }
+        );
+      }
 
       res.status(201).json({
         success: true,
@@ -445,6 +481,32 @@ class PatientController {
       res.json({
         success: true,
         data: sessions
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async delete(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const patient = await PatientModel.findById(id);
+      if (!patient) {
+        return next(new AppError('Patient not found', 404));
+      }
+
+      // Prevent deletion if patient has active sessions
+      const activeSession = await PatientSessionModel.findActiveByPatient(id);
+      if (activeSession) {
+        return next(new AppError('Cannot delete patient with active sessions', 400));
+      }
+
+      await PatientModel.delete(id);
+
+      res.json({
+        success: true,
+        message: 'Patient deleted successfully'
       });
     } catch (error) {
       next(error);

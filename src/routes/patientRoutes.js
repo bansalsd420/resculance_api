@@ -16,6 +16,7 @@ router.post(
     ROLES.HOSPITAL_ADMIN,
     ROLES.HOSPITAL_STAFF,
     ROLES.HOSPITAL_PARAMEDIC,
+    ROLES.HOSPITAL_DOCTOR,
     ROLES.FLEET_ADMIN,
     ROLES.FLEET_STAFF,
     ROLES.FLEET_PARAMEDIC
@@ -62,6 +63,18 @@ router.patch(
     ROLES.FLEET_STAFF
   ),
   PatientController.unhideData
+);
+
+router.delete(
+  '/:id',
+  authorize(
+    ROLES.SUPERADMIN,
+    ROLES.HOSPITAL_ADMIN,
+    ROLES.HOSPITAL_STAFF,
+    ROLES.FLEET_ADMIN,
+    ROLES.FLEET_STAFF
+  ),
+  PatientController.delete
 );
 
 // Patient session routes

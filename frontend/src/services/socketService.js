@@ -179,6 +179,17 @@ class SocketService {
     this.socket.on('location_update', callback);
   }
 
+  // Notifications
+  onNotification(callback) {
+    if (!this.socket) return;
+    this.socket.on('notification', callback);
+  }
+
+  offNotification(callback) {
+    if (!this.socket) return;
+    this.socket.off('notification', callback);
+  }
+
   // Generic event listener
   on(event, callback) {
     if (!this.socket) return;

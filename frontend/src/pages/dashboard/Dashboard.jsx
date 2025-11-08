@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../store/authStore';
 import { dashboardService } from '../../services';
 import { useToast } from '../../hooks/useToast';
-import { ToastContainer } from '../../components/ui/Toast';
+import getErrorMessage from '../../utils/getErrorMessage';
 
 const StatCard = ({ title, value, icon: Icon, trend, color = 'primary' }) => {
   const colors = {
@@ -38,12 +38,27 @@ const StatCard = ({ title, value, icon: Icon, trend, color = 'primary' }) => {
 
 export const Dashboard = () => {
   const { user } = useAuthStore();
-  const { toasts, toast, removeToast } = useToast();
+  const { toast } = useToast();
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
+  }, []);
+
+  // Global cache reset handler
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        await fetchStats();
+      } catch (err) {
+        console.error('Global reset handler failed for dashboard', err);
+      } finally {
+        window.dispatchEvent(new CustomEvent('global:cache-reset-done', { detail: { page: 'dashboard' } }));
+      }
+    };
+    window.addEventListener('global:cache-reset', handler);
+    return () => window.removeEventListener('global:cache-reset', handler);
   }, []);
 
   const fetchStats = async () => {
@@ -55,7 +70,8 @@ export const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-      toast.error('Failed to load dashboard statistics');
+  const msg = getErrorMessage(error, 'Failed to load dashboard statistics');
+  toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -63,7 +79,7 @@ export const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      
       
       {/* Welcome Section */}
       <motion.div
@@ -71,7 +87,7 @@ export const Dashboard = () => {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <h1 className="text-3xl font-display font-bold mb-2">
+  <h1 className="text-3xl font-display font-bold mt-5 mb-2">
           Welcome back, {user?.firstName} {user?.lastName}! 👋
         </h1>
         <p className="text-secondary">

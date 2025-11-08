@@ -14,11 +14,11 @@ export const Button = ({
   const baseClasses = 'rounded-2xl font-medium transition-all duration-200 hover:scale-[1.03] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 whitespace-nowrap';
   
   const variants = {
-    primary: 'bg-primary text-white hover:shadow-hover',
-    secondary: 'bg-background-card text-text border border-border hover:border-primary',
+    primary: 'bg-primary text-white hover:shadow-lg',
+    secondary: 'bg-background-card text-text border border-border hover:border-primary hover:bg-background',
     outline: 'border-2 border-primary text-primary hover:bg-primary hover:text-white',
-    danger: 'bg-red-600 text-white hover:bg-red-700',
-    success: 'bg-green-600 text-white hover:bg-green-700',
+    danger: 'bg-error text-white hover:opacity-90',
+    success: 'bg-success text-white hover:opacity-90',
   };
   
   const sizes = {

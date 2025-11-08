@@ -1,4 +1,6 @@
-export const Table = ({ columns, data, onRowClick }) => {
+import { RefreshCw } from 'lucide-react';
+
+export const Table = ({ columns, data, onRowClick, onRefresh, isRefreshing }) => {
   return (
     <div className="table-container">
       <div className="overflow-x-auto">
@@ -8,9 +10,20 @@ export const Table = ({ columns, data, onRowClick }) => {
               {columns.map((column, index) => (
                 <th
                   key={index}
-                  className="px-6 py-4 text-left text-sm font-semibold text-text"
+                  className="px-4 py-3 text-left text-sm font-semibold text-text"
                 >
-                  {column.header}
+                  <div className="flex items-center justify-between">
+                    <span>{column.header}</span>
+                    {index === columns.length - 1 && onRefresh && (
+                      <button
+                        onClick={onRefresh}
+                        className="flex items-center gap-2 px-2 py-1 rounded-md bg-background hover:bg-border text-sm shadow-sm transition-colors"
+                        title="Refresh table"
+                      >
+                        <RefreshCw className={`w-4 h-4 text-text-secondary ${isRefreshing ? 'animate-spin' : ''}`} />
+                      </button>
+                    )}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -18,7 +31,7 @@ export const Table = ({ columns, data, onRowClick }) => {
           <tbody className="divide-y divide-border">
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-6 py-8 text-center text-secondary">
+                <td colSpan={columns.length} className="px-4 py-8 text-center text-text-secondary">
                   No data available
                 </td>
               </tr>
@@ -32,7 +45,7 @@ export const Table = ({ columns, data, onRowClick }) => {
                   }`}
                 >
                   {columns.map((column, colIndex) => (
-                    <td key={colIndex} className="px-6 py-4 text-sm text-text">
+                    <td key={colIndex} className="px-4 py-3 text-sm text-text">
                       {column.render ? column.render(row) : row[column.accessor]}
                     </td>
                   ))}

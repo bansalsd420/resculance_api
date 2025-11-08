@@ -22,6 +22,7 @@ router.post(
 );
 
 router.get('/', CollaborationController.getAll);
+router.get('/partnerships/my', CollaborationController.getMyPartnerships);
 router.get('/:id', CollaborationController.getById);
 
 router.patch(

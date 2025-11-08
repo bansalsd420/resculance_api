@@ -58,7 +58,11 @@ class AuthController {
         return next(new AppError('Invalid email or password', 401));
       }
 
-      // Check if user is active
+      // Check if user is active (block suspended, inactive, pending_approval)
+      if (user.status === 'suspended') {
+        return next(new AppError('Your account has been suspended. Please contact your administrator.', 403));
+      }
+
       if (user.status !== 'active') {
         return next(new AppError('Your account is not active. Please contact administrator.', 403));
       }

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from './layouts/MainLayout';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { Login } from './pages/auth/Login';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { NotFound } from './pages/NotFound';
@@ -14,8 +15,10 @@ import { Patients } from './pages/patients/Patients';
 import { Onboarding } from './pages/onboarding/Onboarding';
 import { OnboardingDetail } from './pages/onboarding/OnboardingDetail';
 import { Collaborations } from './pages/collaborations/Collaborations';
+import Activity from './pages/activity/Activity';
 import { Settings } from './pages/settings/Settings';
 import { useAuthStore } from './store/authStore';
+import { PERMISSIONS } from './utils/permissions';
 
 function App() {
   const initialize = useAuthStore((state) => state.initialize);
@@ -26,18 +29,19 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          {/* Register removed - users should be created by admins only */}
+      <ThemeProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            {/* Register removed - users should be created by admins only */}
 
           {/* Protected Routes */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
                 <MainLayout>
                   <Dashboard />
                 </MainLayout>
@@ -47,7 +51,7 @@ function App() {
           <Route
             path="/organizations"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPermission={PERMISSIONS.VIEW_ALL_ORGANIZATIONS}>
                 <MainLayout>
                   <Organizations />
                 </MainLayout>
@@ -57,7 +61,9 @@ function App() {
           <Route
             path="/users"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute 
+                requiredPermissions={[PERMISSIONS.VIEW_ALL_USERS, PERMISSIONS.VIEW_OWN_ORG_USERS]}
+              >
                 <MainLayout>
                   <Users />
                 </MainLayout>
@@ -68,7 +74,14 @@ function App() {
           <Route
             path="/ambulances"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute 
+                requiredPermissions={[
+                  PERMISSIONS.VIEW_ALL_AMBULANCES,
+                  PERMISSIONS.VIEW_OWN_AMBULANCES,
+                  PERMISSIONS.VIEW_ASSIGNED_AMBULANCES,
+                  PERMISSIONS.VIEW_PARTNERED_AMBULANCES
+                ]}
+              >
                 <MainLayout>
                   <Ambulances />
                 </MainLayout>
@@ -78,7 +91,7 @@ function App() {
           <Route
             path="/patients"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPermission={PERMISSIONS.VIEW_PATIENTS}>
                 <MainLayout>
                   <Patients />
                 </MainLayout>
@@ -88,7 +101,7 @@ function App() {
           <Route
             path="/onboarding"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPermission={PERMISSIONS.ONBOARD_PATIENT}>
                 <MainLayout>
                   <Onboarding />
                 </MainLayout>
@@ -98,7 +111,7 @@ function App() {
           <Route
             path="/onboarding/:sessionId"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPermission={PERMISSIONS.ONBOARD_PATIENT}>
                 <MainLayout>
                   <OnboardingDetail />
                 </MainLayout>
@@ -108,9 +121,19 @@ function App() {
           <Route
             path="/collaborations"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredPermission={PERMISSIONS.VIEW_COLLABORATIONS}>
                 <MainLayout>
                   <Collaborations />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity"
+            element={
+              <ProtectedRoute requiredPermission={PERMISSIONS.VIEW_ACTIVITY_LOGS}>
+                <MainLayout>
+                  <Activity />
                 </MainLayout>
               </ProtectedRoute>
             }
@@ -133,7 +156,8 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-    </ErrorBoundary>
+    </ThemeProvider>
+  </ErrorBoundary>
   );
 }
 

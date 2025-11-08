@@ -6,6 +6,8 @@ const ambulanceRoutes = require('./ambulanceRoutes');
 const patientRoutes = require('./patientRoutes');
 const collaborationRoutes = require('./collaborationRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+const activityRoutes = require('./activityRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 const router = express.Router();
 
@@ -17,5 +19,7 @@ router.use('/ambulances', ambulanceRoutes);
 router.use('/patients', patientRoutes);
 router.use('/collaborations', collaborationRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/activities', activityRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

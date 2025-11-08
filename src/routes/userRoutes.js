@@ -1,8 +1,9 @@
 const express = require('express');
 const UserController = require('../controllers/userController');
-const { authenticate, authorize } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const { registerValidation, validate } = require('../middleware/validation');
-const { ROLES } = require('../config/constants');
+const { requirePermission, requireAnyPermission, canApproveUserRole } = require('../middleware/permissions');
+const { PERMISSIONS } = require('../config/permissions');
 
 const router = express.Router();
 
@@ -11,50 +12,34 @@ router.use(authenticate);
 
 router.post(
   '/',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF,
-    ROLES.FLEET_ADMIN,
-    ROLES.FLEET_STAFF
-  ),
+  requirePermission(PERMISSIONS.CREATE_USER),
   registerValidation,
   validate,
   UserController.create
 );
 
 router.get('/', UserController.getAll);
+
 router.get('/:id', UserController.getById);
 
-router.put('/:id', UserController.update);
+router.put('/:id', requirePermission(PERMISSIONS.UPDATE_USER), UserController.update);
 
 router.patch(
   '/:id/approve',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.FLEET_ADMIN
-  ),
+  requirePermission(PERMISSIONS.APPROVE_USER),
+  canApproveUserRole,
   UserController.approve
 );
 
 router.patch(
   '/:id/suspend',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.FLEET_ADMIN
-  ),
+  requirePermission(PERMISSIONS.UPDATE_USER),
   UserController.suspend
 );
 
 router.delete(
   '/:id',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.FLEET_ADMIN
-  ),
+  requirePermission(PERMISSIONS.DELETE_USER),
   UserController.delete
 );
 

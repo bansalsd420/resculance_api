@@ -85,7 +85,7 @@ export const ForgotPassword = () => {
             >
               <Activity className="w-8 h-8 text-white" />
             </motion.div>
-            <h1 className="text-3xl font-display font-bold mb-2">Forgot Password?</h1>
+            <h1 className="text-3xl font-display font-bold mt-5 mb-2">Forgot Password?</h1>
             <p className="text-secondary text-center">
               Enter your email address and we'll send you a link to reset your password.
             </p>

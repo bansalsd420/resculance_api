@@ -1,6 +1,6 @@
 const AmbulanceDeviceModel = require('../models/AmbulanceDevice');
 const AmbulanceModel = require('../models/Ambulance');
-const { AppError } = require('../middleware/errorHandler');
+const { AppError } = require('../middleware/auth');
 const axios = require('axios');
 
 class AmbulanceDeviceController {
@@ -20,31 +20,69 @@ class AmbulanceDeviceController {
         return next(new AppError('Ambulance not found', 404));
       }
 
-      // Check if device ID already exists
-      const existingDevice = await AmbulanceDeviceModel.findByDeviceId(deviceId);
+      // Check if device ID already exists for this ambulance (allow same device_id on different ambulances)
+      const existingDevice = await AmbulanceDeviceModel.findByDeviceIdForAmbulance(deviceId, ambulanceId);
       if (existingDevice) {
-        return next(new AppError('Device ID already exists', 400));
+        return next(new AppError('Device ID already exists for this ambulance', 400));
       }
 
-      const deviceDbId = await AmbulanceDeviceModel.create({
-        ambulanceId,
-        deviceName,
-        deviceType,
-        deviceId,
-        deviceUsername,
-        devicePassword,
-        deviceApi,
-        manufacturer,
-        model
-      });
+      let deviceDbId;
+      try {
+        deviceDbId = await AmbulanceDeviceModel.create({
+          ambulanceId,
+          deviceName,
+          deviceType,
+          deviceId,
+          deviceUsername,
+          devicePassword,
+          deviceApi,
+          manufacturer,
+          model
+        });
 
-      const newDevice = await AmbulanceDeviceModel.findById(deviceDbId);
+        const newDevice = await AmbulanceDeviceModel.findById(deviceDbId);
 
-      res.status(201).json({
-        success: true,
-        message: 'Device added successfully',
-        data: newDevice
-      });
+        return res.status(201).json({
+          success: true,
+          message: 'Device added successfully',
+          data: newDevice
+        });
+      } catch (createErr) {
+        // Handle duplicate device_id unique constraint at DB level
+        if (createErr && createErr.code === 'ER_DUP_ENTRY') {
+          // Find the existing device (global) and reassign it to this ambulance
+          try {
+            const existing = await AmbulanceDeviceModel.findByDeviceId(deviceId);
+            if (existing) {
+              // Update the existing device's ambulance mapping and other fields
+              await AmbulanceDeviceModel.update(existing.id, {
+                ambulanceId,
+                deviceName,
+                deviceType,
+                deviceUsername,
+                devicePassword,
+                deviceApi,
+                manufacturer,
+                model,
+                status: 'active'
+              });
+
+              const updated = await AmbulanceDeviceModel.findById(existing.id);
+              return res.status(200).json({
+                success: true,
+                message: 'Device existed; reassigned to this ambulance and updated',
+                data: updated
+              });
+            }
+          } catch (reassignErr) {
+            console.error('Failed to reassign device after duplicate entry:', reassignErr);
+            return next(reassignErr);
+          }
+        }
+
+        // rethrow if not handled
+        throw createErr;
+      }
     } catch (error) {
       next(error);
     }
@@ -99,11 +137,11 @@ class AmbulanceDeviceController {
         return next(new AppError('Device not found', 404));
       }
 
-      // If updating deviceId, check it doesn't exist
+      // If updating deviceId, check it doesn't exist for this ambulance
       if (updateData.deviceId && updateData.deviceId !== device.device_id) {
-        const existingDevice = await AmbulanceDeviceModel.findByDeviceId(updateData.deviceId);
+        const existingDevice = await AmbulanceDeviceModel.findByDeviceIdForAmbulance(updateData.deviceId, device.ambulance_id);
         if (existingDevice) {
-          return next(new AppError('Device ID already exists', 400));
+          return next(new AppError('Device ID already exists for this ambulance', 400));
         }
       }
 

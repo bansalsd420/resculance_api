@@ -21,8 +21,35 @@ const errorHandler = (err, req, res, next) => {
 
   // MySQL duplicate key error
   if (err.code === 'ER_DUP_ENTRY') {
-    const field = err.sqlMessage?.match(/for key '(\w+)'/)?.[1] || 'field';
-    error = new AppError(`Duplicate value for ${field}. Please use another value.`, 400);
+    // Extract the key name from SQL message. Examples:
+    // "Duplicate entry 'DL-01-AB-9012' for key 'registration_number'"
+    // "Duplicate entry 'foo@bar.com' for key 'email'"
+    const rawKey = err.sqlMessage?.match(/for key '([^']+)'/)?.[1] || '';
+
+    // Map common DB index/column names to friendlier labels
+    const keyMap = {
+      registration_number: 'registration number',
+      vehicle_number: 'registration number',
+      email: 'email',
+      contact_email: 'email',
+      phone: 'phone number',
+      contact_phone: 'phone number',
+      organization_id: 'organization',
+      organization_code: 'organization code',
+      code: 'code',
+      name: 'name'
+    };
+
+    // Some MySQL keys include index suffixes or use backticks; try to normalize
+    let key = rawKey || 'field';
+    // Remove common suffixes (e.g., UNIQUE, idx) and surrounding backticks
+    key = key.replace(/`/g, '').replace(/_?UNIQUE$/i, '').replace(/_?idx$/i, '');
+
+    const friendly = keyMap[key] || key.replace(/_/g, ' ');
+    // Capitalize first letter
+    const label = friendly.charAt(0).toUpperCase() + friendly.slice(1);
+
+    error = new AppError(`Duplicate value for ${label}. Please use another value.`, 400);
   }
 
   // MySQL foreign key constraint error

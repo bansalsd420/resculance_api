@@ -6,11 +6,13 @@ import { Card } from '../../components/ui/Card';
 import { Table } from '../../components/ui/Table';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
-import { ToastContainer } from '../../components/ui/Toast';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import { ambulanceService, organizationService, userService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
+import { hasPermission, PERMISSIONS } from '../../utils/permissions';
 
 const DEVICE_TYPES = [
   { value: 'CAMERA', label: 'Camera' },
@@ -22,10 +24,32 @@ const DEVICE_TYPES = [
 
 export const Ambulances = () => {
   const [ambulances, setAmbulances] = useState([]);
+  const [ambulancesCache, setAmbulancesCache] = useState({});
+  const AMB_CACHE_TTL = 1000 * 60 * 5; // 5 minutes TTL for cache entries
+
+  // Load cache from sessionStorage on mount (non-blocking)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('ambulancesCache');
+      if (raw) {
+        const parsed = JSON.parse(raw || '{}');
+        setAmbulancesCache(parsed);
+      }
+    } catch (err) {
+      // non-fatal
+      console.warn('Failed to load ambulances cache from sessionStorage', err);
+    }
+  }, []);
   const [organizations, setOrganizations] = useState([]);
+  const [orgTypeFilter, setOrgTypeFilter] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [selectedOrgInfo, setSelectedOrgInfo] = useState(null);
+  
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAmbulance, setSelectedAmbulance] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [devices, setDevices] = useState([]);
@@ -34,8 +58,11 @@ export const Ambulances = () => {
   const [availableUsers, setAvailableUsers] = useState([]);
   const [assignedUsers, setAssignedUsers] = useState([]);
   const [ambulanceAssignments, setAmbulanceAssignments] = useState({});
+  const [assigningUserId, setAssigningUserId] = useState(null);
+  const [unassigningUserId, setUnassigningUserId] = useState(null);
   const { user } = useAuthStore();
-  const { toasts, toast, removeToast } = useToast();
+  const { toast } = useToast();
+  const runWithLoader = useWithGlobalLoader();
 
   const { register, handleSubmit, reset, control, formState: { errors } } = useForm({
     defaultValues: {
@@ -49,40 +76,156 @@ export const Ambulances = () => {
   });
 
   useEffect(() => {
-    fetchAmbulances();
-    fetchOrganizations();
-  }, [filterStatus]);
+    // load organizations with global loader
+    runWithLoader(async () => {
+      await fetchOrganizations();
+    }, 'Loading organizations...').catch(err => console.error(err));
+  }, []);
+
+  // Helper: ensure a superadmin has selected an organization before attempting network calls
+  const ensureOrgSelected = () => {
+    if (user?.role === 'superadmin' && !selectedOrgId) {
+      toast.info('Please select an Organization Type and an Organization before loading ambulances.');
+      return false;
+    }
+    return true;
+  };
+
+  // Listen for global cache reset events and force refresh
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        // clear in-memory and sessionStorage cache for ambulances
+        setAmbulancesCache({});
+        try { sessionStorage.removeItem('ambulancesCache'); } catch (err) {}
+        // Only fetch if org selected (superadmin must pick org)
+        if (ensureOrgSelected()) await fetchAmbulances(true);
+      } catch (err) {
+        console.error('Global reset handler failed for ambulances', err);
+      } finally {
+        window.dispatchEvent(new CustomEvent('global:cache-reset-done', { detail: { page: 'ambulances' } }));
+      }
+    };
+    window.addEventListener('global:cache-reset', handler);
+    return () => window.removeEventListener('global:cache-reset', handler);
+  }, [selectedOrgId, activeTab, user]);
+
+  useEffect(() => {
+    // Fetch ambulances when filters change. For superadmin require an organization selected first.
+    if (user?.role === 'superadmin' && !selectedOrgId) {
+      setAmbulances([]);
+      return;
+    }
+
+    runWithLoader(async () => {
+      await fetchAmbulances();
+    }, 'Loading ambulances...').catch(err => console.error(err));
+  }, [filterStatus, selectedOrgId, activeTab]);
 
   const fetchOrganizations = async () => {
     try {
       const response = await organizationService.getAll();
-      setOrganizations(response.data?.data?.organizations || response.data?.organizations || response.data || []);
+      const raw = response.data?.data?.organizations || response.data?.organizations || response.data || [];
+      // Normalize organization type to lowercase canonical values used by this UI
+      const normalized = raw.map(org => ({
+        ...org,
+        type: (org.type || org.type === 0) ? org.type.toString().toLowerCase() : '',
+        // keep backwards-compatible name/code fields
+        name: org.name || org.org_name || org.organization_name,
+        code: org.code || org.organization_code || org.org_code
+      }));
+      setOrganizations(normalized);
     } catch (error) {
       console.error('Failed to fetch organizations:', error);
       toast.error('Failed to load organizations');
     }
   };
 
-  const fetchAmbulances = async () => {
+  const fetchAmbulances = async (force = false) => {
     setLoading(true);
     try {
-      const params = filterStatus !== 'all' ? { status: filterStatus } : {};
-      const response = await ambulanceService.getAll(params);
-      const ambulancesData = response.data?.data?.ambulances || response.data?.ambulances || response.data || [];
-      setAmbulances(ambulancesData);
+      // Build cache key similar to Users page: scope by organization + activeTab
+      const scopeKey = user?.role === 'superadmin'
+        ? `org:${selectedOrgId || 'none'}`
+        : `org:${user?.organizationId || 'own'}`;
+      const cacheKey = `${scopeKey}|tab:${activeTab}`;
 
-      // Fetch assigned users for each ambulance
+      // If cache exists and not forcing, use it and avoid network call
+      if (!force && ambulancesCache[cacheKey]) {
+        const cached = ambulancesCache[cacheKey];
+        const age = cached.ts ? (Date.now() - cached.ts) : Infinity;
+        if (age < AMB_CACHE_TTL) {
+          setAmbulances(cached.ambulances || []);
+          setAmbulanceAssignments(cached.assignments || {});
+          setLoading(false);
+          return;
+        } else {
+          // expired: remove from memory and sessionStorage then continue to fetch
+          const next = { ...ambulancesCache };
+          delete next[cacheKey];
+          setAmbulancesCache(next);
+          try { sessionStorage.setItem('ambulancesCache', JSON.stringify(next)); } catch (err) { /* ignore */ }
+        }
+      }
+  // Determine status filter from activeTab
+  let statusParam = null;
+  if (activeTab === 'approvals') statusParam = 'pending_approval';
+  else if (activeTab === 'available') statusParam = 'available';
+  else if (activeTab === 'maintenance') statusParam = 'maintenance';
+  else if (activeTab === 'active') statusParam = 'active';
+  else if (activeTab === 'inactive') statusParam = 'inactive';
+  else if (activeTab === 'partnered') statusParam = null;
+
+      const params = {};
+      if (statusParam) params.status = statusParam;
+      // include organizationId for superadmin or use user's organization
+      if (activeTab === 'partnered') {
+        // partnered view: request ambulances belonging to fleets partnered with the selected hospital
+  params.partnered = 'true';
+        if (user?.role === 'superadmin') {
+          if (selectedOrgId) params.hospitalId = selectedOrgId;
+        } else if (user?.organizationType === 'hospital') {
+          // hospital users will see their partnered fleets
+          // backend will infer hospital from the token
+        }
+      } else {
+        if (user?.role === 'superadmin') {
+          if (selectedOrgId) params.organizationId = selectedOrgId;
+        } else {
+          params.organizationId = user?.organizationId;
+        }
+      }
+
+  const response = await ambulanceService.getAll(params);
+  const ambulancesData = response.data?.data?.ambulances || response.data?.ambulances || response.data || [];
+  setAmbulances(ambulancesData);
+
+      // Fetch assigned users in parallel (tolerate individual failures)
+      const assignmentPromises = ambulancesData.map(a => (
+        ambulanceService.getAssignedUsers(a.id)
+          .then(res => ({ id: a.id, users: res.data?.data?.users || res.data?.users || [] }))
+          .catch(err => {
+            console.error(`Failed to fetch assigned users for ambulance ${a.id}:`, err);
+            return { id: a.id, users: [] };
+          })
+      ));
+
+      const settled = await Promise.allSettled(assignmentPromises);
       const assignments = {};
-      for (const ambulance of ambulancesData) {
-        try {
-          const assignedResponse = await ambulanceService.getAssignedUsers(ambulance.id);
-          assignments[ambulance.id] = assignedResponse.data?.data?.users || assignedResponse.data?.users || [];
-        } catch (error) {
-          console.error(`Failed to fetch assigned users for ambulance ${ambulance.id}:`, error);
-          assignments[ambulance.id] = [];
+      for (const s of settled) {
+        if (s.status === 'fulfilled' && s.value) {
+          assignments[s.value.id] = s.value.users || [];
         }
       }
       setAmbulanceAssignments(assignments);
+
+      // Cache the result (ambulances list + assignments) for this scope/tab with timestamp
+      const entry = { ambulances: ambulancesData, assignments, ts: Date.now() };
+      setAmbulancesCache(prev => {
+        const next = { ...prev, [cacheKey]: entry };
+        try { sessionStorage.setItem('ambulancesCache', JSON.stringify(next)); } catch (err) { console.warn('Failed to persist ambulances cache', err); }
+        return next;
+      });
     } catch (error) {
       console.error('Failed to fetch ambulances:', error);
       toast.error('Failed to load ambulances');
@@ -132,6 +275,14 @@ export const Ambulances = () => {
       });
     } else {
       const defaultData = user?.role === 'superadmin' ? {} : { organizationId: user?.organizationId };
+      // If the page has an organization selected, preload it into the create form
+      if (user?.role === 'superadmin' && selectedOrgId) {
+        defaultData.organizationId = selectedOrgId;
+      }
+      else {
+        // no-op: we intentionally don't show organization inputs in the modal anymore
+      }
+
       reset({ ...defaultData, devices: [] });
       setDevices([]);
     }
@@ -147,16 +298,14 @@ export const Ambulances = () => {
   };
 
   const onSubmit = async (data) => {
+    setSubmitting(true);
     try {
-      // Ensure organizationId is set for non-superadmins
-      const submitData = user?.role === 'superadmin' ? data : { ...data, organizationId: user?.organizationId };
-
-      // Separate devices from ambulance data
-      const { devices: deviceData, ...ambulanceData } = submitData;
+  // Separate devices from ambulance data
+  const { devices: deviceData, ...ambulanceData } = data;
 
       let ambulanceId;
 
-      if (selectedAmbulance) {
+  if (selectedAmbulance) {
         // For update, backend expects vehicleModel, vehicleType and status.
         // Map registrationNumber -> vehicleNumber if present in the form but update endpoint doesn't require it.
         const updatePayload = {
@@ -165,16 +314,29 @@ export const Ambulances = () => {
           status: ambulanceData.status,
         };
 
-        await ambulanceService.update(selectedAmbulance.id, updatePayload);
+        const updateResp = await ambulanceService.update(selectedAmbulance.id, updatePayload);
         ambulanceId = selectedAmbulance.id;
-        toast.success('Ambulance updated successfully');
+        const warning = updateResp?.data?.warning;
+        if (warning) {
+          toast.warn(warning.message || 'Ambulance updated with warning');
+        } else {
+          toast.success('Ambulance updated successfully');
+        }
       } else {
         // Create: backend expects vehicleNumber, vehicleModel, vehicleType, organizationId
+        // For superadmin, organizationId is taken from the page selection (`selectedOrgId`).
+        const orgIdForCreate = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
+        if (user?.role === 'superadmin' && !orgIdForCreate) {
+          toast.info('Please select an Organization Type and an Organization before creating an ambulance.');
+          setSubmitting(false);
+          return;
+        }
+
         const createPayload = {
           vehicleNumber: ambulanceData.registrationNumber || ambulanceData.vehicleNumber,
           vehicleModel: ambulanceData.vehicleModel,
           vehicleType: ambulanceData.vehicleType,
-          organizationId: ambulanceData.organizationId,
+          organizationId: orgIdForCreate,
         };
 
         const response = await ambulanceService.create(createPayload);
@@ -210,16 +372,33 @@ export const Ambulances = () => {
             }
           } catch (error) {
             console.error('Failed to save device:', error);
-            toast.error(`Failed to save device: ${device.deviceName}`);
+            const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Failed to save device';
+            toast.error(`Failed to save device ${device.deviceName}: ${msg}`);
           }
         }
       }
 
-      fetchAmbulances();
+      if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
       handleCloseModal();
     } catch (error) {
       console.error('Failed to save ambulance:', error);
-      toast.error(selectedAmbulance ? 'Failed to update ambulance' : 'Failed to create ambulance');
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || (selectedAmbulance ? 'Failed to update ambulance' : 'Failed to create ambulance');
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleApprove = async (id) => {
+    try {
+      await ambulanceService.approve(id);
+  toast.success('Ambulance approved successfully');
+  if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
+      handleCloseModal();
+    } catch (error) {
+      console.error('Failed to approve ambulance:', error);
+      const msg = error?.response?.data?.message || 'Failed to approve ambulance';
+      toast.error(msg);
     }
   };
 
@@ -227,8 +406,8 @@ export const Ambulances = () => {
     if (window.confirm('Are you sure you want to delete this ambulance? All associated devices will also be deleted.')) {
       try {
         await ambulanceService.delete(id);
-        toast.success('Ambulance deleted successfully');
-        fetchAmbulances();
+  toast.success('Ambulance deleted successfully');
+  if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
       } catch (error) {
         console.error('Failed to delete ambulance:', error);
         toast.error('Failed to delete ambulance');
@@ -258,26 +437,55 @@ export const Ambulances = () => {
       const assigned = assignedResponse.data?.data?.users || assignedResponse.data?.users || [];
       setAssignedUsers(assigned);
 
-      // Fetch available users (doctors, paramedics, drivers from same organization)
-      // Backend doesn't support array of roles, so we fetch all and filter on frontend
+      // Fetch available users for assignment. Rules:
+      // - If superadmin and a hospital is selected in the page (selectedOrgId), fetch that hospital's staff so superadmin can assign hospital staff.
+      // - If the requester is a hospital user, fetch the hospital's staff (they assign their own staff to partnered ambulances).
+      // - Otherwise (fleet view), fetch staff from the ambulance's owning organization (fleet owner).
+      let orgIdForUsers = null;
+      const selectedIsHospital = selectedOrgInfo && selectedOrgInfo.type === 'hospital';
+      if (user?.role === 'superadmin' && selectedOrgId && selectedIsHospital) {
+        orgIdForUsers = selectedOrgId;
+      } else if (user?.organizationType === 'hospital') {
+        orgIdForUsers = user.organizationId;
+      } else {
+        orgIdForUsers = ambulance.organization_id || ambulance.organizationId || selectedOrgId || user?.organizationId;
+      }
       const usersResponse = await userService.getAll({
-        organizationId: ambulance.organization_id || ambulance.organizationId,
+        organizationId: orgIdForUsers,
       });
       const allUsers = usersResponse.data?.data?.users || usersResponse.data?.users || usersResponse.data || [];
       
-      // Filter for doctors, paramedics, and drivers only
-      const staffUsers = allUsers.filter(u => 
-        ['doctor', 'paramedic', 'driver'].includes(u.role?.toLowerCase())
-      );
+      // Filter for doctors, paramedics, and drivers only.
+      // Roles in the backend may be namespaced (e.g. 'hospital_doctor' or 'fleet_doctor'),
+      // so match by substring to include those variants.
+      const staffUsers = allUsers.filter(u => {
+        const r = (u.role || '').toString().toLowerCase();
+        return r.includes('doctor') || r.includes('paramedic') || r.includes('driver');
+      }).map(u => ({
+        ...u,
+        // normalize role label for display (e.g. 'fleet_doctor' -> 'Doctor')
+        roleLabel: (u.role || '').toString().toLowerCase().includes('doctor') ? 'Doctor'
+          : (u.role || '').toString().toLowerCase().includes('paramedic') ? 'Paramedic'
+          : (u.role || '').toString().toLowerCase().includes('driver') ? 'Driver'
+          : (u.role || '').toString()
+      }));
       
       // Filter out already assigned users
       const assignedUserIds = assigned.map(u => u.id);
       const available = staffUsers.filter(u => !assignedUserIds.includes(u.id));
-      setAvailableUsers(available);
+      // For UI convenience map to expected frontend fields and show roleLabel
+      const availableMapped = available.map(u => ({
+        id: u.id,
+        firstName: u.firstName || u.first_name || u.first_name || '',
+        lastName: u.lastName || u.last_name || u.last_name || '',
+        role: u.roleLabel || u.role || '',
+        roleKey: u.role || ''
+      }));
+      setAvailableUsers(availableMapped);
       
       console.log('Assignment Modal: Fetched users', { 
         assigned: assigned.length, 
-        available: available.length,
+        available: availableMapped.length,
         staffUsers: staffUsers.length 
       });
       
@@ -299,11 +507,24 @@ export const Ambulances = () => {
   };
 
   const handleAssignUser = async (userId, role) => {
+    setAssigningUserId(userId);
     try {
-      await ambulanceService.assign(assignmentAmbulance.id, userId, role);
+      // If superadmin is acting on a selected hospital, send assigningOrganizationId so backend records the correct assigning org
+      const assigningOrganizationId = (user?.role === 'superadmin' && selectedOrgId && selectedOrgInfo?.type === 'hospital') ? selectedOrgId : null;
+      
+      console.log('[handleAssignUser] Assigning user:', { 
+        userId, 
+        role, 
+        assigningOrganizationId,
+        selectedOrgId,
+        selectedOrgInfo,
+        userRole: user?.role
+      });
+      
+      await ambulanceService.assign(assignmentAmbulance.id, userId, role, assigningOrganizationId);
       toast.success('User assigned successfully');
       
-      // Refresh assigned users
+  // Refresh assigned users
       const assignedResponse = await ambulanceService.getAssignedUsers(assignmentAmbulance.id);
       const assigned = assignedResponse.data?.data?.users || assignedResponse.data?.users || [];
       setAssignedUsers(assigned);
@@ -319,11 +540,15 @@ export const Ambulances = () => {
       
     } catch (error) {
       console.error('Failed to assign user:', error);
-      toast.error('Failed to assign user');
+      const msg = error?.response?.data?.message || error?.message || 'Failed to assign user';
+      toast.error(msg);
+    } finally {
+      setAssigningUserId(null);
     }
   };
 
   const handleUnassignUser = async (userId) => {
+    setUnassigningUserId(userId);
     try {
       await ambulanceService.unassign(assignmentAmbulance.id, userId);
       toast.success('User unassigned successfully');
@@ -340,20 +565,25 @@ export const Ambulances = () => {
       }));
       
       // Add back to available users
+      const orgIdForAllUsers = assignmentAmbulance.organization_id || assignmentAmbulance.organizationId || selectedOrgId || user?.organizationId;
       const allUsersResponse = await userService.getAll({
-        organizationId: assignmentAmbulance.organization_id || assignmentAmbulance.organizationId,
+        organizationId: orgIdForAllUsers,
       });
       const allUsers = allUsersResponse.data?.data?.users || allUsersResponse.data?.users || allUsersResponse.data || [];
-      const staffUsers = allUsers.filter(u => 
-        ['doctor', 'paramedic', 'driver'].includes(u.role?.toLowerCase())
-      );
+      const staffUsers = allUsers.filter(u => {
+        const r = (u.role || '').toString().toLowerCase();
+        return r.includes('doctor') || r.includes('paramedic') || r.includes('driver');
+      });
       const assignedUserIds = assigned.map(u => u.id);
       const available = staffUsers.filter(u => !assignedUserIds.includes(u.id));
       setAvailableUsers(available);
       
     } catch (error) {
       console.error('Failed to unassign user:', error);
-      toast.error('Failed to unassign user');
+      const msg = error?.response?.data?.message || error?.message || 'Failed to unassign user';
+      toast.error(msg);
+    } finally {
+      setUnassigningUserId(null);
     }
   };
 
@@ -370,16 +600,6 @@ export const Ambulances = () => {
             <p className="font-medium">{row.registration_number || row.vehicleNumber}</p>
             <p className="text-sm text-secondary">{row.vehicle_model || row.vehicleModel}</p>
           </div>
-        </div>
-      ),
-    },
-    {
-      header: 'Organization',
-      accessor: 'organization_name',
-      render: (row) => (
-        <div>
-          <p className="text-sm font-medium">{row.organization_name || 'N/A'}</p>
-          <p className="text-xs text-secondary">{row.organization_code || ''}</p>
         </div>
       ),
     },
@@ -413,26 +633,7 @@ export const Ambulances = () => {
         </span>
       ),
     },
-    {
-      header: 'Driver',
-      accessor: 'driverId',
-      render: (row) => {
-        const assigned = ambulanceAssignments[row.id] || [];
-        const driver = Array.isArray(assigned) ? assigned.find(u => u.role === 'DRIVER') : null;
-        return (
-          <div className="flex items-center gap-2 text-sm">
-            {driver ? (
-              <>
-                <User className="w-4 h-4 text-secondary" />
-                <span>{driver.firstName} {driver.lastName}</span>
-              </>
-            ) : (
-              <span className="text-secondary">Not assigned</span>
-            )}
-          </div>
-        );
-      },
-    },
+    // Organization column removed — page is scoped by selected organization
     {
       header: 'Paramedic',
       accessor: 'paramedicId',
@@ -473,20 +674,43 @@ export const Ambulances = () => {
     },
     {
       header: 'Actions',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
-            Edit
-          </Button>
-          <Button size="sm" variant="success" onClick={() => handleOpenAssignmentModal(row)}>
-            <UserPlus className="w-4 h-4 mr-1" />
-            Assign Staff
-          </Button>
-          <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>
-            Delete
-          </Button>
-        </div>
-      ),
+      render: (row) => {
+        const status = (row.status || row.status === 0) ? String(row.status).toLowerCase() : '';
+        const isPending = status === 'pending_approval';
+        return (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
+              Edit
+            </Button>
+
+            {/* If ambulance is pending approval, disable assignment and show approve action instead */}
+            {isPending ? (
+              <>
+                {user?.role === 'superadmin' && (
+                  <Button size="sm" variant="success" onClick={() => handleApprove(row.id)}>
+                    Approve
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" disabled>
+                  <UserPlus className="w-4 h-4 mr-1" />
+                  Assign Staff
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="success" onClick={() => handleOpenAssignmentModal(row)}>
+                <UserPlus className="w-4 h-4 mr-1" />
+                Assign Staff
+              </Button>
+            )}
+
+            {hasPermission(user?.role, PERMISSIONS.DELETE_AMBULANCE) && (
+              <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>
+                Delete
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -497,72 +721,249 @@ export const Ambulances = () => {
 
   return (
     <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Ambulances</h1>
-          <p className="text-secondary">Manage your fleet of ambulances</p>
+          <h1 className="text-2xl md:text-3xl font-display font-bold text-text mb-2">Ambulances</h1>
+          <p className="text-text-secondary">Manage your fleet of ambulances</p>
         </div>
-        <Button onClick={() => handleOpenModal()}>
-          <Plus className="w-5 h-5 mr-2" />
-          Add Ambulance
-        </Button>
+        {hasPermission(user?.role, PERMISSIONS.CREATE_AMBULANCE) && (
+          <Button onClick={() => handleOpenModal()}>
+            <Plus className="w-5 h-5 mr-2" />
+            Add Ambulance
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
       <Card>
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-secondary" />
-            <input
-              type="text"
-              placeholder="Search ambulances..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input pl-12"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setFilterStatus('all')}
-              className={`px-4 py-2 rounded-2xl font-medium transition-all ${
-                filterStatus === 'all' ? 'bg-primary text-white' : 'bg-background-card'
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                activeTab === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
               }`}
             >
               All
             </button>
+            {hasPermission(user?.role, PERMISSIONS.APPROVE_AMBULANCE) && (
+              <button
+                onClick={() => setActiveTab('approvals')}
+                className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                  activeTab === 'approvals' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
+                }`}
+              >
+                Approvals
+              </button>
+            )}
             <button
-              onClick={() => setFilterStatus('available')}
-              className={`px-4 py-2 rounded-2xl font-medium transition-all ${
-                filterStatus === 'available' ? 'bg-primary text-white' : 'bg-background-card'
+              onClick={() => setActiveTab('partnered')}
+              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                activeTab === 'partnered' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
+              }`}
+            >
+              Partnered
+            </button>
+            <button
+              onClick={() => setActiveTab('available')}
+              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                activeTab === 'available' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
               }`}
             >
               Available
             </button>
             <button
-              onClick={() => setFilterStatus('on-duty')}
-              className={`px-4 py-2 rounded-2xl font-medium transition-all ${
-                filterStatus === 'on-duty' ? 'bg-primary text-white' : 'bg-background-card'
+              onClick={() => setActiveTab('active')}
+              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                activeTab === 'active' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
               }`}
             >
-              On Duty
+              Active
             </button>
             <button
-              onClick={() => setFilterStatus('maintenance')}
-              className={`px-4 py-2 rounded-2xl font-medium transition-all ${
-                filterStatus === 'maintenance' ? 'bg-primary text-white' : 'bg-background-card'
+              onClick={() => setActiveTab('maintenance')}
+              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                activeTab === 'maintenance' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
               }`}
             >
               Maintenance
             </button>
+            <button
+              onClick={() => setActiveTab('inactive')}
+              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                activeTab === 'inactive' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
+              }`}
+            >
+              Inactive
+            </button>
+          </div>
+
+          <div className="w-full md:flex-1 md:max-w-md md:ml-auto relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text-secondary" />
+            <input
+              type="text"
+              placeholder="Search ambulances..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input pl-12 w-full"
+            />
           </div>
         </div>
       </Card>
 
+      {/* Organization filters (superadmin only) with selected org info on the right */}
+      {user?.role === 'superadmin' && (
+        <Card className="p-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+            <div>
+                <label className="block text-xs font-medium text-text mb-0">Organization Type</label>
+              <Select
+                isClearable
+                value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                onChange={(opt) => { const v = opt?.value || ''; setOrgTypeFilter(v); setSelectedOrgId(null); setSelectedOrgInfo(null); }}
+                options={[{ value: '', label: 'All Types' }, { value: 'hospital', label: 'Hospital' }, { value: 'fleet_owner', label: 'Fleet Owner' }]}
+                styles={{
+                  control: (base, state) => ({ ...base, minHeight: 30, borderRadius: 6, borderColor: state.isFocused ? '#34d399' : '#e6eef9', boxShadow: 'none', paddingLeft: 6 }),
+                  option: (base) => ({ ...base, padding: '4px 6px' })
+                }}
+              />
+            </div>
+
+            <div className="w-full">
+              <label className="block text-xs font-medium text-text mb-0">Select Organization</label>
+              <div title={!orgTypeFilter ? 'Please select an Organization Type first' : ''}>
+                <Select
+                  isDisabled={!orgTypeFilter}
+                  placeholder={orgTypeFilter ? 'Type to search or pick an organization' : 'Select an organization type first'}
+                  options={organizations.filter(o => (!orgTypeFilter || o.type === orgTypeFilter)).map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                  value={selectedOrgId ? { value: selectedOrgId, label: `${selectedOrgInfo?.name || ''} (${selectedOrgInfo?.code || ''})` } : null}
+                  onChange={(opt) => {
+                    if (opt) {
+                      setSelectedOrgId(opt.value);
+                      const info = organizations.find(o => o.id === opt.value) || null;
+                      setSelectedOrgInfo(info);
+                    } else {
+                      setSelectedOrgId(null);
+                      setSelectedOrgInfo(null);
+                    }
+                  }}
+                  classNamePrefix="react-select"
+                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                  menuPosition="fixed"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end">
+              <div className="text-right">
+                {selectedOrgInfo ? (
+                  <>
+                    <p className="font-semibold">{selectedOrgInfo.name} <span className="text-sm text-secondary">({selectedOrgInfo.code})</span></p>
+                    <p className="text-sm text-secondary">Type: {selectedOrgInfo.type}</p>
+                    <div>
+                      <button onClick={() => { setSelectedOrgId(null); setOrgTypeFilter(''); setSelectedOrgInfo(null); }} className="text-sm text-primary underline">Clear selection</button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-secondary">Select an organization to view details here</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* If superadmin and no organization selected, prompt selection */}
+      {user?.role === 'superadmin' && !selectedOrgId && (
+        <Card>
+          <div className="py-3 text-center">
+              <p className="text-sm text-secondary">Please select an Organization Type and an Organization above to load ambulances for that organization.</p>
+            </div>
+          </Card>
+      )}
+
       {/* Ambulances Table */}
-      <Table columns={columns} data={filteredAmbulances} />
+      {activeTab === 'partnered' ? (
+        // Single table grouped by fleet owner (organization header rows)
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                {columns.map((col) => (
+                  <th
+                    key={col.accessor || col.header}
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {(() => {
+                const groups = new Map();
+                filteredAmbulances.forEach((a) => {
+                  const key = a.organization_id || 'unknown';
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key).push(a);
+                });
+
+                const getOrgName = (orgId) => {
+                  const org = (organizations || []).find((o) => String(o.id) === String(orgId));
+                  return org ? org.name : (orgId === 'unknown' ? 'Unknown owner' : `Org ${orgId}`);
+                };
+
+                const rows = [];
+                groups.forEach((groupAmbs, orgId) => {
+                  rows.push(
+                    <tr key={`org-${orgId}`} className="bg-gray-100">
+                      <td colSpan={columns.length} className="px-6 py-2 font-semibold text-gray-700">
+                        {getOrgName(orgId)}
+                      </td>
+                    </tr>
+                  );
+
+                  groupAmbs.forEach((amb) => {
+                    rows.push(
+                      <tr key={`amb-${amb.id}`} className="hover:bg-gray-50">
+                        {columns.map((col) => {
+                          const cellKey = (col.accessor || col.header) + '-' + amb.id;
+                          const value = col.accessor ? (typeof col.accessor === 'function' ? col.accessor(amb) : amb[col.accessor]) : null;
+                          if (col.render) {
+                            return (
+                              <td key={cellKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {col.render(amb)}
+                              </td>
+                            );
+                          }
+                          return (
+                            <td key={cellKey} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{value}</td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  });
+                });
+
+                return rows;
+              })()}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <Table
+          columns={columns}
+          data={filteredAmbulances}
+          onRefresh={() => {
+            if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
+          }}
+          isRefreshing={loading}
+        />
+      )}
 
       {/* Add/Edit Modal */}
       <Modal
@@ -574,7 +975,12 @@ export const Ambulances = () => {
             <Button variant="secondary" onClick={handleCloseModal}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(onSubmit)}>
+            {selectedAmbulance && user?.role === 'superadmin' && selectedAmbulance.status === 'pending_approval' && (
+              <Button variant="success" onClick={() => handleApprove(selectedAmbulance.id)}>
+                Approve
+              </Button>
+            )}
+            <Button loading={submitting} onClick={handleSubmit(onSubmit)}>
               {selectedAmbulance ? 'Update' : 'Create'}
             </Button>
           </>
@@ -599,41 +1005,65 @@ export const Ambulances = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-text mb-2">Vehicle Type</label>
-              <select {...register('vehicleType', { required: 'Type is required' })} className="input">
-                <option value="">Select Type</option>
-                <option value="BLS">BLS (Basic Life Support)</option>
-                <option value="ALS">ALS (Advanced Life Support)</option>
-                <option value="SCU">SCU (Special Care Unit)</option>
-              </select>
+              <Controller
+                name="vehicleType"
+                control={control}
+                defaultValue={''}
+                rules={{ required: 'Type is required' }}
+                render={({ field }) => {
+                  const options = [
+                    { value: 'BLS', label: 'BLS (Basic Life Support)' },
+                    { value: 'ALS', label: 'ALS (Advanced Life Support)' },
+                    { value: 'SCU', label: 'SCU (Special Care Unit)' },
+                  ];
+                  const value = options.find(o => o.value === field.value) || null;
+                  return (
+                    <Select
+                      classNamePrefix="react-select"
+                      options={options}
+                      value={value}
+                      onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                      placeholder="Select Type"
+                    />
+                  );
+                }}
+              />
               {errors.vehicleType && <p className="mt-1 text-sm text-red-500">{errors.vehicleType.message}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-text mb-2">Status</label>
-              <select {...register('status')} className="input">
-                <option value="">Select Status</option>
-                <option value="pending_approval">Pending Approval</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
-            </div>
+            {selectedAmbulance && (
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">Status</label>
+                <Controller
+                  name="status"
+                  control={control}
+                  defaultValue={''}
+                  render={({ field }) => {
+                    // Available statuses for selection; pending_approval and inactive are not selectable here
+                    const options = [
+                      { value: 'available', label: 'Available' },
+                      { value: 'active', label: 'Active' },
+                      { value: 'maintenance', label: 'Maintenance' },
+                    ];
+                    const value = options.find(o => o.value === field.value) || null;
+                    return (
+                      <Select
+                        classNamePrefix="react-select"
+                        options={options}
+                        value={value}
+                        onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                        placeholder="Select Status"
+                      />
+                    );
+                  }}
+                />
+              </div>
+            )}
           </div>
 
-          {user?.role === 'superadmin' && (
-            <div>
-              <label className="block text-sm font-medium text-text mb-2">Organization *</label>
-              <select {...register('organizationId', { required: 'Organization is required' })} className="input">
-                <option value="">Select Organization</option>
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name} ({org.type})
-                  </option>
-                ))}
-              </select>
-              {errors.organizationId && <p className="mt-1 text-sm text-red-500">{errors.organizationId.message}</p>}
-            </div>
-          )}
+          {/* Organization selection is intentionally removed from the modal.
+              OrganizationId is taken from the page selection (`selectedOrgId`) for superadmins
+              and from the current user's organization for other roles. */}
 
           {/* Devices Section */}
           <div className="border-t pt-4 mt-6">
@@ -674,15 +1104,25 @@ export const Ambulances = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-text mb-2">Device Type *</label>
-                      <select
-                        {...register(`devices.${index}.deviceType`, { required: 'Device type is required' })}
-                        className="input"
-                      >
-                        <option value="">Select Type</option>
-                        {DEVICE_TYPES.map(type => (
-                          <option key={type.value} value={type.value}>{type.label}</option>
-                        ))}
-                      </select>
+                      <Controller
+                        name={`devices.${index}.deviceType`}
+                        control={control}
+                        defaultValue={field.deviceType || ''}
+                        rules={{ required: 'Device type is required' }}
+                        render={({ field: f }) => {
+                          const options = DEVICE_TYPES.map(t => ({ value: t.value, label: t.label }));
+                          const value = options.find(o => o.value === f.value) || null;
+                          return (
+                            <Select
+                              classNamePrefix="react-select"
+                              options={options}
+                              value={value}
+                              onChange={(opt) => f.onChange(opt ? opt.value : '')}
+                              placeholder="Select Type"
+                            />
+                          );
+                        }}
+                      />
                       {errors.devices?.[index]?.deviceType && (
                         <p className="mt-1 text-sm text-red-500">{errors.devices[index].deviceType.message}</p>
                       )}
@@ -741,6 +1181,11 @@ export const Ambulances = () => {
         size="lg"
       >
         <div className="space-y-6">
+          {assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId && (
+            <div className="p-3 bg-yellow-50 border border-yellow-100 rounded">
+              <p className="text-sm text-yellow-800">This ambulance is currently active for <strong>{assignmentAmbulance.current_hospital_name || 'another hospital'}</strong> and cannot be assigned by your organization until it becomes available.</p>
+            </div>
+          )}
           {/* Currently Assigned Users */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Currently Assigned</h3>
@@ -762,6 +1207,7 @@ export const Ambulances = () => {
                     <Button
                       size="sm"
                       variant="danger"
+                      loading={unassigningUserId === assignedUser.id}
                       onClick={() => handleUnassignUser(assignedUser.id)}
                     >
                       <UserMinus className="w-4 h-4 mr-1" />
@@ -773,34 +1219,106 @@ export const Ambulances = () => {
             )}
           </div>
 
-          {/* Available Users */}
+          {/* Available Users - split into Doctors and Paramedics for clarity */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Available Staff</h3>
             {availableUsers.length === 0 ? (
               <p className="text-secondary text-sm">No staff available for assignment.</p>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {availableUsers.map((availableUser) => (
-                  <div key={availableUser.id} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                        {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
-                      </div>
-                      <div>
-                        <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
-                        <p className="text-sm text-secondary">{availableUser.role}</p>
-                      </div>
+              <div className="space-y-4 max-h-60 overflow-y-auto">
+                {/* Doctors */}
+                {availableUsers.filter(u => (u.role || '').toLowerCase() === 'doctor').length > 0 && (
+                  <div>
+                    <h4 className="text-md font-semibold mb-2">Doctors</h4>
+                    <div className="space-y-2">
+                      {availableUsers.filter(u => (u.role || '').toLowerCase() === 'doctor').map((availableUser) => (
+                        <div key={`doc-${availableUser.id}`} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                              {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
+                            </div>
+                            <div>
+                              <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
+                              <p className="text-sm text-secondary">{availableUser.role}</p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            loading={assigningUserId === availableUser.id}
+                            onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
+                            disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
+                          >
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Assign
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                    <Button
-                      size="sm"
-                      variant="success"
-                      onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
-                    >
-                      <UserPlus className="w-4 h-4 mr-1" />
-                      Assign
-                    </Button>
                   </div>
-                ))}
+                )}
+
+                {/* Paramedics */}
+                {availableUsers.filter(u => (u.role || '').toLowerCase() === 'paramedic').length > 0 && (
+                  <div>
+                    <h4 className="text-md font-semibold mb-2">Paramedics</h4>
+                    <div className="space-y-2">
+                      {availableUsers.filter(u => (u.role || '').toLowerCase() === 'paramedic').map((availableUser) => (
+                        <div key={`para-${availableUser.id}`} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                              {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
+                            </div>
+                            <div>
+                              <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
+                              <p className="text-sm text-secondary">{availableUser.role}</p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
+                            disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
+                          >
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Assign
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Others */}
+                {availableUsers.filter(u => !['doctor','paramedic'].includes((u.role||'').toLowerCase())).length > 0 && (
+                  <div>
+                    <h4 className="text-md font-semibold mb-2">Other Staff</h4>
+                    <div className="space-y-2">
+                      {availableUsers.filter(u => !['doctor','paramedic'].includes((u.role||'').toLowerCase())).map((availableUser) => (
+                        <div key={`oth-${availableUser.id}`} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                              {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
+                            </div>
+                            <div>
+                              <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
+                              <p className="text-sm text-secondary">{availableUser.role}</p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
+                            disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
+                          >
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Assign
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

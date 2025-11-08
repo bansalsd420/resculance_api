@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 
@@ -21,15 +22,19 @@ import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
 import { Table } from '../../components/ui/Table';
-import { ToastContainer } from '../../components/ui/Toast';
 import { collaborationService, organizationService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
+import getErrorMessage from '../../utils/getErrorMessage';
 
 // --- Validation Schema ---
 
 const collaborationSchema = yup.object({
-  fleetOwnerId: yup.number().typeError('Fleet owner is required').required('Fleet owner is required'),
+  fleetId: yup.number().typeError('Fleet owner is required').required('Fleet owner is required'),
+  // hospitalId is required only when superadmin is creating the partnership (handled via resolver context)
+  hospitalId: yup.number().when('$isSuper', (isSuper, schema) => {
+    return isSuper ? schema.typeError('Hospital is required').required('Hospital is required') : schema.notRequired();
+  }),
   terms: yup.string().required('Terms are required'),
   duration: yup.number().typeError('Duration must be a number').required('Duration is required').positive('Duration must be positive'),
 });
@@ -39,9 +44,11 @@ const collaborationSchema = yup.object({
 export const Collaborations = () => {
   const [collaborations, setCollaborations] = useState([]);
   const [organizations, setOrganizations] = useState([]);
+  const [fleetOwners, setFleetOwners] = useState([]);
+  const [hospitals, setHospitals] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false); // For Create Modal
-  const { toasts, toast, removeToast } = useToast();
+  const { toast } = useToast();
   
   // State for the Action Confirmation Modal
   const [actionModal, setActionModal] = useState({
@@ -57,35 +64,63 @@ export const Collaborations = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
   } = useForm({
-    resolver: yupResolver(collaborationSchema),
+    resolver: yupResolver(collaborationSchema, { context: { isSuper: user?.role === 'superadmin' } }),
   });
 
   useEffect(() => {
     fetchData();
   }, []);
 
+  // Global cache reset handler
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        await fetchData();
+      } catch (err) {
+        console.error('Global reset handler failed for collaborations', err);
+      } finally {
+        window.dispatchEvent(new CustomEvent('global:cache-reset-done', { detail: { page: 'collaborations' } }));
+      }
+    };
+    window.addEventListener('global:cache-reset', handler);
+    return () => window.removeEventListener('global:cache-reset', handler);
+  }, []);
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [collabsRes, orgsRes] = await Promise.all([
+      const [collabsRes, orgsAllRes] = await Promise.all([
         collaborationService.getAll(),
-        organizationService.getAll({ type: 'FLEET_OWNER' }),
+        organizationService.getAll(),
       ]);
 
       // Backend returns { success: true, data: { requests: [...] } } or similar
       const collabData = collabsRes.data?.data?.requests || collabsRes.data?.requests || collabsRes.data || [];
-      const orgData = orgsRes.data?.data?.organizations || orgsRes.data?.organizations || orgsRes.data || [];
-      
-      setCollaborations(Array.isArray(collabData) ? collabData : []);
-      setOrganizations(Array.isArray(orgData) ? orgData : []);
+  const orgData = orgsAllRes.data?.data?.organizations || orgsAllRes.data?.organizations || orgsAllRes.data || [];
+
+  let fleets = Array.isArray(orgData) ? orgData.filter(o => (o.type || '').toString().toLowerCase() === 'fleet_owner') : [];
+  let hosps = Array.isArray(orgData) ? orgData.filter(o => (o.type || '').toString().toLowerCase() === 'hospital') : [];
+
+  // If superadmin has an organization attached, remove it from the selectable lists
+  if (user?.role === 'superadmin' && user?.organizationId) {
+    fleets = fleets.filter(o => o.id !== user.organizationId);
+    hosps = hosps.filter(o => o.id !== user.organizationId);
+  }
+
+  setCollaborations(Array.isArray(collabData) ? collabData : []);
+  setOrganizations(Array.isArray(orgData) ? orgData : []);
+  setFleetOwners(fleets);
+  setHospitals(hosps);
 
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      toast.error('Failed to load collaborations');
+  const msg = getErrorMessage(error, 'Failed to load collaborations');
+      toast.error(msg);
       setCollaborations([]);
       setOrganizations([]);
     } finally {
@@ -96,17 +131,52 @@ export const Collaborations = () => {
   const onSubmit = async (data) => {
     try {
       setLoading(true);
-      await collaborationService.create(data);
+      // Prepare payload mapping frontend field names to backend expected names
+      const payloadBase = { requestType: 'partnership' };
+  // fleetId is now the canonical field from the form
+  payloadBase.fleetId = data.fleetId;
+      payloadBase.terms = data.terms;
+      payloadBase.message = data.message || '';
+      payloadBase.duration = data.duration;
+
+      // Hospital id: superadmin must select, non-superadmin uses their org
+      if (user?.role === 'superadmin') {
+        if (!data.hospitalId) {
+          toast.error('Please select a Hospital for the partnership');
+          setLoading(false);
+          return;
+        }
+        payloadBase.hospitalId = data.hospitalId;
+      } else {
+        payloadBase.hospitalId = user.organizationId;
+      }
+
+      await collaborationService.create(payloadBase);
       toast.success('Collaboration request created successfully');
       await fetchData();
       handleCloseModal();
     } catch (error) {
       console.error('Failed to create collaboration:', error);
-      toast.error('Failed to create collaboration request');
+  const msg = getErrorMessage(error, 'Failed to create collaboration request');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
+
+  // onInvalid handler extracted so we can call it and also log clicks
+  const onInvalidHandler = (formErrors) => {
+    try {
+      const firstKey = Object.keys(formErrors)[0];
+      const firstErr = firstKey ? formErrors[firstKey]?.message : 'Please fix the form errors';
+      toast.error(firstErr || 'Please fix the form errors');
+      console.error('Collaboration form validation errors:', formErrors);
+    } catch (e) {
+      console.error('Error handling form validation errors', e);
+    }
+  };
+
+  const submitHandler = handleSubmit(onSubmit, onInvalidHandler);
 
   // Action Handlers (Triggering the Action Modal)
   const handleAcceptPrompt = (id) => setActionModal({ isOpen: true, type: 'accept', collabId: id, reason: '' });
@@ -267,27 +337,38 @@ export const Collaborations = () => {
     {
       header: 'Actions',
       accessor: 'actions',
-      render: (collab) => (
-        <div className="flex items-center gap-2">
-          {collab.status?.toLowerCase() === 'pending' && (
-            <>
-              <Button size="sm" variant="success" onClick={() => handleAcceptPrompt(collab.id)}>
-                <CheckCircle className="w-4 h-4 mr-1" />
-                Accept
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => handleRejectPrompt(collab.id)}>
-                <XCircle className="w-4 h-4 mr-1" />
-                Reject
-              </Button>
-            </>
-          )}
-          {collab.status?.toLowerCase() === 'approved' && (
-            <Button size="sm" variant="secondary" onClick={() => handleCancelPrompt(collab.id)}>
-              Cancel
-            </Button>
-          )}
-        </div>
-      ),
+      render: (collab) => {
+          const status = (collab.status || '').toLowerCase();
+          const isSuper = user?.role === 'superadmin';
+          const isRequesterHospital = user?.organizationId && (user.organizationId === collab.hospital_id || user.organizationId === collab.hospitalId);
+          const isFleetOwner = user?.organizationId && (user.organizationId === collab.fleet_id || user.organizationId === collab.fleetId);
+
+          const canAcceptOrReject = status === 'pending' && (isSuper || isFleetOwner);
+          const canCancel = (status === 'pending' && (isSuper || isRequesterHospital || isFleetOwner)) || (status === 'approved' && (isSuper || isRequesterHospital || isFleetOwner));
+
+          return (
+            <div className="flex items-center gap-2">
+              {canAcceptOrReject && (
+                <>
+                  <Button size="sm" variant="success" onClick={() => handleAcceptPrompt(collab.id)}>
+                    <CheckCircle className="w-4 h-4 mr-1" />
+                    Accept
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => handleRejectPrompt(collab.id)}>
+                    <XCircle className="w-4 h-4 mr-1" />
+                    Reject
+                  </Button>
+                </>
+              )}
+
+              {canCancel && (
+                <Button size="sm" variant="secondary" onClick={() => handleCancelPrompt(collab.id)}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          );
+        },
     },
   ];
 
@@ -305,7 +386,7 @@ export const Collaborations = () => {
 
   return (
     <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      
       
       {/* Header */}
       <motion.div
@@ -314,7 +395,7 @@ export const Collaborations = () => {
         className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
       >
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2 bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-display font-bold mt-5 mb-2 bg-gradient-to-r from-teal-600 to-cyan-600 bg-clip-text text-transparent">
             Partnership Management
           </h1>
           <p className="text-gray-600">Manage hospital-fleet collaborations and partnerships</p>
@@ -459,30 +540,66 @@ export const Collaborations = () => {
             <Button variant="secondary" onClick={handleCloseModal}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(onSubmit)} loading={loading}>
+            <Button onClick={() => { console.log('Create Partnership clicked'); submitHandler(); }} loading={loading}>
               Create Partnership
             </Button>
           </>
         }
       >
         <form className="space-y-4">
+          {user?.role === 'superadmin' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hospital</label>
+                <Controller
+                  name="hospitalId"
+                  control={control}
+                  defaultValue={''}
+                  render={({ field }) => {
+                    const options = hospitals.map(o => ({ value: o.id, label: `${o.name} - ${o.city || o.code || ''}` }));
+                    const value = options.find(o => o.value === field.value) || null;
+                    return (
+                      <Select
+                        classNamePrefix="react-select"
+                        options={options}
+                        value={value}
+                        onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                        placeholder="Select Hospital"
+                        isClearable
+                      />
+                    );
+                  }}
+                />
+                    {errors.hospitalId && (
+                      <p className="mt-1 text-sm text-red-500">{errors.hospitalId.message}</p>
+                    )}
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Fleet Owner
             </label>
-            <select
-              {...register('fleetOwnerId')}
-              className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500"
-            >
-              <option value="">Select Fleet Owner</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name} - {org.city}
-                </option>
-              ))}
-            </select>
-            {errors.fleetOwnerId && (
-              <p className="mt-1 text-sm text-red-500">{errors.fleetOwnerId.message}</p>
+            <Controller
+              name="fleetId"
+              control={control}
+              defaultValue={''}
+              render={({ field }) => {
+                const options = fleetOwners.length ? fleetOwners.map(o => ({ value: o.id, label: `${o.name} - ${o.city || o.code || ''}` })) : organizations.map(o => ({ value: o.id, label: `${o.name} - ${o.city || o.code || ''}` }));
+                const value = options.find(o => o.value === field.value) || null;
+                return (
+                  <Select
+                    classNamePrefix="react-select"
+                    options={options}
+                    value={value}
+                    onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                    placeholder="Select Fleet Owner"
+                  />
+                );
+              }}
+            />
+            {errors.fleetId && (
+              <p className="mt-1 text-sm text-red-500">{errors.fleetId.message}</p>
             )}
           </div>
           

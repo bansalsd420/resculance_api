@@ -14,7 +14,6 @@ import {
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
-import { ToastContainer } from '../../components/ui/Toast';
 import { authService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
@@ -47,7 +46,7 @@ export const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const { user, setUser, updateProfile } = useAuthStore();
-  const { toasts, toast, removeToast } = useToast();
+  const { toast } = useToast();
 
   const {
     register: registerProfile,
@@ -122,11 +121,11 @@ export const Settings = () => {
 
   return (
     <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      
       
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-display font-bold mb-2">Settings</h1>
+  <h1 className="text-3xl font-display font-bold mt-5 mb-2">Settings</h1>
         <p className="text-secondary">Manage your account settings and preferences</p>
       </div>
 

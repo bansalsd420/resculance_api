@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 import {
@@ -23,9 +25,9 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Table } from '../../components/ui/Table';
 import { Card } from '../../components/ui/Card';
-import { ToastContainer } from '../../components/ui/Toast';
 import { patientService, ambulanceService, organizationService } from '../../services';
 import { useToast } from '../../hooks/useToast';
+import getErrorMessage from '../../utils/getErrorMessage';
 import { CameraFeedModal } from './CameraFeedModal';
 import { useAuthStore } from '../../store/authStore';
 
@@ -46,17 +48,27 @@ export const Onboarding = () => {
   const [patients, setPatients] = useState([]);
   const [ambulances, setAmbulances] = useState([]);
   const [hospitals, setHospitals] = useState([]);
+  const [organizations, setOrganizations] = useState([]);
+  const [orgTypeFilter, setOrgTypeFilter] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [selectedOrgInfo, setSelectedOrgInfo] = useState(null);
+  // modal-level org state (separate from page filters)
+  const [modalOrgTypeFilter, setModalOrgTypeFilter] = useState('');
+  const [modalSelectedOrgId, setModalSelectedOrgId] = useState(null);
+  const [modalSelectedOrgInfo, setModalSelectedOrgInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedSession, setSelectedSession] = useState(null);
   const [activeTab, setActiveTab] = useState('all');
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [cameraSession, setCameraSession] = useState(null);
-  const { toasts, toast, removeToast } = useToast();
+  const { toast } = useToast();
   const { user } = useAuthStore();
+  const runWithLoader = useWithGlobalLoader();
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -65,38 +77,90 @@ export const Onboarding = () => {
   });
 
   useEffect(() => {
-    fetchData();
+    fetchOrganizations();
   }, []);
+
+  useEffect(() => {
+    // Only fetch onboarding data if superadmin has selected an org, or if non-superadmin
+    const doFetch = async () => {
+      // clear current sessions while loading to avoid stale data
+      setSessions([]);
+      await runWithLoader(async () => {
+        if (user?.role === 'superadmin') {
+          if (selectedOrgId) {
+            await fetchData();
+          }
+        } else {
+          await fetchData();
+        }
+      }, 'Loading onboardings...');
+    };
+
+    doFetch().catch((err) => {
+      console.error('Error fetching onboarding data with loader', err);
+    });
+  }, [selectedOrgId, user]);
+
+  // Global cache reset handler
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        await fetchData();
+      } catch (err) {
+        console.error('Global reset handler failed for onboarding', err);
+      } finally {
+        window.dispatchEvent(new CustomEvent('global:cache-reset-done', { detail: { page: 'onboarding' } }));
+      }
+    };
+    window.addEventListener('global:cache-reset', handler);
+    return () => window.removeEventListener('global:cache-reset', handler);
+  }, []);
+
+  const fetchOrganizations = async () => {
+    try {
+      const resp = await organizationService.getAll();
+      const raw = resp.data?.data?.organizations || resp.data?.organizations || resp.data || [];
+      setOrganizations(raw);
+    } catch (err) {
+      console.error('Failed to load organizations', err);
+      setOrganizations([]);
+    }
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
+
+      const params = {};
+      if (user?.role === 'superadmin' && selectedOrgId) {
+        params.organizationId = selectedOrgId;
+      }
+
+      // clear lists to avoid stale UI
+      setPatients([]);
+      setAmbulances([]);
+      setHospitals([]);
+
       const [patientsRes, ambulancesRes, orgsRes, sessionsRes] = await Promise.all([
-        patientService.getAll(),
-        ambulanceService.getAll(),
+        patientService.getAll(params),
+        ambulanceService.getAll(params),
         organizationService.getAll({ type: 'HOSPITAL' }),
-        patientService.getAllSessions(),
+        patientService.getAllSessions(params),
       ]);
-      
+
       const patientsList = patientsRes.data?.data?.patients || patientsRes.data?.patients || patientsRes.data || [];
       const ambulancesList = ambulancesRes.data?.data?.ambulances || ambulancesRes.data?.ambulances || ambulancesRes.data || [];
       const hospitalsList = orgsRes.data?.data?.organizations || orgsRes.data?.organizations || orgsRes.data || [];
       const sessionsList = sessionsRes.data?.data?.sessions || sessionsRes.data?.sessions || sessionsRes.data || [];
-      
-      console.log('Onboarding: Fetched data', { 
-        patients: patientsList.length, 
-        ambulances: ambulancesList.length, 
-        hospitals: hospitalsList.length,
-        sessions: sessionsList.length
-      });
-      
+
       setPatients(patientsList);
       setAmbulances(ambulancesList);
       setHospitals(hospitalsList);
-      setSessions(sessionsList);
+      setSessions(Array.isArray(sessionsList) ? sessionsList : []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      toast.error('Failed to load onboarding data');
+      const msg = getErrorMessage(error, 'Failed to load onboarding data');
+      toast.error(msg);
       setSessions([]);
       setPatients([]);
       setAmbulances([]);
@@ -109,6 +173,17 @@ export const Onboarding = () => {
   const onSubmit = async (data) => {
     try {
       setLoading(true);
+      // Determine organization for this onboarding
+      const orgIdForOnboard = user?.role === 'superadmin'
+        ? (modalSelectedOrgId || selectedOrgId)
+        : (user?.organizationId || selectedOrgId);
+
+      if (user?.role === 'superadmin' && !orgIdForOnboard) {
+        toast.error('Please select an Organization before onboarding a patient');
+        setLoading(false);
+        return;
+      }
+
       await patientService.onboard(data.patientId, {
         ambulanceId: data.ambulanceId,
         pickupLocation: data.pickupLocation,
@@ -117,13 +192,15 @@ export const Onboarding = () => {
         destinationHospitalId: data.destinationHospitalId,
         chiefComplaint: data.chiefComplaint,
         initialAssessment: data.initialAssessment,
+        organizationId: orgIdForOnboard,
       });
       toast.success('Patient onboarded successfully');
       await fetchData();
       handleCloseModal();
     } catch (error) {
       console.error('Failed to onboard patient:', error);
-      toast.error('Failed to onboard patient');
+  const msg = getErrorMessage(error, 'Failed to onboard patient');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -141,7 +218,8 @@ export const Onboarding = () => {
         await fetchData();
       } catch (error) {
         console.error('Failed to offboard patient:', error);
-        toast.error('Failed to offboard patient');
+    const msg = getErrorMessage(error, 'Failed to offboard patient');
+        toast.error(msg);
       } finally {
         setLoading(false);
       }
@@ -326,22 +404,104 @@ export const Onboarding = () => {
 
   return (
     <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
+      
       
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Patient Onboarding</h1>
+          <h1 className="text-3xl font-display font-bold mt-5 mb-2">Patient Onboarding</h1>
           <p className="text-secondary">Manage patient transport and ambulance assignments</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
+        <Button onClick={() => {
+          // prepare modal org defaults without touching page-level selectedOrg
+          if (user?.role !== 'superadmin') {
+            setModalSelectedOrgId(user?.organizationId || null);
+            const info = organizations.find(o => String(o.id) === String(user?.organizationId));
+            setModalSelectedOrgInfo(info || null);
+            setModalOrgTypeFilter(info?.type || '');
+          } else {
+            // prefer the page-level selected org as default for modal
+            setModalSelectedOrgId(selectedOrgId || null);
+            setModalSelectedOrgInfo(selectedOrgInfo || null);
+            setModalOrgTypeFilter(orgTypeFilter || '');
+          }
+          setShowModal(true);
+        }}>
           <Plus className="w-5 h-5 mr-2" />
           Onboard Patient
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* Organization Filters (Superadmin only) */}
+      {user?.role === 'superadmin' && (
+        <Card className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Organization Type</label>
+              <Select
+                isClearable
+                value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                onChange={(opt) => {
+                  const v = opt?.value || '';
+                  setOrgTypeFilter(v);
+                  setSelectedOrgId(null);
+                  setSelectedOrgInfo(null);
+                }}
+                options={[
+                  { value: '', label: 'All Types' },
+                  { value: 'hospital', label: 'Hospital' },
+                  { value: 'fleet_owner', label: 'Fleet Owner' }
+                ]}
+                placeholder="Select organization type"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Organization</label>
+              <Select
+                isDisabled={!orgTypeFilter}
+                isClearable
+                placeholder={orgTypeFilter ? 'Select an organization' : 'Select a type first'}
+                options={organizations
+                  .filter(o => !orgTypeFilter || o.type === orgTypeFilter)
+                  .map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                value={selectedOrgId ? {
+                  value: selectedOrgId,
+                  label: `${selectedOrgInfo?.name || ''} (${selectedOrgInfo?.code || ''})`
+                } : null}
+                onChange={(opt) => {
+                  if (opt) {
+                    setSelectedOrgId(opt.value);
+                    const info = organizations.find(o => o.id === opt.value) || null;
+                    setSelectedOrgInfo(info);
+                  } else {
+                    setSelectedOrgId(null);
+                    setSelectedOrgInfo(null);
+                  }
+                }}
+                classNamePrefix="react-select"
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* If superadmin and no organization chosen, prompt and skip table/stats */}
+      {user?.role === 'superadmin' && !selectedOrgId && (
+        <Card className="p-6">
+          <div className="text-center">
+            <p className="text-lg font-medium">Please select an Organization Type and Organization to view onboardings.</p>
+            <p className="text-sm text-secondary mt-2">Choose an organization above to load patients, ambulances and sessions for that organization.</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Stats Cards (only show when not superadmin or when an organization is selected) */}
+      {(user?.role !== 'superadmin' || selectedOrgId) && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="p-6">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-gray-100 rounded-2xl">
@@ -408,18 +568,20 @@ export const Onboarding = () => {
             </button>
           ))}
         </div>
-      </Card>
+          </Card>
 
-      {/* Onboarding Table */}
-      <Card>
-        <div className="p-6">
-          <Table
-            columns={columns}
-            data={filteredSessions}
-            loading={loading}
-          />
-        </div>
-      </Card>
+          {/* Onboarding Table */}
+          <Card>
+            <div className="p-6">
+              <Table
+                columns={columns}
+                data={filteredSessions}
+                loading={loading}
+              />
+            </div>
+          </Card>
+        </>
+      )}
 
       {/* Onboard Patient Modal */}
       <Modal
@@ -429,19 +591,79 @@ export const Onboarding = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Modal-level organization selectors for superadmin */}
+          {user?.role === 'superadmin' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Organization Type</label>
+                <Select
+                  isClearable
+                  value={modalOrgTypeFilter ? { value: modalOrgTypeFilter, label: modalOrgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                  onChange={(opt) => {
+                    const v = opt?.value || '';
+                    setModalOrgTypeFilter(v);
+                    setModalSelectedOrgId(null);
+                    setModalSelectedOrgInfo(null);
+                  }}
+                  options={[
+                    { value: '', label: 'All Types' },
+                    { value: 'hospital', label: 'Hospital' },
+                    { value: 'fleet_owner', label: 'Fleet Owner' }
+                  ]}
+                  placeholder="Select organization type"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Organization</label>
+                <Select
+                  isDisabled={!modalOrgTypeFilter}
+                  isClearable
+                  placeholder={modalOrgTypeFilter ? 'Select an organization' : 'Select a type first'}
+                  options={organizations
+                    .filter(o => !modalOrgTypeFilter || o.type === modalOrgTypeFilter)
+                    .map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                  value={modalSelectedOrgId ? {
+                    value: modalSelectedOrgId,
+                    label: `${modalSelectedOrgInfo?.name || ''} (${modalSelectedOrgInfo?.code || ''})`
+                  } : null}
+                  onChange={(opt) => {
+                    if (opt) {
+                      setModalSelectedOrgId(opt.value);
+                      const info = organizations.find(o => o.id === opt.value) || null;
+                      setModalSelectedOrgInfo(info);
+                    } else {
+                      setModalSelectedOrgId(null);
+                      setModalSelectedOrgInfo(null);
+                    }
+                  }}
+                  classNamePrefix="react-select"
+                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                  menuPosition="fixed"
+                />
+              </div>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium mb-2">Patient</label>
-            <select
-              {...register('patientId')}
-              className="w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Select Patient</option>
-              {patients.map((patient) => (
-                <option key={patient.id} value={patient.id}>
-                  {patient.firstName} {patient.lastName} - {patient.phone}
-                </option>
-              ))}
-            </select>
+            <Controller
+              name="patientId"
+              control={control}
+              defaultValue={''}
+              render={({ field }) => {
+                const options = patients.map(p => ({ value: p.id, label: `${p.firstName} ${p.lastName} - ${p.phone}` }));
+                const value = options.find(o => o.value === field.value) || null;
+                return (
+                  <Select
+                    classNamePrefix="react-select"
+                    options={options}
+                    value={value}
+                    onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                    placeholder="Select Patient"
+                  />
+                );
+              }}
+            />
             {errors.patientId && (
               <p className="mt-1 text-sm text-gray-900">{errors.patientId.message}</p>
             )}
@@ -449,19 +671,26 @@ export const Onboarding = () => {
 
           <div>
             <label className="block text-sm font-medium mb-2">Ambulance</label>
-            <select
-              {...register('ambulanceId')}
-              className="w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Select Ambulance</option>
-              {ambulances
-                .filter((a) => a.status === 'available' || a.status === 'active')
-                .map((ambulance) => (
-                  <option key={ambulance.id} value={ambulance.id}>
-                    {ambulance.registration_number || ambulance.vehicleNumber || ambulance.registrationNumber || ambulance.ambulance_code} - {ambulance.vehicle_type || ambulance.vehicleType}
-                  </option>
-                ))}
-            </select>
+            <Controller
+              name="ambulanceId"
+              control={control}
+              defaultValue={''}
+              render={({ field }) => {
+                const options = ambulances
+                  .filter(a => a.status === 'available' || a.status === 'active')
+                  .map(a => ({ value: a.id, label: `${a.registration_number || a.vehicleNumber || a.registrationNumber || a.ambulance_code} - ${a.vehicle_type || a.vehicleType}` }));
+                const value = options.find(o => o.value === field.value) || null;
+                return (
+                  <Select
+                    classNamePrefix="react-select"
+                    options={options}
+                    value={value}
+                    onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                    placeholder="Select Ambulance"
+                  />
+                );
+              }}
+            />
             {errors.ambulanceId && (
               <p className="mt-1 text-sm text-gray-900">{errors.ambulanceId.message}</p>
             )}
@@ -495,17 +724,24 @@ export const Onboarding = () => {
 
           <div>
             <label className="block text-sm font-medium mb-2">Destination Hospital *</label>
-            <select
-              {...register('destinationHospitalId')}
-              className="w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Select Hospital</option>
-              {hospitals.map((hospital) => (
-                <option key={hospital.id} value={hospital.id}>
-                  {hospital.name} - {hospital.city}, {hospital.state}
-                </option>
-              ))}
-            </select>
+            <Controller
+              name="destinationHospitalId"
+              control={control}
+              defaultValue={''}
+              render={({ field }) => {
+                const options = hospitals.map(h => ({ value: h.id, label: `${h.name} - ${h.city}, ${h.state}` }));
+                const value = options.find(o => o.value === field.value) || null;
+                return (
+                  <Select
+                    classNamePrefix="react-select"
+                    options={options}
+                    value={value}
+                    onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                    placeholder="Select Hospital"
+                  />
+                );
+              }}
+            />
             {errors.destinationHospitalId && (
               <p className="mt-1 text-sm text-gray-900">{errors.destinationHospitalId.message}</p>
             )}

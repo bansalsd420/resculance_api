@@ -125,6 +125,11 @@ export const ambulanceService = {
     return response;
   },
 
+  getForUser: async (userId) => {
+    const response = await api.get(`/ambulances/for-user/${userId}`);
+    return response;
+  },
+
   getById: async (id) => {
     const response = await api.get(`/ambulances/${id}`);
     return response;
@@ -145,8 +150,10 @@ export const ambulanceService = {
     return response;
   },
 
-  assign: async (id, userId, role) => {
-    const response = await api.post(`/ambulances/${id}/assign`, { userId, role });
+  assign: async (id, userId, role, assigningOrganizationId) => {
+    const body = { userId, role };
+    if (assigningOrganizationId) body.assigningOrganizationId = assigningOrganizationId;
+    const response = await api.post(`/ambulances/${id}/assign`, body);
     return response;
   },
 

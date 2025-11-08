@@ -26,23 +26,28 @@ const authenticate = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Check if user still exists
+    // Check if user still exists and is active (not suspended)
     const [users] = await db.query(
-      `SELECT u.*, o.type as org_type, o.code as org_code, o.name as org_name, o.status as org_status
+      `SELECT u.*, o.type as org_type, o.code as org_code, o.name as org_name, o.status as org_status, o.is_active as org_is_active
        FROM users u
        JOIN organizations o ON u.organization_id = o.id
-       WHERE u.id = ? AND u.status = 'active'`,
+       WHERE u.id = ? AND u.status IN ('active', 'pending_approval')`,
       [decoded.id]
     );
 
     if (users.length === 0) {
-      return next(new AppError('The user belonging to this token no longer exists or is inactive.', 401));
+      return next(new AppError('The user belonging to this token no longer exists or is suspended.', 401));
     }
 
     const user = users[0];
 
+    // Block suspended users from accessing any endpoints
+    if (user.status === 'suspended') {
+      return next(new AppError('Your account has been suspended. Please contact your administrator.', 403));
+    }
+
     // Check if organization is active
-    if (user.org_status !== 'active') {
+    if (user.org_status !== 'active' || !user.org_is_active) {
       return next(new AppError('Your organization is currently inactive. Please contact support.', 403));
     }
 
@@ -91,6 +96,11 @@ const authorize = (...roles) => {
 // Check if user belongs to specific organization type
 const requireOrgType = (...orgTypes) => {
   return (req, res, next) => {
+    // Superadmin should be able to perform actions regardless of org type
+    if (req.user && req.user.role === 'superadmin') {
+      return next();
+    }
+
     if (!orgTypes.includes(req.user.organizationType)) {
       return next(
         new AppError('This action is not available for your organization type.', 403)
@@ -138,8 +148,8 @@ const canAccessAmbulance = async (req, res, next) => {
     // Check if ambulance belongs to user's organization or is mapped to user
     const [ambulances] = await db.query(
       `SELECT a.* FROM ambulances a
-       LEFT JOIN ambulance_user_mappings aum ON a.id = aum.ambulance_id AND aum.user_id = ?
-       WHERE a.id = ? AND (a.organization_id = ? OR aum.id IS NOT NULL)`,
+       LEFT JOIN ambulance_assignments aa ON a.id = aa.ambulance_id AND aa.user_id = ? AND aa.is_active = TRUE
+       WHERE a.id = ? AND (a.organization_id = ? OR aa.id IS NOT NULL)`,
       [req.user.id, ambulanceId, req.user.organizationId]
     );
 

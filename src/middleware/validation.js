@@ -15,9 +15,15 @@ const registerValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
   body('firstName').trim().notEmpty().withMessage('First name is required'),
-  body('lastName').trim().notEmpty().withMessage('Last name is required'),
+  body('lastName').optional().trim(),
   body('role').notEmpty().withMessage('Role is required'),
-  body('organizationId').isInt().withMessage('Valid organization ID is required')
+  // organizationId is required for organization-scoped roles, but not for superadmin
+  body('organizationId')
+    .if((value, { req }) => {
+      const role = (req.body.role || '').toString().toLowerCase();
+      return role !== 'superadmin';
+    })
+    .isInt().withMessage('Valid organization ID is required')
 ];
 
 const loginValidation = [
@@ -55,11 +61,12 @@ const createAmbulanceValidation = [
 // Patient validation rules
 const createPatientValidation = [
   body('firstName').trim().notEmpty().withMessage('First name is required'),
-  body('lastName').trim().notEmpty().withMessage('Last name is required'),
+  body('lastName').optional().trim(),
+  body('dateOfBirth').optional({ checkFalsy: true }).isISO8601().withMessage('Invalid date'),
   body('age').optional().isInt({ min: 0, max: 150 }).withMessage('Age must be between 0 and 150'),
-  body('gender').optional().isIn(['male', 'female', 'other']).withMessage('Invalid gender'),
+  body('gender').optional({ checkFalsy: true }).isIn(['male', 'female', 'other']).withMessage('Invalid gender'),
   body('bloodGroup').optional().trim(),
-  body('contactPhone').optional().trim()
+  body('phone').optional().trim()
 ];
 
 // Patient session validation rules
@@ -72,7 +79,27 @@ const onboardPatientValidation = [
 
 // Collaboration request validation rules
 const createCollaborationRequestValidation = [
-  body('fleetOwnerId').isInt().withMessage('Fleet owner ID is required'),
+  // Require fleetId. If the requester is a superadmin, also require hospitalId.
+  body().custom((_, { req }) => {
+    const fleetId = req.body.fleetId;
+    if (!fleetId) {
+      throw new Error('Fleet ID is required');
+    }
+    if (!Number.isInteger(Number(fleetId))) {
+      throw new Error('Valid Fleet ID is required');
+    }
+
+    if (req.user && req.user.role && req.user.role.toString().toLowerCase() === 'superadmin') {
+      const hospitalId = req.body.hospitalId;
+      if (!hospitalId) {
+        throw new Error('Hospital ID is required for superadmin-created partnerships');
+      }
+      if (!Number.isInteger(Number(hospitalId))) {
+        throw new Error('Valid Hospital ID is required');
+      }
+    }
+    return true;
+  }),
   body('message').optional().trim()
 ];
 

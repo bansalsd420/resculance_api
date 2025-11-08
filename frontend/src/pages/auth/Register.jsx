@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { motion } from 'framer-motion';
@@ -26,6 +27,7 @@ export const Register = () => {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm({
@@ -89,7 +91,7 @@ export const Register = () => {
             >
               <Activity className="w-8 h-8 text-white" />
             </motion.div>
-            <h1 className="text-3xl font-display font-bold mb-2">Create Account</h1>
+            <h1 className="text-3xl font-display font-bold mt-5 mb-2">Create Account</h1>
             <p className="text-secondary text-center">
               Join Resculance to manage your healthcare operations
             </p>
@@ -169,17 +171,30 @@ export const Register = () => {
             </div>
 
             <div>
-              <select
-                {...register('role')}
-                className={`input ${errors.role ? 'border-red-500' : ''}`}
-              >
-                <option value="">Select Role</option>
-                <option value="HOSPITAL_ADMIN">Hospital Admin</option>
-                <option value="FLEET_ADMIN">Fleet Admin</option>
-                <option value="DOCTOR">Doctor</option>
-                <option value="PARAMEDIC">Paramedic</option>
-                <option value="DRIVER">Driver</option>
-              </select>
+              <Controller
+                name="role"
+                control={control}
+                defaultValue={''}
+                render={({ field }) => {
+                  const options = [
+                    { value: 'HOSPITAL_ADMIN', label: 'Hospital Admin' },
+                    { value: 'FLEET_ADMIN', label: 'Fleet Admin' },
+                    { value: 'DOCTOR', label: 'Doctor' },
+                    { value: 'PARAMEDIC', label: 'Paramedic' },
+                    { value: 'DRIVER', label: 'Driver' },
+                  ];
+                  const value = options.find(o => o.value === field.value) || null;
+                  return (
+                    <Select
+                      classNamePrefix="react-select"
+                      options={options}
+                      value={value}
+                      onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                      placeholder="Select Role"
+                    />
+                  );
+                }}
+              />
               {errors.role && (
                 <p className="mt-1 text-sm text-red-500">{errors.role.message}</p>
               )}

@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 const { SOCKET_EVENTS } = require('../config/constants');
 
+// Store socket.io instance globally for access from other modules
+let ioInstance = null;
+
 const authenticateSocket = (socket, next) => {
   try {
     const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
@@ -18,10 +21,14 @@ const authenticateSocket = (socket, next) => {
 };
 
 const socketHandler = (io) => {
+  ioInstance = io; // Store for use in other modules
   io.use(authenticateSocket);
 
   io.on(SOCKET_EVENTS.CONNECTION, (socket) => {
     console.log(`✅ User connected: ${socket.user.id} (${socket.user.role})`);
+
+    // Join user's personal notification room
+    socket.join(`user_${socket.user.id}`);
 
     // Join ambulance room
     socket.on(SOCKET_EVENTS.JOIN_AMBULANCE, (data) => {
@@ -328,4 +335,24 @@ const socketHandler = (io) => {
   console.log('✅ Socket.IO handler initialized');
 };
 
+// Helper function to emit notifications to specific users
+const emitNotification = (userId, notification) => {
+  if (ioInstance) {
+    ioInstance.to(`user_${userId}`).emit('notification', notification);
+  }
+};
+
+// Helper function to emit notifications to multiple users
+const emitBulkNotifications = (notifications) => {
+  if (ioInstance && Array.isArray(notifications)) {
+    notifications.forEach(notif => {
+      if (notif.userId) {
+        ioInstance.to(`user_${notif.userId}`).emit('notification', notif);
+      }
+    });
+  }
+};
+
 module.exports = socketHandler;
+module.exports.emitNotification = emitNotification;
+module.exports.emitBulkNotifications = emitBulkNotifications;

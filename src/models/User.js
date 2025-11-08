@@ -69,9 +69,16 @@ class UserModel {
       params.push(filters.organizationId);
     }
 
-    if (filters.role) {
-      query += ' AND u.role = ?';
-      params.push(filters.role);
+    if (filters.role !== undefined && filters.role !== null) {
+      // support passing an array of roles for IN queries
+      if (Array.isArray(filters.role)) {
+        const placeholders = filters.role.map(() => '?').join(',');
+        query += ` AND u.role IN (${placeholders})`;
+        params.push(...filters.role);
+      } else {
+        query += ' AND u.role = ?';
+        params.push(filters.role);
+      }
     }
 
     if (filters.status) {
@@ -164,6 +171,38 @@ class UserModel {
     const [rows] = await db.query(
       `SELECT * FROM users WHERE organization_id = ? AND role = ? AND status = 'active'`,
       [organizationId, role]
+    );
+    return rows;
+  }
+
+  static async findByRole(role) {
+    const [rows] = await db.query(
+      `SELECT u.*, o.name as organization_name, o.code as organization_code
+       FROM users u
+       LEFT JOIN organizations o ON u.organization_id = o.id
+       WHERE u.role = ? AND u.status = 'active'`,
+      [role]
+    );
+    return rows;
+  }
+
+  static async findAdminsByOrganization(organizationId) {
+    const [rows] = await db.query(
+      `SELECT * FROM users 
+       WHERE organization_id = ? 
+       AND role IN ('hospital_admin', 'fleet_admin') 
+       AND status = 'active'`,
+      [organizationId]
+    );
+    return rows;
+  }
+
+  static async findByAmbulanceId(ambulanceId) {
+    const [rows] = await db.query(
+      `SELECT u.* FROM users u
+       JOIN ambulance_assignments aa ON u.id = aa.user_id
+       WHERE aa.ambulance_id = ? AND u.status = 'active'`,
+      [ambulanceId]
     );
     return rows;
   }

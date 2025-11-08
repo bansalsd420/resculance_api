@@ -51,9 +51,27 @@ class AmbulanceModel {
                  WHERE 1=1`;
     const params = [];
 
+    // Support fetching ambulances belonging to a specific fleet organization
     if (filters.organizationId) {
       query += ' AND a.organization_id = ?';
       params.push(filters.organizationId);
+    }
+
+    // Support partnered ambulances: when filters.partneredHospitalId is set,
+    // Support partnered ambulances: when filters.partneredHospitalId is set,
+    // return ambulances that belong to fleets partnered with that hospital
+    if (filters.partneredHospitalId) {
+      query += ' AND a.organization_id IN (SELECT fleet_id FROM partnerships WHERE hospital_id = ? AND status = "active")';
+      params.push(filters.partneredHospitalId);
+
+      // Security: if the caller requested partnered ambulances on behalf of a hospital,
+      // do not expose fleet ambulances that are not yet approved/available. Only show
+      // ambulances with status = 'available' unless the caller explicitly overrides this
+      // using an internal flag (onlyApprovedForPartnered === false).
+      if (filters.onlyApprovedForPartnered !== false) {
+        // Allow both 'available' and legacy 'active' statuses as approved/visible
+        query += " AND (a.status = 'available' OR a.status = 'active')";
+      }
     }
 
     if (filters.status) {
@@ -87,8 +105,8 @@ class AmbulanceModel {
       `SELECT a.*, o.name as organization_name, o.code as organization_code
        FROM ambulances a
        JOIN organizations o ON a.organization_id = o.id
-       JOIN ambulance_user_mappings aum ON a.id = aum.ambulance_id
-       WHERE aum.user_id = ? AND aum.is_active = TRUE AND a.status = 'active'`,
+       JOIN ambulance_assignments aa ON a.id = aa.ambulance_id
+       WHERE aa.user_id = ? AND aa.is_active = TRUE AND (a.status = 'active' OR a.status = 'available')`,
       [userId]
     );
     return rows;
@@ -125,8 +143,9 @@ class AmbulanceModel {
   }
 
   static async approve(id, approvedBy) {
+    // When approved, mark ambulance as available for use
     const [result] = await db.query(
-      `UPDATE ambulances SET status = 'active', approved_by = ?, approved_at = NOW() WHERE id = ?`,
+      `UPDATE ambulances SET status = 'available', approved_by = ?, approved_at = NOW() WHERE id = ?`,
       [approvedBy, id]
     );
     return result.affectedRows > 0;
@@ -151,34 +170,59 @@ class AmbulanceModel {
       params.push(filters.status);
     }
 
+    if (filters.partneredHospitalId) {
+      query += ' AND organization_id IN (SELECT fleet_id FROM partnerships WHERE hospital_id = ? AND status = "active")';
+      params.push(filters.partneredHospitalId);
+
+      // If caller should only see approved fleet ambulances in partnered view, enforce it here.
+      if (filters.onlyApprovedForPartnered !== false) {
+        query += " AND (status = 'available' OR status = 'active')";
+      }
+    }
+
     const [rows] = await db.query(query, params);
     return rows[0].total;
   }
 
-  static async assignUser(ambulanceId, userId, assignedBy) {
+  static async assignUser(ambulanceId, userId, assignedBy, assigningOrganizationId = null) {
+    // Use ambulance_assignments and record assigning organization
+    let assigningOrgId = assigningOrganizationId;
+    if (!assigningOrgId) {
+      // find the assigning user's organization
+      const [rows] = await db.query('SELECT organization_id FROM users WHERE id = ? LIMIT 1', [assignedBy]);
+      assigningOrgId = rows.length ? rows[0].organization_id : null;
+    }
+
+    const [roleRow] = await db.query('SELECT role FROM users WHERE id = ? LIMIT 1', [userId]);
+    const role = roleRow[0] && roleRow[0].role ? roleRow[0].role : null;
+
     const [result] = await db.query(
-      `INSERT INTO ambulance_user_mappings (ambulance_id, user_id, assigned_by)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE is_active = TRUE, assigned_at = NOW()`,
-      [ambulanceId, userId, assignedBy]
+      `INSERT INTO ambulance_assignments (ambulance_id, user_id, assigning_organization_id, assigned_by, role, is_active)
+       VALUES (?, ?, ?, ?, ?, TRUE)
+       ON DUPLICATE KEY UPDATE is_active = TRUE, assigned_at = NOW(), assigned_by = VALUES(assigned_by), role = VALUES(role)`,
+      [ambulanceId, userId, assigningOrgId, assignedBy, role]
     );
-    return result.insertId || result.affectedRows > 0;
+    return result.insertId || true;
   }
 
   static async unassignUser(ambulanceId, userId) {
+    // Only allow deactivation if caller is from the same organization that created the assignment.
+    // The controller will perform authorization; this helper simply marks the assignment inactive.
     const [result] = await db.query(
-      `UPDATE ambulance_user_mappings SET is_active = FALSE WHERE ambulance_id = ? AND user_id = ?`,
+      `UPDATE ambulance_assignments SET is_active = FALSE WHERE ambulance_id = ? AND user_id = ? AND is_active = TRUE`,
       [ambulanceId, userId]
     );
     return result.affectedRows > 0;
   }
 
   static async getAssignedUsers(ambulanceId) {
+    // Return all active assignments with minimal user details
     const [rows] = await db.query(
-      `SELECT u.*, aum.assigned_at
-       FROM users u
-       JOIN ambulance_user_mappings aum ON u.id = aum.user_id
-       WHERE aum.ambulance_id = ? AND aum.is_active = TRUE`,
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.phone, aa.assigning_organization_id, org.name as assigning_organization_name, aa.assigned_at, aa.role
+       FROM ambulance_assignments aa
+       JOIN users u ON aa.user_id = u.id
+       LEFT JOIN organizations org ON aa.assigning_organization_id = org.id
+       WHERE aa.ambulance_id = ? AND aa.is_active = TRUE`,
       [ambulanceId]
     );
     return rows;

@@ -1,5 +1,8 @@
 const UserModel = require('../models/User');
 const { AppError } = require('../middleware/auth');
+const { normalizeRole, normalizeStatus } = require('../utils/roleUtils');
+const db = require('../config/database');
+const NotificationService = require('../services/notificationService');
 
 class UserController {
   static async create(req, res, next) {
@@ -13,17 +16,44 @@ class UserController {
 
       // Check if email already exists
       const existingEmail = await UserModel.findByEmail(email);
-      if (existingEmail) {
-        return next(new AppError('Email already registered', 400));
-      }
-
+      // Preserve original role string to detect generic aliases like 'doctor'
+      
+      // If role provided as short string (e.g., DOCTOR), try to normalize using the requestor's orgType
       // Auto-generate username from email
       const username = email.split('@')[0] + '_' + Math.random().toString(36).substr(2, 4);
 
       // Users can only create users for their own organization (except superadmin)
-      const organizationId = req.user.role === 'superadmin' 
-        ? req.body.organizationId 
+      // If frontend explicitly indicates organizationType === 'superadmin', prefer that for creating a global superadmin
+      let organizationId = req.user.role === 'superadmin'
+        ? req.body.organizationId
         : req.user.organizationId;
+
+      // If frontend signalled this is a superadmin creation via organizationType, clear organizationId so it becomes global
+      if (req.user.role === 'superadmin' && (req.body.organizationType || '').toString().toLowerCase() === 'superadmin') {
+        organizationId = null;
+      }
+
+      // Determine organization type if needed and normalize the incoming role
+      let orgType = req.user.organizationType;
+      if (req.user.role === 'superadmin' && organizationId) {
+        const [rows] = await db.query('SELECT type FROM organizations WHERE id = ? LIMIT 1', [organizationId]);
+        orgType = rows && rows[0] ? rows[0].type : orgType;
+      }
+
+      const normalizedRole = await normalizeRole(role, orgType, organizationId);
+      // If creating a global SUPERADMIN (no organizationId provided), attach the SYSTEM org
+      // because the users table requires an organization_id. Prefer a real SYSTEM org if present.
+      if ((normalizedRole || '').toString().toLowerCase() === 'superadmin') {
+        if (!organizationId) {
+          const [sysRows] = await db.query("SELECT id FROM organizations WHERE code = 'SYSTEM' LIMIT 1");
+          if (sysRows && sysRows[0] && sysRows[0].id) {
+            organizationId = sysRows[0].id;
+          } else {
+            return next(new AppError('System organization not found. Please run seeds or provide an organization for the superadmin.', 500));
+          }
+        }
+      }
+      const normalizedStatus = normalizeStatus(req.body.status) || 'pending_approval';
 
       const userId = await UserModel.create({
         email,
@@ -31,12 +61,30 @@ class UserController {
         password,
         firstName,
         lastName,
-        role,
+        role: normalizedRole,
         phone,
         organizationId,
-        status: 'pending_approval',
+        status: normalizedStatus,
         createdBy: req.user.id
       });
+
+      // Notify superadmins if creating an admin account
+      if (normalizedRole.includes('admin')) {
+        try {
+          const [orgRows] = await db.query('SELECT name FROM organizations WHERE id = ?', [organizationId]);
+          const orgName = orgRows && orgRows[0] ? orgRows[0].name : 'Unknown';
+          
+          await NotificationService.notifySuperadminsNewAdmin({
+            id: userId,
+            role: normalizedRole,
+            firstName,
+            lastName,
+            organizationName: orgName
+          });
+        } catch (notifError) {
+          console.error('Failed to send new admin notification:', notifError);
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -50,14 +98,38 @@ class UserController {
 
   static async getAll(req, res, next) {
     try {
-      const { role, status, limit = 50, offset = 0 } = req.query;
+      let { role, status, limit = 50, offset = 0 } = req.query;
+
+      // Normalize incoming filter params
+      status = normalizeStatus(status);
+
+      // If requester is superadmin and they are NOT explicitly requesting superadmins,
+      // require an organizationId to be provided to scope results. This prevents returning
+      // all users across organizations when a superadmin has not selected an organization.
+      const originalRole = role;
+      if (req.user.role === 'superadmin' && !(originalRole && String(originalRole).trim().toLowerCase() === 'superadmin') && !req.query.organizationId) {
+        return next(new AppError('organizationId is required when superadmin is viewing non-superadmin users', 400));
+      }
 
       // Users can only view users from their organization (except superadmin)
-      const organizationId = req.user.role === 'superadmin' 
-        ? req.query.organizationId 
+      const organizationId = req.user.role === 'superadmin'
+        ? req.query.organizationId
         : req.user.organizationId;
 
-      const filters = { organizationId, role, status, limit, offset };
+  // Preserve original role string to detect generic aliases like 'doctor'
+
+      // If role provided as short string (e.g., DOCTOR), try to normalize using the requestor's orgType
+      if (role) {
+        role = await normalizeRole(role, req.user.organizationType, organizationId);
+      }
+
+      // If caller requested generic 'doctor' (case-insensitive) then expand to both hospital and fleet doctor roles
+      let roleFilter = role;
+      if (originalRole && String(originalRole).trim().toLowerCase() === 'doctor') {
+        roleFilter = ['hospital_doctor', 'fleet_doctor'];
+      }
+
+      const filters = { organizationId, role: roleFilter, status, limit, offset };
       const users = await UserModel.findAll(filters);
       const total = await UserModel.count({ organizationId, role, status });
 
@@ -109,7 +181,7 @@ class UserController {
   static async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { firstName, lastName, phone, status } = req.body;
+      const { firstName, lastName, phone, status, role, organizationId: bodyOrganizationId } = req.body;
 
       const user = await UserModel.findById(id);
       if (!user) {
@@ -121,12 +193,40 @@ class UserController {
         return next(new AppError('Access denied', 403));
       }
 
-      await UserModel.update(id, {
-        firstName,
-        lastName,
-        phone,
-        status
-      });
+      const updateData = { firstName, lastName, phone, status };
+
+      // Allow role updates only when requester is superadmin
+      if (role && req.user.role === 'superadmin') {
+        // Determine orgType for normalization: if superadmin provided organizationId in body, use that org's type
+        let orgType = user.organization_type || user.organizationType || req.user.organizationType;
+        let effectiveOrgId = bodyOrganizationId || user.organization_id || user.organizationId || null;
+        if (effectiveOrgId) {
+          const [rows] = await db.query('SELECT type FROM organizations WHERE id = ? LIMIT 1', [effectiveOrgId]);
+          if (rows && rows[0]) orgType = rows[0].type;
+        }
+
+        const normalizedRole = await normalizeRole(role, orgType, effectiveOrgId);
+        updateData.role = normalizedRole;
+
+        // If role becomes superadmin and no organization specified, map to SYSTEM org if available
+        if ((normalizedRole || '').toString().toLowerCase() === 'superadmin') {
+          if (!effectiveOrgId) {
+            const [sysRows] = await db.query("SELECT id FROM organizations WHERE code = 'SYSTEM' LIMIT 1");
+            if (sysRows && sysRows[0] && sysRows[0].id) {
+              updateData.organizationId = sysRows[0].id;
+            } else {
+              return next(new AppError('System organization not found. Cannot assign SUPERADMIN without an organization.', 500));
+            }
+          } else {
+            updateData.organizationId = effectiveOrgId;
+          }
+        } else if (bodyOrganizationId && req.user.role === 'superadmin') {
+          // superadmin may reassign organization for the user when changing role
+          updateData.organizationId = bodyOrganizationId;
+        }
+      }
+
+      await UserModel.update(id, updateData);
 
       res.json({
         success: true,
@@ -141,17 +241,35 @@ class UserController {
     try {
       const { id } = req.params;
 
-      // Only superadmin and admins can approve users
-      if (!['superadmin', 'hospital_admin', 'fleet_admin'].includes(req.user.role)) {
-        return next(new AppError('You do not have permission to approve users', 403));
-      }
-
       const user = await UserModel.findById(id);
       if (!user) {
         return next(new AppError('User not found', 404));
       }
 
+      // Check if user belongs to same organization (except superadmin)
+      if (req.user.role !== 'superadmin' && user.organization_id !== req.user.organizationId) {
+        return next(new AppError('You can only approve users from your organization', 403));
+      }
+
+      // Admins cannot approve other admins
+      const { canApproveRole } = require('../config/permissions');
+      if (!canApproveRole(req.user.role, user.role)) {
+        return next(new AppError('You cannot approve users with admin roles', 403));
+      }
+
       await UserModel.update(id, { status: 'active' });
+
+      // Notify admins of the user's organization
+      try {
+        await NotificationService.notifyAdminUserApproved(user.organization_id, {
+          id,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          role: user.role
+        });
+      } catch (notifError) {
+        console.error('Failed to send user approval notification:', notifError);
+      }
 
       res.json({
         success: true,
@@ -165,6 +283,29 @@ class UserController {
   static async suspend(req, res, next) {
     try {
       const { id } = req.params;
+
+      const user = await UserModel.findById(id);
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+
+      // Prevent users from deactivating their own account
+      if (String(req.user.id) === String(user.id)) {
+        return next(new AppError('You cannot deactivate your own account', 403));
+      }
+
+      const targetRole = (user.role || '').toString().toLowerCase();
+      const requesterRole = (req.user.role || '').toString().toLowerCase();
+
+      // Only a superadmin may deactivate accounts with admin privileges (any role that includes 'admin')
+      if (targetRole.includes('admin') && requesterRole !== 'superadmin') {
+        return next(new AppError('Only a superadmin can deactivate an admin account', 403));
+      }
+
+      // Non-superadmins may only suspend users within their own organization
+      if (req.user.role !== 'superadmin' && user.organization_id !== req.user.organizationId) {
+        return next(new AppError('You do not have permission to suspend users from other organizations', 403));
+      }
 
       await UserModel.update(id, { status: 'suspended' });
 

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   id INT PRIMARY KEY AUTO_INCREMENT,
   name VARCHAR(255) NOT NULL,
   code VARCHAR(50) UNIQUE NOT NULL,
-  type ENUM('hospital', 'fleet_owner') NOT NULL,
+  type ENUM('hospital', 'fleet_owner', 'superadmin') NOT NULL,
   address TEXT,
   city VARCHAR(100),
   state VARCHAR(100),
@@ -153,6 +153,28 @@ CREATE TABLE IF NOT EXISTS ambulance_user_mappings (
   INDEX idx_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Ambulance Assignments Table (New: records which organization assigned which staff to an ambulance)
+CREATE TABLE IF NOT EXISTS ambulance_assignments (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  ambulance_id INT NOT NULL,
+  user_id INT NOT NULL,
+  assigning_organization_id INT,
+  assigned_by INT,
+  role VARCHAR(100),
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (ambulance_id) REFERENCES ambulances(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (assigning_organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE KEY unique_ambulance_assignment (ambulance_id, user_id, assigning_organization_id),
+  INDEX idx_ambulance_assignment_ambulance (ambulance_id),
+  INDEX idx_ambulance_assignment_user (user_id),
+  INDEX idx_ambulance_assignment_org (assigning_organization_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Collaboration Requests Table (Hospital requesting Fleet ambulance)
 CREATE TABLE IF NOT EXISTS collaboration_requests (
   id INT PRIMARY KEY AUTO_INCREMENT,
@@ -175,6 +197,22 @@ CREATE TABLE IF NOT EXISTS collaboration_requests (
   INDEX idx_hospital (hospital_id),
   INDEX idx_fleet (fleet_id),
   INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Partnerships Table (Fleet <-> Hospital partnerships)
+CREATE TABLE IF NOT EXISTS partnerships (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  fleet_id INT NOT NULL,
+  hospital_id INT NOT NULL,
+  status ENUM('active', 'inactive') DEFAULT 'active',
+  created_by INT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (fleet_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (hospital_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE KEY unique_partnership (fleet_id, hospital_id),
+  INDEX idx_fleet (fleet_id),
+  INDEX idx_hospital (hospital_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Patients Table

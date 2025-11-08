@@ -45,6 +45,16 @@ class AmbulanceDeviceModel {
     return rows[0];
   }
 
+  // Find device by device_id scoped to a particular ambulance (if ambulanceId provided)
+  static async findByDeviceIdForAmbulance(deviceId, ambulanceId) {
+    if (!ambulanceId) return this.findByDeviceId(deviceId);
+    const [rows] = await db.query(
+      `SELECT * FROM ambulance_devices WHERE device_id = ? AND ambulance_id = ?`,
+      [deviceId, ambulanceId]
+    );
+    return rows[0];
+  }
+
   static async update(id, data) {
     const fields = [];
     const values = [];

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 import { motion } from 'framer-motion';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import * as yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 import {
@@ -21,22 +23,24 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Table } from '../../components/ui/Table';
 import { Card } from '../../components/ui/Card';
-import { ToastContainer } from '../../components/ui/Toast';
-import { patientService } from '../../services';
+import { patientService, organizationService } from '../../services';
+import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
+import { hasPermission, PERMISSIONS } from '../../utils/permissions';
+import getErrorMessage from '../../utils/getErrorMessage';
 
 const patientSchema = yup.object({
   firstName: yup.string().required('First name is required'),
-  lastName: yup.string().required('Last name is required'),
-  dateOfBirth: yup.date().required('Date of birth is required'),
-  gender: yup.string().required('Gender is required'),
-  bloodGroup: yup.string().required('Blood group is required'),
-  phone: yup.string().required('Phone is required'),
+  lastName: yup.string(),
+  dateOfBirth: yup.date(),
+  gender: yup.string(),
+  bloodGroup: yup.string(),
+  phone: yup.string(),
   email: yup.string().email('Invalid email'),
-  address: yup.string().required('Address is required'),
-  emergencyContactName: yup.string().required('Emergency contact name is required'),
-  emergencyContactPhone: yup.string().required('Emergency contact phone is required'),
-  emergencyContactRelation: yup.string().required('Relation is required'),
+  address: yup.string(),
+  emergencyContactName: yup.string(),
+  emergencyContactPhone: yup.string(),
+  emergencyContactRelation: yup.string(),
 });
 
 const vitalSignsSchema = yup.object({
@@ -58,10 +62,21 @@ export const Patients = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [vitalSigns, setVitalSigns] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const { toasts, toast, removeToast } = useToast();
+  const [organizations, setOrganizations] = useState([]);
+  const [orgTypeFilter, setOrgTypeFilter] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [selectedOrgInfo, setSelectedOrgInfo] = useState(null);
+  // Separate state for modal organization selection
+  const [modalOrgTypeFilter, setModalOrgTypeFilter] = useState('');
+  const [modalSelectedOrgId, setModalSelectedOrgId] = useState(null);
+  const [modalSelectedOrgInfo, setModalSelectedOrgInfo] = useState(null);
+  const { user } = useAuthStore();
+  const { toast } = useToast();
+  const runWithLoader = useWithGlobalLoader();
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -79,18 +94,72 @@ export const Patients = () => {
   });
 
   useEffect(() => {
-    fetchPatients();
+    fetchOrganizations();
+  }, []);
+
+  useEffect(() => {
+    // Only fetch patients if superadmin has selected an org, or if non-superadmin
+    const doFetch = async () => {
+      // clear current patients while loading to avoid stale data
+      setPatients([]);
+      await runWithLoader(async () => {
+        if (user?.role === 'superadmin') {
+          if (selectedOrgId) {
+            await fetchPatients();
+          }
+        } else {
+          await fetchPatients();
+        }
+      }, 'Loading patients...');
+    };
+
+    doFetch().catch((err) => {
+      // error already handled in fetchPatients but ensure loader hidden
+      console.error('Error fetching patients with loader', err);
+    });
+  }, [selectedOrgId, user]);
+
+  const fetchOrganizations = async () => {
+    try {
+      const resp = await organizationService.getAll();
+      const raw = resp.data?.data?.organizations || resp.data?.organizations || resp.data || [];
+      setOrganizations(raw);
+    } catch (err) {
+      console.error('Failed to load organizations', err);
+    }
+  };
+
+  // Global cache reset handler
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        // No persistent cache used here, just force refetch
+        await fetchPatients();
+      } catch (err) {
+        console.error('Global reset handler failed for patients', err);
+      } finally {
+        window.dispatchEvent(new CustomEvent('global:cache-reset-done', { detail: { page: 'patients' } }));
+      }
+    };
+    window.addEventListener('global:cache-reset', handler);
+    return () => window.removeEventListener('global:cache-reset', handler);
   }, []);
 
   const fetchPatients = async () => {
     try {
       setLoading(true);
-      const response = await patientService.getAll();
+      const params = {};
+      // For superadmin: pass organizationId to scope the query
+      if (user?.role === 'superadmin' && selectedOrgId) {
+        params.organizationId = selectedOrgId;
+      }
+      const response = await patientService.getAll(params);
       // API returns { success: true, data: { patients: [...] } }
       setPatients(response.data?.data?.patients || response.data?.patients || response.data || []);
     } catch (error) {
       console.error('Failed to fetch patients:', error);
-      toast.error('Failed to load patients');
+  const msg = getErrorMessage(error, 'Failed to load patients');
+      toast.error(msg);
       setPatients([]);
     } finally {
       setLoading(false);
@@ -105,7 +174,8 @@ export const Patients = () => {
       setVitalSigns(vitals);
     } catch (error) {
       console.error('Failed to fetch vital signs:', error);
-      toast.error('Failed to load vital signs');
+  const msg = getErrorMessage(error, 'Failed to load vital signs');
+      toast.error(msg);
       setVitalSigns([]);
     }
   };
@@ -115,10 +185,12 @@ export const Patients = () => {
       const response = await patientService.getSessions(patientId);
       // Backend returns sessions array directly or nested in .data
       const sessionsData = response.data?.data?.sessions || response.data?.sessions || response.data || [];
-      setSessions(sessionsData);
+      // Some endpoints return an object or an error; guard against non-array
+      setSessions(Array.isArray(sessionsData) ? sessionsData : (Array.isArray(response.data?.data) ? response.data.data : []));
     } catch (error) {
       console.error('Failed to fetch sessions:', error);
-      toast.error('Failed to load sessions');
+  const msg = getErrorMessage(error, 'Failed to load sessions');
+      toast.error(msg);
       setSessions([]);
     }
   };
@@ -126,6 +198,20 @@ export const Patients = () => {
   const onSubmit = async (data) => {
     try {
       setLoading(true);
+      // Ensure an organization is associated with the patient
+      if (user?.role === 'superadmin') {
+        // prefer organization selected in the modal, or fallback to data.organizationId
+        data.organizationId = data.organizationId || modalSelectedOrgId || null;
+        if (!data.organizationId) {
+          toast.error('Please select an Organization for this patient');
+          setLoading(false);
+          return;
+        }
+      } else {
+        // non-superadmins: backend will attach req.user.organizationId, but include for clarity
+        data.organizationId = user?.organizationId || data.organizationId || null;
+      }
+
       if (editingPatient) {
         await patientService.update(editingPatient.id, data);
         toast.success('Patient updated successfully');
@@ -137,7 +223,8 @@ export const Patients = () => {
       handleCloseModal();
     } catch (error) {
       console.error('Failed to save patient:', error);
-      toast.error(editingPatient ? 'Failed to update patient' : 'Failed to create patient');
+  const msg = getErrorMessage(error, editingPatient ? 'Failed to update patient' : 'Failed to create patient');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -152,7 +239,8 @@ export const Patients = () => {
       resetVitals();
     } catch (error) {
       console.error('Failed to save vital signs:', error);
-      toast.error('Failed to add vital signs');
+  const msg = getErrorMessage(error, 'Failed to add vital signs');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -160,7 +248,18 @@ export const Patients = () => {
 
   const handleEdit = (patient) => {
     setEditingPatient(patient);
+    // Pre-fill organization selection if present
     reset(patient);
+    const orgId = patient.organization_id || patient.organizationId || null;
+    setModalSelectedOrgId(orgId);
+    if (orgId) {
+      const info = organizations.find(o => String(o.id) === String(orgId));
+      setModalSelectedOrgInfo(info || null);
+      setModalOrgTypeFilter(info?.type || '');
+    } else {
+      setModalSelectedOrgInfo(null);
+      setModalOrgTypeFilter('');
+    }
     setShowModal(true);
   };
 
@@ -172,7 +271,8 @@ export const Patients = () => {
         await fetchPatients();
       } catch (error) {
         console.error('Failed to delete patient:', error);
-        toast.error('Failed to delete patient');
+  const msg = getErrorMessage(error, 'Failed to delete patient');
+        toast.error(msg);
       }
     }
   };
@@ -188,6 +288,9 @@ export const Patients = () => {
     setShowModal(false);
     setEditingPatient(null);
     reset();
+    setModalSelectedOrgId(null);
+    setModalSelectedOrgInfo(null);
+    setModalOrgTypeFilter('');
   };
 
   const filteredPatients = patients.filter((patient) => {
@@ -256,7 +359,7 @@ export const Patients = () => {
       header: 'Actions',
       accessor: 'actions',
       render: (patient) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
           <Button
             variant="outline"
             size="sm"
@@ -286,19 +389,90 @@ export const Patients = () => {
 
   return (
     <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
       
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Patients Management</h1>
+          <h1 className="text-3xl font-display font-bold mt-5 mb-2">Patients Management</h1>
           <p className="text-secondary">Manage patient records and medical history</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
+        {hasPermission(user?.role, PERMISSIONS.CREATE_PATIENT) && (
+        <Button onClick={() => {
+          // prepare modal for create
+          reset();
+          setEditingPatient(null);
+          if (user?.role !== 'superadmin') {
+            setModalSelectedOrgId(user?.organizationId || null);
+            const info = organizations.find(o => String(o.id) === String(user?.organizationId));
+            setModalSelectedOrgInfo(info || null);
+          } else {
+            setModalSelectedOrgId(null);
+            setModalSelectedOrgInfo(null);
+            setModalOrgTypeFilter('');
+          }
+          setShowModal(true);
+        }}>
           <Plus className="w-5 h-5 mr-2" />
           Add Patient
         </Button>
+        )}
       </div>
+
+      {/* Organization Filters (Superadmin only) */}
+      {user?.role === 'superadmin' && (
+        <Card className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Organization Type</label>
+              <Select
+                isClearable
+                value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                onChange={(opt) => {
+                  const v = opt?.value || '';
+                  setOrgTypeFilter(v);
+                  setSelectedOrgId(null);
+                  setSelectedOrgInfo(null);
+                }}
+                options={[
+                  { value: '', label: 'All Types' },
+                  { value: 'hospital', label: 'Hospital' },
+                  { value: 'fleet_owner', label: 'Fleet Owner' }
+                ]}
+                placeholder="Select organization type"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Organization</label>
+              <Select
+                isDisabled={!orgTypeFilter}
+                isClearable
+                placeholder={orgTypeFilter ? 'Select an organization' : 'Select a type first'}
+                options={organizations
+                  .filter(o => !orgTypeFilter || o.type === orgTypeFilter)
+                  .map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                value={selectedOrgId ? {
+                  value: selectedOrgId,
+                  label: `${selectedOrgInfo?.name || ''} (${selectedOrgInfo?.code || ''})`
+                } : null}
+                onChange={(opt) => {
+                  if (opt) {
+                    setSelectedOrgId(opt.value);
+                    const info = organizations.find(o => o.id === opt.value) || null;
+                    setSelectedOrgInfo(info);
+                  } else {
+                    setSelectedOrgId(null);
+                    setSelectedOrgInfo(null);
+                  }
+                }}
+                classNamePrefix="react-select"
+                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                menuPosition="fixed"
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -353,31 +527,46 @@ export const Patients = () => {
         </Card>
       </div>
 
+      {/* Show message if superadmin hasn't selected org yet */}
+      {user?.role === 'superadmin' && !selectedOrgId && (
+        <Card className="p-8 text-center">
+          <UserSquare2 className="w-12 h-12 text-secondary mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Select an Organization</h3>
+          <p className="text-secondary">
+            Please select an organization type and organization above to view patients.
+          </p>
+        </Card>
+      )}
+
       {/* Search Bar */}
-      <Card className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-secondary" />
-          <input
-            type="text"
-            placeholder="Search patients by name, phone, or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
-          />
-        </div>
-      </Card>
+      {(user?.role !== 'superadmin' || selectedOrgId) && (
+        <Card className="p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-secondary" />
+            <input
+              type="text"
+              placeholder="Search patients by name, phone, or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </Card>
+      )}
 
       {/* Patients Table */}
-      <Card>
-        <div className="p-6">
-          <Table
-            columns={columns}
-            data={filteredPatients}
-            loading={loading}
-            onRowClick={handleViewDetails}
-          />
-        </div>
-      </Card>
+      {(user?.role !== 'superadmin' || selectedOrgId) && (
+        <Card>
+          <div className="p-6">
+            <Table
+              columns={columns}
+              data={filteredPatients}
+              loading={loading}
+              onRowClick={handleViewDetails}
+            />
+          </div>
+        </Card>
+      )}
 
       {/* Add/Edit Patient Modal */}
       <Modal
@@ -387,6 +576,48 @@ export const Patients = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Organization selectors: superadmin can pick org; others are scoped to their org */}
+          {user?.role === 'superadmin' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Organization Type</label>
+                <Select
+                  isClearable
+                  value={modalOrgTypeFilter ? { value: modalOrgTypeFilter, label: modalOrgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                  onChange={(opt) => { const v = opt?.value || ''; setModalOrgTypeFilter(v); setModalSelectedOrgId(null); setModalSelectedOrgInfo(null); }}
+                  options={[{ value: '', label: 'All Types' }, { value: 'hospital', label: 'Hospital' }, { value: 'fleet_owner', label: 'Fleet Owner' }]}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Organization</label>
+                <Select
+                  isDisabled={!modalOrgTypeFilter}
+                  placeholder={modalOrgTypeFilter ? 'Type to search or pick an organization' : 'Select an organization type first'}
+                  options={organizations.filter(o => (!modalOrgTypeFilter || o.type === modalOrgTypeFilter)).map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                  value={modalSelectedOrgId ? { value: modalSelectedOrgId, label: `${modalSelectedOrgInfo?.name || ''} (${modalSelectedOrgInfo?.code || ''})` } : null}
+                  onChange={(opt) => {
+                    if (opt) {
+                      setModalSelectedOrgId(opt.value);
+                      const info = organizations.find(o => o.id === opt.value) || null;
+                      setModalSelectedOrgInfo(info);
+                    } else {
+                      setModalSelectedOrgId(null);
+                      setModalSelectedOrgInfo(null);
+                    }
+                  }}
+                  classNamePrefix="react-select"
+                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                  menuPosition="fixed"
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium mb-2">Organization</label>
+              <div className="py-2 text-sm text-secondary">{modalSelectedOrgInfo?.name || organizations.find(o => String(o.id) === String(user?.organizationId))?.name || '—'}</div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"
@@ -409,15 +640,28 @@ export const Patients = () => {
             />
             <div>
               <label className="block text-sm font-medium mb-2">Gender</label>
-              <select
-                {...register('gender')}
-                className="w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">Select Gender</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
+              <Controller
+                name="gender"
+                control={control}
+                defaultValue={''}
+                render={({ field }) => {
+                  const options = [
+                    { value: 'male', label: 'Male' },
+                    { value: 'female', label: 'Female' },
+                    { value: 'other', label: 'Other' },
+                  ];
+                  const value = options.find(o => o.value === field.value) || null;
+                  return (
+                    <Select
+                      classNamePrefix="react-select"
+                      options={options}
+                      value={value}
+                      onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                      placeholder="Select Gender"
+                    />
+                  );
+                }}
+              />
               {errors.gender && (
                 <p className="mt-1 text-sm text-red-600">{errors.gender.message}</p>
               )}
@@ -427,20 +671,26 @@ export const Patients = () => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Blood Group</label>
-              <select
-                {...register('bloodGroup')}
-                className="w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">Select Blood Group</option>
-                <option value="A+">A+</option>
-                <option value="A-">A-</option>
-                <option value="B+">B+</option>
-                <option value="B-">B-</option>
-                <option value="AB+">AB+</option>
-                <option value="AB-">AB-</option>
-                <option value="O+">O+</option>
-                <option value="O-">O-</option>
-              </select>
+              <Controller
+                name="bloodGroup"
+                control={control}
+                defaultValue={''}
+                render={({ field }) => {
+                  const options = [
+                    'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
+                  ].map(v => ({ value: v, label: v }));
+                  const value = options.find(o => o.value === field.value) || null;
+                  return (
+                    <Select
+                      classNamePrefix="react-select"
+                      options={options}
+                      value={value}
+                      onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                      placeholder="Select Blood Group"
+                    />
+                  );
+                }}
+              />
               {errors.bloodGroup && (
                 <p className="mt-1 text-sm text-red-600">{errors.bloodGroup.message}</p>
               )}
@@ -536,9 +786,47 @@ export const Patients = () => {
       <Modal
         isOpen={showVitalsModal}
         onClose={() => setShowVitalsModal(false)}
-        title={`${selectedPatient?.firstName} ${selectedPatient?.lastName} - Details`}
         size="xl"
       >
+        <div className="space-y-4">
+          {user?.role === 'superadmin' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">Organization Type</label>
+                <Select
+                  isClearable
+                  value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                  onChange={(opt) => { const v = opt?.value || ''; setOrgTypeFilter(v); setSelectedOrgId(null); setSelectedOrgInfo(null); }}
+                  options={[{ value: '', label: 'All Types' }, { value: 'hospital', label: 'Hospital' }, { value: 'fleet_owner', label: 'Fleet Owner' }]}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">Organization</label>
+                <div>
+                  <Select
+                    isDisabled={!orgTypeFilter}
+                    placeholder={orgTypeFilter ? 'Type to search or pick an organization' : 'Select an organization type first'}
+                    options={organizations.filter(o => (!orgTypeFilter || o.type === orgTypeFilter)).map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                    value={selectedOrgId ? { value: selectedOrgId, label: `${selectedOrgInfo?.name || ''} (${selectedOrgInfo?.code || ''})` } : null}
+                    onChange={(opt) => {
+                      if (opt) {
+                        setSelectedOrgId(opt.value);
+                        const info = organizations.find(o => o.id === opt.value) || null;
+                        setSelectedOrgInfo(info);
+                      } else {
+                        setSelectedOrgId(null);
+                        setSelectedOrgInfo(null);
+                      }
+                    }}
+                    classNamePrefix="react-select"
+                    menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                    menuPosition="fixed"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         {selectedPatient && (
           <div className="space-y-6">
             {/* Patient Info */}
@@ -656,7 +944,7 @@ export const Patients = () => {
             <div>
               <h3 className="font-semibold mb-4">Ambulance Sessions</h3>
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {sessions.length === 0 ? (
+                {(!Array.isArray(sessions) || sessions.length === 0) ? (
                   <p className="text-secondary text-center py-8">No sessions found</p>
                 ) : (
                   sessions.map((session, index) => (
@@ -691,6 +979,7 @@ export const Patients = () => {
             </div>
           </div>
         )}
+        </div>
       </Modal>
     </div>
   );

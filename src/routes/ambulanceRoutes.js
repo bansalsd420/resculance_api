@@ -1,9 +1,11 @@
 const express = require('express');
 const AmbulanceController = require('../controllers/ambulanceController');
 const AmbulanceDeviceController = require('../controllers/ambulanceDeviceController');
-const { authenticate, authorize, canAccessAmbulance } = require('../middleware/auth');
+const { authenticate, canAccessAmbulance, authorize } = require('../middleware/auth');
 const { createAmbulanceValidation, validate } = require('../middleware/validation');
-const { ROLES } = require('../config/constants');
+const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
+const UserController = require('../controllers/userController');
+const { PERMISSIONS, ROLES } = require('../config/permissions');
 
 const router = express.Router();
 
@@ -12,61 +14,50 @@ router.use(authenticate);
 
 router.post(
   '/',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF,
-    ROLES.FLEET_ADMIN,
-    ROLES.FLEET_STAFF
-  ),
+  requirePermission(PERMISSIONS.CREATE_AMBULANCE),
   createAmbulanceValidation,
   validate,
   AmbulanceController.create
 );
 
-router.get('/', AmbulanceController.getAll);
+router.get(
+  '/',
+  requireAnyPermission(
+    PERMISSIONS.VIEW_ALL_AMBULANCES,
+    PERMISSIONS.VIEW_OWN_AMBULANCES,
+    PERMISSIONS.VIEW_ASSIGNED_AMBULANCES,
+    PERMISSIONS.VIEW_PARTNERED_AMBULANCES
+  ),
+  AmbulanceController.getAll
+);
+
+// Get ambulances assigned to a specific user (RBAC enforced in controller)
+router.get('/for-user/:userId', AmbulanceController.getAmbulancesForUser);
+
 router.get('/my-ambulances', AmbulanceController.getUserAmbulances);
 router.get('/:id', AmbulanceController.getById);
 
 router.put(
   '/:id',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF,
-    ROLES.FLEET_ADMIN,
-    ROLES.FLEET_STAFF
-  ),
+  requirePermission(PERMISSIONS.UPDATE_AMBULANCE),
   AmbulanceController.update
 );
 
 router.patch(
   '/:id/approve',
-  authorize(ROLES.SUPERADMIN),
+  requirePermission(PERMISSIONS.APPROVE_AMBULANCE),
   AmbulanceController.approve
 );
 
 router.post(
   '/:id/assign',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF,
-    ROLES.FLEET_ADMIN,
-    ROLES.FLEET_STAFF
-  ),
+  requirePermission(PERMISSIONS.ASSIGN_STAFF),
   AmbulanceController.assignUser
 );
 
 router.delete(
   '/:id/unassign/:userId',
-  authorize(
-    ROLES.SUPERADMIN,
-    ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF,
-    ROLES.FLEET_ADMIN,
-    ROLES.FLEET_STAFF
-  ),
+  requirePermission(PERMISSIONS.ASSIGN_STAFF),
   AmbulanceController.unassignUser
 );
 
@@ -74,10 +65,6 @@ router.get('/:id/assigned-users', AmbulanceController.getAssignedUsers);
 
 router.post(
   '/:id/location',
-  authorize(
-    ROLES.HOSPITAL_PARAMEDIC,
-    ROLES.FLEET_PARAMEDIC
-  ),
   AmbulanceController.updateLocation
 );
 

@@ -6,35 +6,79 @@ import { Card } from '../../components/ui/Card';
 import { Table } from '../../components/ui/Table';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import Select from '../../components/ui/Select';
 import { organizationService } from '../../services';
+import useUiStore from '../../store/uiStore';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
+import { useToast } from '../../hooks/useToast';
 
 export const Organizations = () => {
   const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { showLoader, hideLoader } = useUiStore();
+  const runWithLoader = useWithGlobalLoader();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm();
+  const { register, control, handleSubmit, reset, formState: { errors } } = useForm();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchOrganizations();
   }, [filterType]);
 
+  // Listen for global cache reset and refresh organizations
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        await fetchOrganizations();
+      } catch (err) {
+        console.error('Global reset handler failed for organizations', err);
+      } finally {
+        window.dispatchEvent(new CustomEvent('global:cache-reset-done', { detail: { page: 'organizations' } }));
+      }
+    };
+    window.addEventListener('global:cache-reset', handler);
+    return () => window.removeEventListener('global:cache-reset', handler);
+  }, [filterType]);
+
   const fetchOrganizations = async () => {
     setLoading(true);
     try {
-      const params = filterType !== 'all' ? { type: filterType } : {};
-      const response = await organizationService.getAll(params);
-      // API returns { success: true, data: { organizations: [...], pagination: {...} } }
-      setOrganizations(response.data?.data?.organizations || response.data?.organizations || response.data || []);
+      await runWithLoader(async () => {
+        const params = filterType !== 'all' ? { type: filterType } : {};
+        const response = await organizationService.getAll(params);
+        // API returns { success: true, data: { organizations: [...], pagination: {...} } }
+        const raw = response.data?.data?.organizations || response.data?.organizations || response.data || [];
+        // Normalize backend keys (contact_email/contact_phone, zip_code) to frontend-friendly names
+        const normalized = raw.map(org => ({
+          ...org,
+          phone: org.phone || org.contact_phone || org.contactPhone || null,
+          email: org.email || org.contact_email || org.contactEmail || null,
+          city: org.city || org.city_name || org.cityName || null,
+          state: org.state || null,
+          contactPerson: org.contact_person || org.contactPerson || null,
+          // ensure type uses canonical uppercase values used by the UI
+          type: (org.type || '').toString().toUpperCase(),
+          // include pincode fallback used in existing DB rows
+          zipCode: org.zipCode || org.postalCode || org.postal_code || org.zip_code || org.zip || org.pincode || null,
+          // license might not exist in DB (legacy); keep it if present but don't display in form
+          licenseNumber: org.licenseNumber || org.license_number || org.license || null
+        }));
+
+        setOrganizations(normalized);
+      }, 'Loading organizations...');
     } catch (error) {
       console.error('Failed to fetch organizations:', error);
       setOrganizations([]);
+      toast.error('Failed to load organizations. Please try again later.');
     } finally {
       setLoading(false);
+      hideLoader();
     }
   };
 
@@ -55,16 +99,39 @@ export const Organizations = () => {
   };
 
   const onSubmit = async (data) => {
+    setSubmitting(true);
     try {
+      // include legacy/canonical variants to ensure backend mapping works across schemas
+      const payload = {
+        ...data,
+        // postal variants
+        postalCode: data.zipCode,
+        postal_code: data.zipCode,
+        pincode: data.zipCode,
+        // contact person variants
+        contactPerson: data.contactPerson,
+        contact_person: data.contactPerson,
+        // contact variants
+        contact_email: data.email,
+        contactPhone: data.phone,
+        contact_phone: data.phone,
+        email: data.email,
+        phone: data.phone,
+      };
+
       if (selectedOrg) {
-        await organizationService.update(selectedOrg.id, data);
+        await organizationService.update(selectedOrg.id, payload);
       } else {
-        await organizationService.create(data);
+        await organizationService.create(payload);
       }
       fetchOrganizations();
       handleCloseModal();
     } catch (error) {
       console.error('Failed to save organization:', error);
+      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Cannot perform the action right now. Please try again later.';
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -75,6 +142,8 @@ export const Organizations = () => {
         fetchOrganizations();
       } catch (error) {
         console.error('Failed to delete organization:', error);
+        const msg = error?.response?.data?.message || 'Cannot perform the action right now. Please try again later.';
+        toast.error(msg);
       }
     }
   };
@@ -90,7 +159,6 @@ export const Organizations = () => {
           </div>
           <div>
             <p className="font-medium">{row.name}</p>
-            <p className="text-sm text-secondary">{row.licenseNumber}</p>
           </div>
         </div>
       ),
@@ -168,7 +236,7 @@ export const Organizations = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold mb-2">Organizations</h1>
+          <h1 className="text-3xl font-display font-bold mt-5 mb-2">Organizations</h1>
           <p className="text-secondary">Manage hospitals and fleet owners</p>
         </div>
         <Button onClick={() => handleOpenModal()}>
@@ -232,69 +300,87 @@ export const Organizations = () => {
             <Button variant="secondary" onClick={handleCloseModal}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit(onSubmit)}>
-              {selectedOrg ? 'Update' : 'Create'}
-            </Button>
+              <Button loading={submitting} onClick={handleSubmit(onSubmit)}>
+                {selectedOrg ? 'Update' : 'Create'}
+              </Button>
           </>
         }
       >
         <form className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Organization Name"
+              label={<><span>Organization Name</span><span className="text-red-500"> *</span></>}
               {...register('name', { required: 'Name is required' })}
               error={errors.name?.message}
             />
             <div>
-              <label className="block text-sm font-medium text-text mb-2">Type</label>
-              <select {...register('type', { required: 'Type is required' })} className="input">
-                <option value="">Select Type</option>
-                <option value="HOSPITAL">Hospital</option>
-                <option value="FLEET_OWNER">Fleet Owner</option>
-              </select>
+              <label className="block text-sm font-medium text-text mb-2">Type <span className="text-red-500">*</span></label>
+              <Controller
+                name="type"
+                control={control}
+                defaultValue={selectedOrg?.type || ''}
+                rules={{ required: 'Type is required' }}
+                render={({ field }) => {
+                  const options = [
+                    { value: 'HOSPITAL', label: 'Hospital' },
+                    { value: 'FLEET_OWNER', label: 'Fleet Owner' },
+                  ];
+                  const value = options.find((o) => o.value === field.value) || null;
+                  return (
+                    <Select
+                      classNamePrefix="react-select"
+                      options={options}
+                      value={value}
+                      onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                      placeholder="Select Type"
+                    />
+                  );
+                }}
+              />
               {errors.type && <p className="mt-1 text-sm text-red-500">{errors.type.message}</p>}
             </div>
           </div>
 
-          <Input
-            label="License Number"
-            {...register('licenseNumber', { required: 'License number is required' })}
-            error={errors.licenseNumber?.message}
-          />
+          {/* License Number removed from form — DB doesn't have a stable column for it */}
 
           <Input
-            label="Address"
-            {...register('address', { required: 'Address is required' })}
+            label={<><span>Address</span></>}
+            {...register('address')}
             error={errors.address?.message}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              label="City"
-              {...register('city', { required: 'City is required' })}
+              label={<><span>City</span></>}
+              {...register('city')}
               error={errors.city?.message}
             />
             <Input
-              label="State"
-              {...register('state', { required: 'State is required' })}
+              label={<><span>State</span></>}
+              {...register('state')}
               error={errors.state?.message}
             />
             <Input
-              label="Zip Code"
-              {...register('zipCode', { required: 'Zip code is required' })}
+              label={<><span>Zip Code</span></>}
+              {...register('zipCode')}
               error={errors.zipCode?.message}
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Phone"
+              label={<><span>Contact Person</span><span className="text-red-500"> *</span></>}
+              {...register('contactPerson', { required: 'Contact person is required' })}
+              error={errors.contactPerson?.message}
+            />
+            <Input
+              label={<><span>Phone</span><span className="text-red-500"> *</span></>}
               type="tel"
               {...register('phone', { required: 'Phone is required' })}
               error={errors.phone?.message}
             />
             <Input
-              label="Email"
+              label={<><span>Email</span><span className="text-red-500"> *</span></>}
               type="email"
               {...register('email', { required: 'Email is required' })}
               error={errors.email?.message}

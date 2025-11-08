@@ -4,53 +4,75 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   MapPin,
-  Clock,
   User,
   Activity,
   Phone,
   AlertCircle,
   Camera,
   Video,
-  Heart,
-  Thermometer,
-  Wind,
-  Droplets,
-  Navigation,
-  Calendar,
-  Building2,
-  Ambulance as AmbulanceIcon,
-  FileText,
-  CheckCircle,
-  Users,
   MessageCircle,
+  Power,
+  Lightbulb,
+  Volume2,
+  Wind,
+  Heart,
+  Navigation,
+  Clock,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { ToastContainer } from '../../components/ui/Toast';
 import ChatPanel from '../../components/ChatPanel';
 import VideoCallPanel from '../../components/VideoCallPanel';
 import { patientService, ambulanceService } from '../../services';
 import socketService from '../../services/socketService';
 import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
+import { CameraFeedModal } from './CameraFeedModal';
 
 export const OnboardingDetail = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const { toasts, toast, removeToast } = useToast();
+  const { toast } = useToast();
   const { user, token } = useAuthStore();
   
   const [session, setSession] = useState(null);
   const [ambulance, setAmbulance] = useState(null);
   const [devices, setDevices] = useState([]);
-  const [assignedUsers, setAssignedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCamera, setSelectedCamera] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [activeTab, setActiveTab] = useState('notes');
+  
+  // Ambulance controls state
+  const [controls, setControls] = useState({
+    mainPower: false,
+    emergencyLights: false,
+    siren: false,
+    airConditioning: false,
+    oxygenSupply: false,
+    cabinCamera: false,
+  });
+
+  // Mock vital signs - in production, these would come from real-time sensors
+  const [vitals, setVitals] = useState({
+    heartRate: 98,
+    bloodPressure: '120/78',
+    spo2: 94,
+    temp: 37.1,
+  });
+
+  // Mock SOS data
+  const [sosAlerts, setSosAlerts] = useState([
+    { id: 1012, time: '10:22', level: 'Critical', note: 'Patient seizure detected', action: 'Ack' },
+    { id: 1011, time: '10:09', level: 'Warning', note: 'O2 below threshold', action: 'Ack' },
+    { id: 1010, time: '09:55', level: 'Info', note: 'Door opened', action: 'Ack' },
+  ]);
 
   useEffect(() => {
-    // Initialize socket connection
+    // Dispatch event to collapse sidebar when this page loads
+    window.dispatchEvent(new CustomEvent('collapse-sidebar'));
+
     if (token) {
       socketService.connect(token);
     }
@@ -58,7 +80,6 @@ export const OnboardingDetail = () => {
     fetchSessionDetails();
 
     return () => {
-      // Cleanup: leave session room when component unmounts
       if (sessionId) {
         socketService.leaveSession(sessionId);
       }
@@ -71,10 +92,7 @@ export const OnboardingDetail = () => {
       console.log('Fetching session details for sessionId:', sessionId);
       
       const sessionRes = await patientService.getSessionById(sessionId);
-      console.log('Session response:', sessionRes);
-      
       const sessionData = sessionRes.data?.data?.session || sessionRes.data?.session || sessionRes.data;
-      console.log('Session data:', sessionData);
       
       if (!sessionData || !sessionData.id) {
         throw new Error('Session data not found or invalid');
@@ -84,32 +102,28 @@ export const OnboardingDetail = () => {
       
       if (sessionData.ambulance_id || sessionData.ambulanceId) {
         const ambulanceId = sessionData.ambulance_id || sessionData.ambulanceId;
-        console.log('Fetching ambulance data for ambulanceId:', ambulanceId);
         
         try {
           const devicesRes = await ambulanceService.getDevices(ambulanceId);
           const devicesData = devicesRes.data || [];
-          console.log('Fetched devices:', devicesData);
           setDevices(Array.isArray(devicesData) ? devicesData : []);
         } catch (error) {
           console.error('Failed to fetch devices:', error);
-          // Don't fail the whole page if devices fail
         }
       }
     } catch (error) {
       console.error('Failed to fetch session details:', error);
-      console.error('Error details:', error.response?.data || error.message);
       toast.error(error.response?.data?.message || 'Failed to load session details');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEndTrip = async () => {
+  const handleOffboardPatient = async () => {
     if (window.confirm('Are you sure you want to offboard this patient?')) {
       try {
         await patientService.offboard(sessionId, {
-          treatmentNotes: 'Patient offboarded from detail view'
+          treatmentNotes: 'Patient offboarded from Command Console'
         });
         toast.success('Patient offboarded successfully');
         navigate('/onboarding');
@@ -120,20 +134,13 @@ export const OnboardingDetail = () => {
     }
   };
 
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-      case 'onboarded':
-      case 'in_transit':
-        return 'bg-gray-100 text-gray-900 border-gray-300';
-      case 'completed':
-      case 'offboarded':
-        return 'bg-gray-200 text-gray-900 border-gray-400';
-      case 'cancelled':
-        return 'bg-gray-300 text-gray-900 border-gray-500';
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-300';
-    }
+  const toggleControl = (controlName) => {
+    setControls(prev => ({
+      ...prev,
+      [controlName]: !prev[controlName]
+    }));
+    // In production, this would send command to ambulance via socket
+    toast.info(`${controlName.replace(/([A-Z])/g, ' $1').trim()} ${controls[controlName] ? 'disabled' : 'enabled'}`);
   };
 
   if (loading) {
@@ -141,7 +148,7 @@ export const OnboardingDetail = () => {
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-secondary">Loading session details...</p>
+          <p className="text-text-secondary">Loading session details...</p>
         </div>
       </div>
     );
@@ -150,9 +157,9 @@ export const OnboardingDetail = () => {
   if (!session) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
-        <AlertCircle className="w-16 h-16 text-gray-500 mb-4" />
-        <h2 className="text-2xl font-bold mb-2">Session Not Found</h2>
-        <p className="text-secondary mb-4">The requested session could not be found.</p>
+        <AlertCircle className="w-16 h-16 text-error mb-4" />
+        <h2 className="text-2xl font-bold mb-2 text-text">Session Not Found</h2>
+        <p className="text-text-secondary mb-4">The requested session could not be found.</p>
         <Button onClick={() => navigate('/onboarding')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Onboarding
@@ -161,437 +168,417 @@ export const OnboardingDetail = () => {
     );
   }
 
+  const isActive = session.status?.toLowerCase() === 'active' || 
+                   session.status?.toLowerCase() === 'onboarded' || 
+                   session.status?.toLowerCase() === 'in_transit';
+
   const cameraDevices = devices.filter(d => {
     const deviceType = (d.device_type || d.deviceType || '').toLowerCase();
     return deviceType.includes('camera');
   });
 
+  // Ensure we have at least 4 camera slots
+  const cameraSlots = [
+    { id: 'front', name: 'Front Cam', device: cameraDevices[0] || null },
+    { id: 'cabin', name: 'Cabin Cam', device: cameraDevices[1] || null },
+    { id: 'rear', name: 'Rear Cam', device: cameraDevices[2] || null },
+    { id: 'side', name: 'Side Cam', device: cameraDevices[3] || null },
+  ];
+
   return (
-    <div className="space-y-6">
-      <ToastContainer toasts={toasts} removeToast={removeToast} />
-      
+    <div className="min-h-screen bg-background pb-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="bg-background-card border-b border-border px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate('/onboarding')}>
-            <ArrowLeft className="w-5 h-5" />
+          <Button variant="outline" size="sm" onClick={() => navigate('/onboarding')}>
+            <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-display font-bold">Onboarding Session</h1>
-            <p className="text-secondary">
-              Session Code: <span className="font-mono font-semibold">{session.session_code || session.sessionCode}</span>
+            <h1 className="text-xl font-bold text-text">Ambulance Command Console</h1>
+            <p className="text-sm text-text-secondary">
+              Live operations • {session.ambulance_code || 'City EMS'}
             </p>
           </div>
         </div>
-        <div className="flex gap-3">
-          {(session.status?.toLowerCase() === 'active' || 
-            session.status?.toLowerCase() === 'onboarded' || 
-            session.status?.toLowerCase() === 'in_transit') ? (
-            <>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowVideoCall(true)}
-                className="flex items-center gap-2"
-              >
-                <Video className="w-4 h-4" />
-                Video Call
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowChat(true)}
-                className="flex items-center gap-2"
-              >
-                <MessageCircle className="w-4 h-4" />
-                Group Chat
-              </Button>
-              <Button variant="danger" onClick={handleEndTrip}>
-                Offboard Patient
-              </Button>
-            </>
-          ) : (
-            <div className="text-sm text-secondary flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              Archived Session - Video & Chat not available
-            </div>
-          )}
-          <span className={`px-4 py-2 rounded-xl border-2 text-sm font-medium flex items-center gap-2 ${getStatusColor(session.status)}`}>
-            <Activity className="w-4 h-4" />
-            {session.status}
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1 rounded-lg bg-error/10 text-error text-sm font-medium flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+            {session.ambulance_code || 'AMB-204'}
+          </span>
+          <span className="px-3 py-1 rounded-lg bg-success/10 text-success text-sm font-medium">
+            82% Battery
+          </span>
+          <span className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-sm font-medium">
+            On-duty
           </span>
         </div>
       </div>
 
-      {/* Camera Feeds Section - Only show for active sessions */}
-      {(session.status?.toLowerCase() === 'active' || 
-        session.status?.toLowerCase() === 'onboarded' || 
-        session.status?.toLowerCase() === 'in_transit') && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <Camera className="w-6 h-6 text-gray-900" />
-              Ambulance Camera Feeds
-              <span className="text-sm font-normal text-gray-500">({devices.length} devices)</span>
-            </h2>
-          </div>
-          
-          {devices.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {devices.filter(d => d.device_type === 'camera').map((device) => (
+      <div className="px-6 pt-6 space-y-6">
+        {/* Main Grid: Camera Feeds + Live Meeting */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Camera Feeds - 2/3 width */}
+          <Card className="lg:col-span-2 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-text flex items-center gap-2">
+                <Camera className="w-5 h-5" />
+                Camera Feeds
+                <span className="text-sm font-normal text-text-secondary">All onboard camera streams</span>
+              </h2>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline">Refresh</Button>
+                <Button size="sm" variant="outline">Layouts</Button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              {cameraSlots.map((slot) => (
                 <motion.div
-                  key={device.id}
+                  key={slot.id}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="relative aspect-video bg-gray-900 rounded-2xl overflow-hidden group"
+                  className="relative aspect-video bg-gray-900 rounded-xl overflow-hidden group cursor-pointer"
+                  onClick={() => slot.device && setSelectedCamera(slot.device)}
                 >
-                  <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/70 px-3 py-1.5 rounded-full backdrop-blur-sm z-10">
-                    <span className={`w-2 h-2 rounded-full ${device.status === 'active' ? 'bg-red-500 animate-pulse' : 'bg-gray-400'}`}></span>
-                    <span className="text-white text-sm font-medium">{device.status === 'active' ? 'LIVE' : 'OFFLINE'}</span>
+                  {/* Live badge */}
+                  <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-error/90 px-2 py-1 rounded-md backdrop-blur-sm z-10">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                    <span className="text-white text-xs font-bold">LIVE</span>
                   </div>
                   
-                  <div className="absolute bottom-3 left-3 bg-black/70 px-3 py-1.5 rounded-full backdrop-blur-sm z-10">
-                    <span className="text-white text-sm font-medium">
-                      {device.device_name || device.deviceName || `Camera ${device.id}`}
-                    </span>
+                  {/* Camera label */}
+                  <div className="absolute bottom-2 left-2 bg-black/70 px-2.5 py-1 rounded-md backdrop-blur-sm z-10">
+                    <span className="text-white text-xs font-medium">{slot.name}</span>
                   </div>
 
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white/60">
-                    <Camera className="w-16 h-16 mb-3" />
-                    <p className="text-sm">
-                      {device.status === 'active' ? 'Stream connecting...' : 'Camera offline'}
+                  {/* Resolution */}
+                  <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 rounded backdrop-blur-sm z-10">
+                    <span className="text-white text-[10px] font-mono">1080p · 30fps</span>
+                  </div>
+
+                  {/* Placeholder content */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-white/40">
+                    <Camera className="w-12 h-12 mb-2" />
+                    <p className="text-xs">
+                      {slot.device ? 'Stream connecting...' : 'Camera offline'}
                     </p>
-                    {device.device_api && (
-                      <p className="text-xs mt-2 font-mono">{device.device_api}</p>
-                    )}
                   </div>
 
-                  {/* Gradient overlay */}
+                  {/* Dark overlay */}
                   <div className="absolute inset-0 bg-gradient-to-br from-gray-800 via-gray-900 to-black"></div>
                 </motion.div>
               ))}
             </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Camera className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg font-medium mb-2">No camera devices found</p>
-              <p className="text-sm">Camera devices will appear here when connected to the ambulance</p>
-            </div>
-          )}
-        </Card>
-      )}
-      
-      {/* Notice for completed sessions */}
-      {(session.status?.toLowerCase() === 'completed' || 
-        session.status?.toLowerCase() === 'offboarded' || 
-        session.status?.toLowerCase() === 'cancelled') && (
-        <Card className="p-4 bg-gray-50 border-gray-300">
-          <div className="flex items-center gap-3 text-sm text-gray-700">
-            <AlertCircle className="w-5 h-5" />
-            <div>
-              <p className="font-semibold">Session Archived</p>
-              <p className="text-xs">Live features (camera feeds, chat, video call) are only available for active sessions</p>
-            </div>
-          </div>
-        </Card>
-      )}
+          </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Info Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Patient Information */}
+          {/* Live Meeting - 1/3 width */}
           <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Patient Information
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-text flex items-center gap-2">
+                <Video className="w-5 h-5" />
+                Live Meeting
+              </h2>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-text-secondary">Telemedicine & dispatch bridge</p>
+              
+              {/* Meeting placeholder */}
+              <div className="aspect-video bg-gray-900 rounded-xl flex flex-col items-center justify-center text-white/60">
+                <Video className="w-16 h-16 mb-3" />
+                <p className="text-sm font-medium mb-1">No active session</p>
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowVideoCall(true)}
+                  className="mt-2"
+                >
+                  Join Session
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Second Row: Patient Flow, Medical Reports, Live Location */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Patient Flow */}
+          <Card className="p-6">
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Patient Flow
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-secondary">Name</label>
-                <p className="font-semibold">
-                  {session.patient_first_name || session.patient?.firstName} {session.patient_last_name || session.patient?.lastName}
-                </p>
-              </div>
-              <div>
-                <label className="text-sm text-secondary">Age</label>
-                <p className="font-semibold">{session.patient_age || session.patient?.age || 'N/A'}</p>
-              </div>
-              <div>
-                <label className="text-sm text-secondary">Gender</label>
-                <p className="font-semibold capitalize">{session.patient_gender || session.patient?.gender || 'N/A'}</p>
-              </div>
-              <div>
-                <label className="text-sm text-secondary">Phone</label>
-                <p className="font-semibold flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-secondary" />
-                  {session.patient_phone || session.patient?.phone || 'N/A'}
-                </p>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm text-secondary">Chief Complaint</label>
-                <p className="font-semibold text-gray-900">
-                  {session.chief_complaint || session.chiefComplaint || 'N/A'}
-                </p>
-              </div>
-              {(session.initial_assessment || session.initialAssessment) && (
-                <div className="md:col-span-2">
-                  <label className="text-sm text-secondary">Initial Assessment</label>
-                  <p className="text-sm">{session.initial_assessment || session.initialAssessment}</p>
+            <p className="text-xs text-text-secondary mb-4">Onboard / Offboard</p>
+            
+            <div className="space-y-3">
+              <Button 
+                variant="primary" 
+                className="w-full justify-center"
+                disabled={!isActive}
+              >
+                <User className="w-4 h-4 mr-2" />
+                Onboard Patient
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-center"
+                onClick={handleOffboardPatient}
+                disabled={!isActive}
+              >
+                Offboard Patient
+              </Button>
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-border">
+              <h3 className="text-sm font-semibold text-text mb-3">Current Patient</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">ID:</span>
+                  <span className="font-mono font-medium text-text">PT-88912</span>
                 </div>
-              )}
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">HR</span>
+                    <span className="font-medium text-text">{vitals.heartRate} bpm</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">SpO₂</span>
+                    <span className="font-medium text-text">{vitals.spo2} %</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">BP</span>
+                    <span className="font-medium text-text">{vitals.bloodPressure} mmHg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text-secondary">Temp</span>
+                    <span className="font-medium text-text">{vitals.temp} °C</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </Card>
 
-          {/* Location & Route */}
+          {/* Medical Reports */}
           <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Navigation className="w-5 h-5 text-primary" />
-              Location & Route
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Medical Reports
             </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-secondary flex items-center gap-2 mb-2">
-                  <MapPin className="w-4 h-4 text-gray-900" />
-                  Pickup Location
-                </label>
-                <p className="font-semibold">{session.pickup_location || session.pickupLocation || 'N/A'}</p>
-                {(session.pickup_latitude || session.pickupLatitude) && (
-                  <p className="text-sm text-secondary font-mono">
-                    {Number(session.pickup_latitude || session.pickupLatitude).toFixed(6)}, {Number(session.pickup_longitude || session.pickupLongitude).toFixed(6)}
-                  </p>
-                )}
-              </div>
-              
-              <div className="border-t pt-4">
-                <label className="text-sm text-secondary flex items-center gap-2 mb-2">
-                  <Building2 className="w-4 h-4 text-gray-900" />
-                  Destination Hospital
-                </label>
-                <p className="font-semibold">{session.destination_hospital_name || session.destinationHospital?.name || 'N/A'}</p>
-                {(session.destination_latitude || session.destinationLatitude) && (
-                  <p className="text-sm text-secondary font-mono">
-                    {Number(session.destination_latitude || session.destinationLatitude).toFixed(6)}, {Number(session.destination_longitude || session.destinationLongitude).toFixed(6)}
-                  </p>
-                )}
-              </div>
+            <p className="text-xs text-text-secondary mb-4">Incident & treatment notes</p>
+
+            {/* Tabs */}
+            <div className="flex gap-4 border-b border-border mb-4">
+              {['Notes', 'Meds', 'Files'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab.toLowerCase())}
+                  className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === tab.toLowerCase()
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-text-secondary hover:text-text'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            <div className="space-y-3">
+              {activeTab === 'notes' && (
+                <div className="text-sm text-text-secondary">
+                  <p className="mb-2">No notes available</p>
+                </div>
+              )}
+              {activeTab === 'meds' && (
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between items-center p-2 bg-background rounded">
+                    <div>
+                      <p className="font-medium text-text">Aspirin</p>
+                      <p className="text-xs text-text-secondary">150 mg</p>
+                    </div>
+                    <span className="text-text-secondary">Salbutamol</span>
+                    <span className="text-text-secondary">2.5 mg neb</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-background rounded">
+                    <div>
+                      <p className="font-medium text-text">Nitro</p>
+                      <p className="text-xs text-text-secondary">0.4 mg</p>
+                    </div>
+                    <span className="text-text-secondary">Ondansetron</span>
+                    <span className="text-text-secondary">4 mg</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-text-secondary">Medication</span>
+                      <span className="text-text-secondary">Dose</span>
+                      <Button size="sm" variant="link" className="text-primary">Add</Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeTab === 'files' && (
+                <div className="text-sm text-text-secondary">
+                  <p>No files uploaded</p>
+                </div>
+              )}
             </div>
           </Card>
 
           {/* Live Location */}
-          {(session.status?.toLowerCase() === 'active' || 
-            session.status?.toLowerCase() === 'onboarded' || 
-            session.status?.toLowerCase() === 'in_transit') && (
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Navigation className="w-5 h-5 text-primary" />
-                Live Location
-              </h2>
-              <div className="space-y-4">
-                {/* Map Placeholder */}
-                <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden relative">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <Navigation className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-secondary">Live GPS tracking</p>
-                      <p className="text-xs text-secondary mt-1 font-mono">
-                        {Number(session.pickup_latitude || session.pickupLatitude).toFixed(6)}, {Number(session.pickup_longitude || session.pickupLongitude).toFixed(6)}
-                      </p>
-                    </div>
-                  </div>
-                  {/* TODO: Integrate actual map service (Google Maps, Mapbox, etc) */}
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <label className="text-secondary">Speed</label>
-                    <p className="font-semibold">-- km/h</p>
-                  </div>
-                  <div>
-                    <label className="text-secondary">ETA</label>
-                    <p className="font-semibold">-- min</p>
-                  </div>
-                  <div>
-                    <label className="text-secondary">Distance</label>
-                    <p className="font-semibold">-- km</p>
-                  </div>
-                  <div>
-                    <label className="text-secondary">Last Update</label>
-                    <p className="font-semibold text-xs">Just now</p>
-                  </div>
+          <Card className="p-6">
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              Live Location
+            </h2>
+            <p className="text-xs text-text-secondary mb-4">Device GPS & route</p>
+
+            {/* Map placeholder */}
+            <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded-xl overflow-hidden mb-4 relative">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center text-text-secondary">
+                  <Navigation className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">GPS tracking</p>
                 </div>
               </div>
-            </Card>
-          )}
+            </div>
 
-          {/* Treatment Notes */}
-          {(session.treatment_notes || session.treatmentNotes) && (
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                Treatment Notes
-              </h2>
-              <p className="text-sm whitespace-pre-wrap">
-                {session.treatment_notes || session.treatmentNotes}
-              </p>
-            </Card>
-          )}
+            {/* Location stats */}
+            <div className="grid grid-cols-3 gap-3 text-center text-sm">
+              <div>
+                <p className="text-text-secondary text-xs mb-1">Speed</p>
+                <p className="font-bold text-text">42 km/h</p>
+              </div>
+              <div>
+                <p className="text-text-secondary text-xs mb-1">Heading</p>
+                <p className="font-bold text-text">NE 45°</p>
+              </div>
+              <div>
+                <p className="text-text-secondary text-xs mb-1">Signal</p>
+                <p className="font-bold text-text">4/5</p>
+              </div>
+            </div>
+
+            <div className="mt-4 text-right">
+              <p className="text-xs text-text-secondary">ETA 08 min</p>
+            </div>
+          </Card>
         </div>
 
-        {/* Sidebar Column */}
-        <div className="space-y-6">
-          {/* Ambulance Info */}
-          {ambulance && (
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <AmbulanceIcon className="w-5 h-5 text-primary" />
-                Ambulance Details
-              </h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm text-secondary">Vehicle Number</label>
-                  <p className="font-semibold font-mono">
-                    {ambulance.registration_number || ambulance.vehicle_number || ambulance.ambulance_code}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm text-secondary">Type</label>
-                  <p className="font-semibold capitalize">
-                    {ambulance.vehicle_type || ambulance.vehicleType || 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm text-secondary">Organization</label>
-                  <p className="font-semibold">
-                    {ambulance.organization_name || session.organization_name || 'N/A'}
-                  </p>
-                  <p className="text-xs text-secondary">{ambulance.organization_code || session.organization_code || ''}</p>
-                </div>
-              </div>
-            </Card>
-          )}
-
-          {/* Timeline */}
+        {/* Third Row: Ambulance Controls + SOS Data */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Ambulance Controls */}
           <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
-              Session Timeline
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              Ambulance Controls
             </h2>
-            <div className="space-y-4">
-              {session.onboarded_at && (
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-gray-900 rounded-full mt-2"></div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">Patient Onboarded</p>
-                    <p className="text-xs text-secondary">
-                      {new Date(session.onboarded_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              )}
-              
-              {session.status === 'in_transit' && (
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full mt-2 animate-pulse"></div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">In Transit</p>
-                    <p className="text-xs text-secondary">Currently active</p>
-                  </div>
-                </div>
-              )}
-              
-              {session.offboarded_at && (
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-gray-900 rounded-full mt-2"></div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm">Patient Offboarded</p>
-                    <p className="text-xs text-secondary">
-                      {new Date(session.offboarded_at).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              )}
+            <p className="text-xs text-text-secondary mb-6">Switches & power systems</p>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {[
+                { key: 'mainPower', icon: Power, label: 'Main Power', color: 'green' },
+                { key: 'emergencyLights', icon: Lightbulb, label: 'Emergency Lights', color: 'yellow' },
+                { key: 'siren', icon: Volume2, label: 'Siren', color: 'red' },
+                { key: 'airConditioning', icon: Wind, label: 'Air Conditioning', color: 'blue' },
+                { key: 'oxygenSupply', icon: Heart, label: 'Oxygen Supply', color: 'green' },
+                { key: 'cabinCamera', icon: Camera, label: 'Cabin Camera', color: 'purple' },
+              ].map(({ key, icon: Icon, label, color }) => (
+                <motion.button
+                  key={key}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => toggleControl(key)}
+                  className={`p-4 rounded-xl border-2 transition-all ${
+                    controls[key]
+                      ? `bg-${color}-50 dark:bg-${color}-900/20 border-${color}-500`
+                      : 'bg-background border-border hover:border-border-hover'
+                  }`}
+                >
+                  <Icon className={`w-6 h-6 mb-2 mx-auto ${controls[key] ? `text-${color}-600 dark:text-${color}-400` : 'text-text-secondary'}`} />
+                  <p className={`text-xs font-medium text-center ${controls[key] ? 'text-text' : 'text-text-secondary'}`}>
+                    {label}
+                  </p>
+                  <p className="text-[10px] text-center mt-1 text-text-secondary">Manual</p>
+                </motion.button>
+              ))}
             </div>
           </Card>
 
-          {/* Attached Devices */}
-          {devices.length > 0 && (
-            <Card className="p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                Attached Devices
-              </h2>
-              <div className="space-y-3">
-                {devices.map((device) => (
-                  <div key={device.id} className="flex items-center justify-between p-3 bg-background-card rounded-xl">
-                    <div className="flex items-center gap-3">
-                      {device.device_type?.toLowerCase().includes('camera') ? (
-                        <Camera className="w-5 h-5 text-secondary" />
-                      ) : (
-                        <Activity className="w-5 h-5 text-secondary" />
-                      )}
-                      <div>
-                        <p className="font-medium text-sm capitalize">
-                          {device.device_name || device.deviceName || 'Unknown'}
-                        </p>
-                        <p className="text-xs text-secondary capitalize">
-                          {device.device_type || device.deviceType}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      device.status === 'active' 
-                        ? 'bg-gray-200 text-gray-900' 
-                        : 'bg-gray-100 text-gray-700'
+          {/* SOS Data */}
+          <Card className="p-6">
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              SOS Data
+            </h2>
+            <p className="text-xs text-text-secondary mb-6">System alerts & anomalies</p>
+
+            <div className="space-y-2">
+              {/* Table header */}
+              <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-text-secondary pb-2 border-b border-border">
+                <div>#</div>
+                <div>Time</div>
+                <div>Level</div>
+                <div className="col-span-2">Note</div>
+              </div>
+
+              {/* Table rows */}
+              {sosAlerts.map((alert) => (
+                <div 
+                  key={alert.id} 
+                  className="grid grid-cols-5 gap-2 text-xs py-2 hover:bg-background rounded transition-colors items-center"
+                >
+                  <div className="font-mono text-text">{alert.id}</div>
+                  <div className="text-text">{alert.time}</div>
+                  <div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                      alert.level === 'Critical' 
+                        ? 'bg-error/20 text-error'
+                        : alert.level === 'Warning'
+                        ? 'bg-warning/20 text-warning'
+                        : 'bg-info/20 text-info'
                     }`}>
-                      {device.status || 'Unknown'}
+                      {alert.level}
                     </span>
                   </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Assigned Staff */}
-          <Card className="p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              Assigned Staff
-            </h2>
-            {assignedUsers.length > 0 ? (
-              <div className="space-y-3">
-                {assignedUsers.map((user) => (
-                  <div key={user.id} className="flex items-center gap-3 p-3 bg-background-card rounded-xl">
-                    <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center">
-                      <User className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">
-                        {user.first_name || user.firstName} {user.last_name || user.lastName}
-                      </p>
-                      <p className="text-xs text-secondary capitalize">
-                        {(user.role || '').replace('_', ' ')}
-                      </p>
-                    </div>
+                  <div className="text-text">{alert.note}</div>
+                  <div className="text-right">
+                    <Button size="sm" variant="link" className="text-primary text-xs">
+                      {alert.action}
+                    </Button>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-secondary">No staff assigned yet</p>
-            )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 text-center">
+              <p className="text-xs text-text-secondary">All data is for demo only</p>
+            </div>
           </Card>
         </div>
       </div>
 
       {/* Chat and Video Call Panels */}
-      <ChatPanel 
-        sessionId={sessionId}
-        isOpen={showChat}
-        onClose={() => setShowChat(false)}
-      />
-      
-      <VideoCallPanel 
-        sessionId={sessionId}
-        isOpen={showVideoCall}
-        onClose={() => setShowVideoCall(false)}
-      />
+      {isActive && (
+        <>
+          <ChatPanel 
+            sessionId={sessionId}
+            isOpen={showChat}
+            onClose={() => setShowChat(false)}
+          />
+          
+          <VideoCallPanel 
+            sessionId={sessionId}
+            isOpen={showVideoCall}
+            onClose={() => setShowVideoCall(false)}
+          />
+        </>
+      )}
+
+      {/* Camera Modal */}
+      {selectedCamera && (
+        <CameraFeedModal
+          camera={selectedCamera}
+          onClose={() => setSelectedCamera(null)}
+        />
+      )}
     </div>
   );
 };
