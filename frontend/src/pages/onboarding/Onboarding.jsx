@@ -15,7 +15,7 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Table } from '../../components/ui/Table';
 import { Card } from '../../components/ui/Card';
-import { patientService, ambulanceService, organizationService } from '../../services';
+import { patientService, ambulanceService, organizationService, collaborationService } from '../../services';
 import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
 
@@ -24,6 +24,7 @@ export const Onboarding = () => {
   const [ambulances, setAmbulances] = useState([]);
   const [patients, setPatients] = useState([]);
   const [hospitals, setHospitals] = useState([]);
+  const [partneredHospitals, setPartneredHospitals] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [orgTypeFilter, setOrgTypeFilter] = useState('');
   const [selectedOrgId, setSelectedOrgId] = useState(null);
@@ -38,6 +39,15 @@ export const Onboarding = () => {
   const { toast } = useToast();
   const { user } = useAuthStore();
   const runWithLoader = useWithGlobalLoader();
+
+  // Determine if current context is hospital or fleet
+  const isHospitalContext = user?.role === 'superadmin' 
+    ? selectedOrgInfo?.type === 'hospital'
+    : user?.organizationType === 'hospital';
+  
+  const isFleetContext = user?.role === 'superadmin'
+    ? selectedOrgInfo?.type === 'fleet_owner'
+    : user?.organizationType === 'fleet_owner';
 
   useEffect(() => {
     fetchOrganizations();
@@ -54,10 +64,18 @@ export const Onboarding = () => {
           if (selectedOrgId) {
             await fetchAmbulances();
             await fetchPatients();
+            // Fetch partnered hospitals if fleet context
+            if (isFleetContext) {
+              await fetchPartneredHospitals();
+            }
           }
         } else {
           await fetchAmbulances();
           await fetchPatients();
+          // Fetch partnered hospitals if fleet context
+          if (isFleetContext) {
+            await fetchPartneredHospitals();
+          }
         }
       }, 'Loading ambulances...');
     };
@@ -65,7 +83,7 @@ export const Onboarding = () => {
     doFetch().catch((err) => {
       console.error('Error fetching data', err);
     });
-  }, [selectedOrgId, user]);
+  }, [selectedOrgId, user, isFleetContext]);
 
   const fetchOrganizations = async () => {
     try {
@@ -91,6 +109,25 @@ export const Onboarding = () => {
       setHospitals(raw);
     } catch (error) {
       console.error('Failed to fetch hospitals:', error);
+    }
+  };
+
+  const fetchPartneredHospitals = async () => {
+    try {
+      const resp = await collaborationService.getAll({ status: 'active' });
+      const partnerships = resp.data?.data?.collaborations || resp.data?.collaborations || resp.data || [];
+      
+      // Extract hospital IDs from partnerships
+      const hospitalIds = partnerships
+        .filter(p => p.hospital_id)
+        .map(p => p.hospital_id);
+      
+      // Filter hospitals to only show partnered ones
+      const partnered = hospitals.filter(h => hospitalIds.includes(h.id));
+      setPartneredHospitals(partnered);
+    } catch (error) {
+      console.error('Failed to fetch partnered hospitals:', error);
+      setPartneredHospitals([]);
     }
   };
 
@@ -176,7 +213,15 @@ export const Onboarding = () => {
   const handleOpenPatientModal = (ambulance) => {
     setSelectedAmbulance(ambulance);
     setSelectedPatient(null);
-    setDestinationHospitalId('');
+    
+    // Auto-set destination hospital for hospital context
+    if (isHospitalContext) {
+      const hospitalId = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
+      setDestinationHospitalId(hospitalId);
+    } else {
+      setDestinationHospitalId('');
+    }
+    
     setShowPatientModal(true);
   };
 
@@ -455,19 +500,39 @@ export const Onboarding = () => {
 
           <div>
             <label className="block text-sm font-medium mb-2">Destination Hospital *</label>
-            <Select
-              placeholder="Select destination hospital"
-              options={hospitals.map(h => ({
-                value: h.id,
-                label: `${h.name} - ${h.city || 'N/A'}, ${h.state || 'N/A'}`
-              }))}
-              value={destinationHospitalId ? {
-                value: destinationHospitalId,
-                label: hospitals.find(h => h.id === destinationHospitalId)?.name || ''
-              } : null}
-              onChange={(opt) => setDestinationHospitalId(opt?.value || '')}
-              classNamePrefix="react-select"
-            />
+            {isHospitalContext ? (
+              // Hospital context: destination is pre-set and read-only
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <p className="text-sm text-gray-900">
+                  {hospitals.find(h => h.id === destinationHospitalId)?.name || selectedOrgInfo?.name || 'Current Hospital'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Destination is automatically set to your hospital
+                </p>
+              </div>
+            ) : (
+              // Fleet context: allow selection from partnered hospitals
+              <>
+                <Select
+                  placeholder="Select destination hospital"
+                  options={partneredHospitals.map(h => ({
+                    value: h.id,
+                    label: `${h.name} - ${h.city || 'N/A'}, ${h.state || 'N/A'}`
+                  }))}
+                  value={destinationHospitalId ? {
+                    value: destinationHospitalId,
+                    label: partneredHospitals.find(h => h.id === destinationHospitalId)?.name || ''
+                  } : null}
+                  onChange={(opt) => setDestinationHospitalId(opt?.value || '')}
+                  classNamePrefix="react-select"
+                />
+                {partneredHospitals.length === 0 && (
+                  <p className="mt-2 text-sm text-yellow-600">
+                    No partnered hospitals available. Please establish partnerships first.
+                  </p>
+                )}
+              </>
+            )}
           </div>
         </div>
       </Modal>
