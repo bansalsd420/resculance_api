@@ -490,7 +490,10 @@ const Topbar = ({ toggleSidebar }) => {
                   )}
                 </div>
                 <div className="p-2 md:p-3 border-t border-border text-center">
-                  <button className="text-xs text-primary hover:text-primary-hover font-medium">
+                  <button
+                    onClick={() => { navigate('/notifications'); setShowNotifications(false); }}
+                    className="text-xs text-primary hover:text-primary-hover font-medium"
+                  >
                     View all notifications
                   </button>
                 </div>

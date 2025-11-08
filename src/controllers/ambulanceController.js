@@ -56,14 +56,27 @@ class AmbulanceController {
       const { isMedicalStaff } = require('../config/permissions');
 
       // Medical staff (doctors/paramedics) can only see ambulances assigned to them
-      if (isMedicalStaff(req.user.role)) {
-        const ambulances = await AmbulanceModel.findMappedToUser(req.user.id);
+      // except when explicitly requesting the partnered view (they should be able to
+      // view partnered ambulances list too). If partnered=true is requested, fall
+      // through to partnered handling below; otherwise return only mapped ambulances.
+      if (isMedicalStaff(req.user.role) && req.query.partnered !== 'true') {
+        // Medical staff should see only ambulances assigned to them.
+        // However, when they filter by status (tabs like 'available', 'inactive'),
+        // apply that status filter server-side so the tab contents are accurate.
+        const mapped = await AmbulanceModel.findMappedToUser(req.user.id);
+        let ambulances = mapped || [];
+
+        if (req.query.status) {
+          ambulances = ambulances.filter(a => String(a.status) === String(req.query.status));
+        }
+
+        const total = ambulances.length;
         return res.json({
           success: true,
           data: {
             ambulances,
             pagination: {
-              total: ambulances.length,
+              total,
               limit: parseInt(limit),
               offset: 0,
               hasMore: false

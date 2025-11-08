@@ -33,12 +33,34 @@ class CommunicationModel {
       [sessionId, limit]
     );
     
-    // Parse JSON fields
-    return rows.map(row => ({
-      ...row,
-      metadata: row.metadata ? JSON.parse(row.metadata) : null,
-      read_by: row.read_by ? JSON.parse(row.read_by) : []
-    }));
+    // Parse JSON fields defensively (malformed JSON should not crash the request)
+    return rows.map(row => {
+      let metadata = null;
+      let readBy = [];
+      if (row.metadata) {
+        try {
+          metadata = JSON.parse(row.metadata);
+        } catch (e) {
+          console.warn('Warning: malformed metadata JSON for communication id', row.id);
+          metadata = null;
+        }
+      }
+
+      if (row.read_by) {
+        try {
+          readBy = JSON.parse(row.read_by);
+        } catch (e) {
+          console.warn('Warning: malformed read_by JSON for communication id', row.id);
+          readBy = [];
+        }
+      }
+
+      return {
+        ...row,
+        metadata,
+        read_by: readBy
+      };
+    });
   }
 
   // Mark message as read by a user

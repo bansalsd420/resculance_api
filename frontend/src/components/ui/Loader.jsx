@@ -14,9 +14,10 @@ export const Loader = () => {
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white/95 rounded-lg p-6 flex flex-col items-center gap-4 shadow-lg min-w-[220px]">
+          {/* Use theme-aware colors so text is readable in dark mode */}
+          <div className="rounded-lg p-6 flex flex-col items-center gap-4 shadow-lg min-w-[220px] bg-white/95 dark:bg-slate-800/95">
             <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            <div className="text-sm text-text text-center">
+            <div className="text-sm text-center text-gray-800 dark:text-gray-100">
               {loadingMessage || 'Loading...'}
             </div>
           </div>

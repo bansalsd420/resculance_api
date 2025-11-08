@@ -51,6 +51,10 @@ class PatientController {
         organizationId = req.user.organizationId;
       }
 
+      if (!req.user || !req.user.id) {
+        return next(new AppError('Authentication required to create patient', 401));
+      }
+
       const patientId = await PatientModel.create({
         organizationId,
         patientCode,
@@ -68,7 +72,7 @@ class PatientController {
         medicalHistory,
         allergies,
         currentMedications,
-        createdBy: req.user && req.user.id ? req.user.id : null
+        createdBy: req.user.id
       });
 
       res.status(201).json({

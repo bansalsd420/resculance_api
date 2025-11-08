@@ -759,14 +759,20 @@ export const Ambulances = () => {
                 Approvals
               </button>
             )}
-            <button
-              onClick={() => setActiveTab('partnered')}
-              className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
-                activeTab === 'partnered' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
-              }`}
-            >
-              Partnered
-            </button>
+            {(
+              hasPermission(user?.role, PERMISSIONS.VIEW_PARTNERED_AMBULANCES) ||
+              (user?.role && (user.role.toString().toLowerCase().includes('doctor') || user.role.toString().toLowerCase().includes('paramedic'))) ||
+              user?.organizationType === 'hospital'
+            ) && (
+              <button
+                onClick={() => setActiveTab('partnered')}
+                className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
+                  activeTab === 'partnered' ? 'bg-primary text-white shadow-sm' : 'bg-background-card text-text-secondary hover:bg-background'
+                }`}
+              >
+                Partnered
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('available')}
               className={`px-4 py-2 rounded-2xl text-sm font-medium transition-all ${
@@ -905,6 +911,16 @@ export const Ambulances = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {(() => {
+                if (!filteredAmbulances || filteredAmbulances.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={columns.length} className="px-6 py-8 text-center text-sm text-text-secondary">
+                        No partnered ambulances found.
+                      </td>
+                    </tr>
+                  );
+                }
+
                 const groups = new Map();
                 filteredAmbulances.forEach((a) => {
                   const key = a.organization_id || 'unknown';
@@ -1186,141 +1202,98 @@ export const Ambulances = () => {
               <p className="text-sm text-yellow-800">This ambulance is currently active for <strong>{assignmentAmbulance.current_hospital_name || 'another hospital'}</strong> and cannot be assigned by your organization until it becomes available.</p>
             </div>
           )}
-          {/* Currently Assigned Users */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Currently Assigned</h3>
-            {assignedUsers.length === 0 ? (
-              <p className="text-secondary text-sm">No staff currently assigned to this ambulance.</p>
-            ) : (
-              <div className="space-y-2">
-                {assignedUsers.map((assignedUser) => (
-                  <div key={assignedUser.id} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                        {assignedUser.firstName?.[0]}{assignedUser.lastName?.[0]}
-                      </div>
-                      <div>
-                        <p className="font-medium">{assignedUser.firstName} {assignedUser.lastName}</p>
-                        <p className="text-sm text-secondary">{assignedUser.role}</p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      loading={unassigningUserId === assignedUser.id}
-                      onClick={() => handleUnassignUser(assignedUser.id)}
-                    >
-                      <UserMinus className="w-4 h-4 mr-1" />
-                      Unassign
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Available Users - split into Doctors and Paramedics for clarity */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Available Staff</h3>
-            {availableUsers.length === 0 ? (
-              <p className="text-secondary text-sm">No staff available for assignment.</p>
-            ) : (
-              <div className="space-y-4 max-h-60 overflow-y-auto">
-                {/* Doctors */}
-                {availableUsers.filter(u => (u.role || '').toLowerCase() === 'doctor').length > 0 && (
-                  <div>
-                    <h4 className="text-md font-semibold mb-2">Doctors</h4>
-                    <div className="space-y-2">
-                      {availableUsers.filter(u => (u.role || '').toLowerCase() === 'doctor').map((availableUser) => (
-                        <div key={`doc-${availableUser.id}`} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                              {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Assigned staff table */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Currently Assigned</h3>
+              {assignedUsers.length === 0 ? (
+                <p className="text-secondary text-sm">No staff currently assigned to this ambulance.</p>
+              ) : (
+                <div className="overflow-auto bg-background-card rounded-lg p-2">
+                  <table className="w-full table-auto">
+                    <thead>
+                      <tr className="text-left text-sm text-secondary">
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Role</th>
+                        <th className="px-3 py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assignedUsers.map(u => (
+                        <tr key={u.id} className="border-t border-gray-200 dark:border-slate-700">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                                {u.firstName?.[0]}{u.lastName?.[0]}
+                              </div>
+                              <div>
+                                <div className="font-medium">{u.firstName} {u.lastName}</div>
+                                <div className="text-sm text-secondary hidden md:block">{u.email}</div>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
-                              <p className="text-sm text-secondary">{availableUser.role}</p>
+                          </td>
+                          <td className="px-3 py-2 text-sm">{u.role || u.roleKey}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="danger" loading={unassigningUserId === u.id} onClick={() => handleUnassignUser(u.id)}>
+                                <UserMinus className="w-4 h-4 mr-1" />
+                                Unassign
+                              </Button>
                             </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="success"
-                            loading={assigningUserId === availableUser.id}
-                            onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
-                            disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
-                          >
-                            <UserPlus className="w-4 h-4 mr-1" />
-                            Assign
-                          </Button>
-                        </div>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  </div>
-                )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
-                {/* Paramedics */}
-                {availableUsers.filter(u => (u.role || '').toLowerCase() === 'paramedic').length > 0 && (
-                  <div>
-                    <h4 className="text-md font-semibold mb-2">Paramedics</h4>
-                    <div className="space-y-2">
-                      {availableUsers.filter(u => (u.role || '').toLowerCase() === 'paramedic').map((availableUser) => (
-                        <div key={`para-${availableUser.id}`} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                              {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
+            {/* Available staff table */}
+            <div>
+              <h3 className="text-lg font-semibold mb-3">Available Staff</h3>
+              {availableUsers.length === 0 ? (
+                <p className="text-secondary text-sm">No staff available for assignment.</p>
+              ) : (
+                <div className="overflow-auto bg-background-card rounded-lg p-2 max-h-[420px]">
+                  <table className="w-full table-auto">
+                    <thead>
+                      <tr className="text-left text-sm text-secondary">
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Role</th>
+                        <th className="px-3 py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {availableUsers.map(u => (
+                        <tr key={u.id} className="border-t border-gray-200 dark:border-slate-700">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                                {u.firstName?.[0]}{u.lastName?.[0]}
+                              </div>
+                              <div>
+                                <div className="font-medium">{u.firstName} {u.lastName}</div>
+                                <div className="text-sm text-secondary hidden md:block">{u.role}</div>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
-                              <p className="text-sm text-secondary">{availableUser.role}</p>
+                          </td>
+                          <td className="px-3 py-2 text-sm">{u.role}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="success" loading={assigningUserId === u.id} onClick={() => handleAssignUser(u.id, u.role)} disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}>
+                                <UserPlus className="w-4 h-4 mr-1" />
+                                Assign
+                              </Button>
                             </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="success"
-                            onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
-                            disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
-                          >
-                            <UserPlus className="w-4 h-4 mr-1" />
-                            Assign
-                          </Button>
-                        </div>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Others */}
-                {availableUsers.filter(u => !['doctor','paramedic'].includes((u.role||'').toLowerCase())).length > 0 && (
-                  <div>
-                    <h4 className="text-md font-semibold mb-2">Other Staff</h4>
-                    <div className="space-y-2">
-                      {availableUsers.filter(u => !['doctor','paramedic'].includes((u.role||'').toLowerCase())).map((availableUser) => (
-                        <div key={`oth-${availableUser.id}`} className="flex items-center justify-between p-3 bg-background-card rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                              {availableUser.firstName?.[0]}{availableUser.lastName?.[0]}
-                            </div>
-                            <div>
-                              <p className="font-medium">{availableUser.firstName} {availableUser.lastName}</p>
-                              <p className="text-sm text-secondary">{availableUser.role}</p>
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="success"
-                            onClick={() => handleAssignUser(availableUser.id, availableUser.role)}
-                            disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
-                          >
-                            <UserPlus className="w-4 h-4 mr-1" />
-                            Assign
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </Modal>

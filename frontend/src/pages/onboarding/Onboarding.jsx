@@ -32,14 +32,17 @@ import { CameraFeedModal } from './CameraFeedModal';
 import { useAuthStore } from '../../store/authStore';
 
 const sessionSchema = yup.object({
+  // Only require patient, ambulance and destination hospital per UX
   patientId: yup.number().required('Patient is required'),
   ambulanceId: yup.number().required('Ambulance is required'),
-  pickupLocation: yup.string().required('Pickup location is required'),
-  pickupLatitude: yup.number().required('Pickup latitude is required'),
-  pickupLongitude: yup.number().required('Pickup longitude is required'),
   destinationHospitalId: yup.number().required('Destination hospital is required'),
-  chiefComplaint: yup.string().required('Chief complaint is required'),
-  initialAssessment: yup.string(),
+  // Make pickup/location fields optional and accept null/empty values
+  pickupLocation: yup.string().nullable().notRequired(),
+  pickupLatitude: yup.number().nullable().notRequired(),
+  pickupLongitude: yup.number().nullable().notRequired(),
+  // Relax chief complaint and initial assessment
+  chiefComplaint: yup.string().nullable().notRequired(),
+  initialAssessment: yup.string().nullable().notRequired(),
 });
 
 export const Onboarding = () => {
@@ -665,7 +668,7 @@ export const Onboarding = () => {
               }}
             />
             {errors.patientId && (
-              <p className="mt-1 text-sm text-gray-900">{errors.patientId.message}</p>
+              <p className="mt-1 text-sm text-red-500">{errors.patientId.message}</p>
             )}
           </div>
 
@@ -692,7 +695,7 @@ export const Onboarding = () => {
               }}
             />
             {errors.ambulanceId && (
-              <p className="mt-1 text-sm text-gray-900">{errors.ambulanceId.message}</p>
+              <p className="mt-1 text-sm text-red-500">{errors.ambulanceId.message}</p>
             )}
           </div>
 
@@ -743,7 +746,7 @@ export const Onboarding = () => {
               }}
             />
             {errors.destinationHospitalId && (
-              <p className="mt-1 text-sm text-gray-900">{errors.destinationHospitalId.message}</p>
+              <p className="mt-1 text-sm text-red-500">{errors.destinationHospitalId.message}</p>
             )}
           </div>
 
@@ -759,11 +762,11 @@ export const Onboarding = () => {
             <textarea
               {...register('initialAssessment')}
               rows="3"
-              className="w-full px-4 py-2 border border-border rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
+              className="input w-full"
               placeholder="Enter initial patient assessment..."
             />
             {errors.initialAssessment && (
-              <p className="mt-1 text-sm text-gray-900">{errors.initialAssessment.message}</p>
+              <p className="mt-1 text-sm text-red-500">{errors.initialAssessment.message}</p>
             )}
           </div>
 

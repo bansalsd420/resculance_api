@@ -7,6 +7,8 @@ export const useAuthStore = create(
     (set, get) => ({
       user: null,
       accessToken: null,
+      // legacy alias used by other components
+      token: null,
       refreshToken: null,
       isAuthenticated: false,
       loading: false,
@@ -15,39 +17,37 @@ export const useAuthStore = create(
       initialize: async () => {
         const token = localStorage.getItem('accessToken');
         const storedUser = get().user;
-        
-        if (token && !storedUser) {
+
+        if (token) {
+          // Always attempt to refresh the authoritative profile from the server when we have a token.
+          // This ensures fields like organizationId/organizationType createdAt etc. are present
+          // even if the persisted user shape is older or incomplete.
           try {
             set({ loading: true });
             const response = await authService.getProfile();
-            // backend: { success: true, data: { user } }
             const user = response.data?.data?.user || response.data?.user || null;
             set({
               user,
               accessToken: token,
+              token: token,
               refreshToken: localStorage.getItem('refreshToken'),
               isAuthenticated: !!user,
               loading: false,
             });
           } catch (error) {
-            console.error('Failed to initialize auth:', error);
+            console.error('Failed to initialize auth (profile refresh):', error);
+            // If profile refresh fails, clear local tokens and stored user to force a re-login
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             set({
               user: null,
               accessToken: null,
+              token: null,
               refreshToken: null,
               isAuthenticated: false,
               loading: false,
             });
           }
-        } else if (token && storedUser) {
-          // Token and user exist, just ensure auth state is correct
-          set({
-            accessToken: token,
-            refreshToken: localStorage.getItem('refreshToken'),
-            isAuthenticated: true,
-          });
         }
       },
 
@@ -67,12 +67,23 @@ export const useAuthStore = create(
           set({
             user,
             accessToken,
+            token: accessToken,
             refreshToken,
             isAuthenticated: true,
             loading: false,
           });
           
           console.log('AuthStore: State updated, isAuthenticated:', true);
+          // Refresh full profile from server to ensure consistent shape (organizationId, createdAt etc.)
+          try {
+            const profileResp = await authService.getProfile();
+            const profileUser = profileResp.data?.data?.user || profileResp.data?.user || null;
+            if (profileUser) set({ user: profileUser });
+          } catch (e) {
+            // non-fatal: keep lightweight login user if profile fetch fails
+            console.warn('Failed to fetch profile after login', e);
+          }
+
           return response;
         } catch (error) {
           console.error('AuthStore: Login error:', error);
@@ -129,6 +140,7 @@ export const useAuthStore = create(
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
+        token: state.token,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),

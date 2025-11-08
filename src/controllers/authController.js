@@ -72,7 +72,7 @@ class AuthController {
 
       // Generate tokens
       const accessToken = jwt.sign(
-        { id: user.id, role: user.role, organizationId: user.organization_id },
+        { id: user.id, role: user.role, organizationId: user.organization_id, firstName: user.first_name, lastName: user.last_name, email: user.email },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRE || '7d' }
       );
@@ -137,7 +137,7 @@ class AuthController {
 
       // Generate new access token
       const accessToken = jwt.sign(
-        { id: user.id, role: user.role, organizationId: user.organization_id },
+        { id: user.id, role: user.role, organizationId: user.organization_id, firstName: user.first_name, lastName: user.last_name, email: user.email },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRE || '7d' }
       );
@@ -158,6 +158,34 @@ class AuthController {
     }
   }
 
+  static async forgotPassword(req, res, next) {
+    try {
+      const { email } = req.body;
+      if (!email) return next(new AppError('Email is required', 400));
+
+      const user = await UserModel.findByEmail(email);
+      if (!user) {
+        // For security don't reveal whether email exists; return success
+        console.warn(`Forgot password requested for unknown email: ${email}`);
+        return res.json({ success: true, message: 'If an account exists with that email, you will receive a reset link.' });
+      }
+
+      // Generate a short-lived JWT as a reset token (dev-friendly approach)
+      const resetToken = jwt.sign(
+        { id: user.id },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      // In production you would persist the token and send an email. For now, log it for dev and return success.
+      console.log(`Password reset token for user ${user.email}: ${resetToken}`);
+
+      res.json({ success: true, message: 'If an account exists with that email, you will receive a reset link.' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getProfile(req, res, next) {
     try {
       const user = await UserModel.findById(req.user.id);
@@ -168,9 +196,29 @@ class AuthController {
 
       delete user.password;
 
+      // Normalize DB row (snake_case) to frontend-friendly camelCase shape
+      const normalized = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        organizationId: user.organization_id,
+        organizationName: user.organization_name,
+        organizationCode: user.organization_code,
+        organizationType: user.organization_type,
+        createdAt: user.created_at,
+        lastLogin: user.last_login,
+        licenseNumber: user.license_number,
+        specialization: user.specialization
+      };
+
       res.json({
         success: true,
-        data: { user }
+        data: { user: normalized }
       });
     } catch (error) {
       next(error);

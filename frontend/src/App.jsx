@@ -17,6 +17,7 @@ import { OnboardingDetail } from './pages/onboarding/OnboardingDetail';
 import { Collaborations } from './pages/collaborations/Collaborations';
 import Activity from './pages/activity/Activity';
 import { Settings } from './pages/settings/Settings';
+import Notifications from './pages/notifications/Notifications';
 import { useAuthStore } from './store/authStore';
 import { PERMISSIONS } from './utils/permissions';
 
@@ -144,6 +145,17 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <Settings />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Notifications />
                 </MainLayout>
               </ProtectedRoute>
             }
