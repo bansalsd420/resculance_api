@@ -159,6 +159,7 @@ export const Organizations = () => {
           </div>
           <div>
             <p className="font-medium">{row.name}</p>
+            {row.code && <p className="text-xs text-secondary">Code: {row.code}</p>}
           </div>
         </div>
       ),
@@ -333,6 +334,7 @@ export const Organizations = () => {
                       value={value}
                       onChange={(opt) => field.onChange(opt ? opt.value : '')}
                       placeholder="Select Type"
+                      isDisabled={!!selectedOrg}
                     />
                   );
                 }}

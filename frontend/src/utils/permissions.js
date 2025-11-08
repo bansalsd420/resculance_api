@@ -62,6 +62,8 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.APPROVE_USER,
     PERMISSIONS.VIEW_OWN_AMBULANCES,
     PERMISSIONS.VIEW_PARTNERED_AMBULANCES,
+    PERMISSIONS.CREATE_AMBULANCE,
+    PERMISSIONS.UPDATE_AMBULANCE,
     PERMISSIONS.ASSIGN_STAFF,
     PERMISSIONS.VIEW_PATIENTS,
     PERMISSIONS.CREATE_PATIENT,
@@ -153,7 +155,30 @@ const ROLE_PERMISSIONS = {
  */
 export const hasPermission = (role, permission) => {
   if (!role) return false;
-  const permissions = ROLE_PERMISSIONS[role] || [];
+  
+  // Normalize the role to handle both generic (ADMIN, DOCTOR) and specific (hospital_admin, fleet_admin) roles
+  const normalizedRole = (role || '').toString().toLowerCase().trim();
+  
+  // Try direct match first
+  let permissions = ROLE_PERMISSIONS[normalizedRole] || [];
+  
+  // If no direct match and role is generic, try inferring from context
+  // For generic roles like 'admin', 'doctor', etc., we'll use hospital variant as default
+  if (permissions.length === 0) {
+    if (normalizedRole === 'admin') {
+      // Admin gets union of hospital_admin and fleet_admin permissions
+      const hospitalAdminPerms = ROLE_PERMISSIONS['hospital_admin'] || [];
+      const fleetAdminPerms = ROLE_PERMISSIONS['fleet_admin'] || [];
+      permissions = [...new Set([...hospitalAdminPerms, ...fleetAdminPerms])];
+    } else if (normalizedRole === 'doctor') {
+      permissions = ROLE_PERMISSIONS['hospital_doctor'] || [];
+    } else if (normalizedRole === 'paramedic') {
+      permissions = ROLE_PERMISSIONS['hospital_paramedic'] || [];
+    } else if (normalizedRole === 'driver') {
+      permissions = ROLE_PERMISSIONS['fleet_driver'] || [];
+    }
+  }
+  
   return permissions.includes(permission);
 };
 

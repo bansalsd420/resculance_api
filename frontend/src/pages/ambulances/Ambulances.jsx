@@ -455,12 +455,15 @@ export const Ambulances = () => {
       });
       const allUsers = usersResponse.data?.data?.users || usersResponse.data?.users || usersResponse.data || [];
       
-      // Filter for doctors, paramedics, and drivers only.
+      // Filter for doctors, paramedics, and drivers only, AND must have status 'active' (approved users only).
       // Roles in the backend may be namespaced (e.g. 'hospital_doctor' or 'fleet_doctor'),
       // so match by substring to include those variants.
       const staffUsers = allUsers.filter(u => {
         const r = (u.role || '').toString().toLowerCase();
-        return r.includes('doctor') || r.includes('paramedic') || r.includes('driver');
+        const s = (u.status || '').toString().toLowerCase();
+        const isStaff = r.includes('doctor') || r.includes('paramedic') || r.includes('driver');
+        const isApproved = s === 'active';
+        return isStaff && isApproved;
       }).map(u => ({
         ...u,
         // normalize role label for display (e.g. 'fleet_doctor' -> 'Doctor')
@@ -760,6 +763,7 @@ export const Ambulances = () => {
               </button>
             )}
             {(
+              user?.role === 'superadmin' ||
               hasPermission(user?.role, PERMISSIONS.VIEW_PARTNERED_AMBULANCES) ||
               (user?.role && (user.role.toString().toLowerCase().includes('doctor') || user.role.toString().toLowerCase().includes('paramedic'))) ||
               user?.organizationType === 'hospital'

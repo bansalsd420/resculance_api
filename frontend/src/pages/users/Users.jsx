@@ -853,7 +853,12 @@ export const Users = () => {
                   opts.push({ value: 'SUPERADMIN', label: 'Superadmin' });
                 }
 
-                if (orgTypeFilter && selectedOrgId) {
+                // For superadmin: show role options only when org type and org are selected
+                // For non-superadmin users (org admins): always show role options (they're creating users for their own org)
+                const shouldShowOrgRoles = (user?.role === 'superadmin' && orgTypeFilter && selectedOrgId) || 
+                                           (user?.role !== 'superadmin');
+
+                if (shouldShowOrgRoles) {
                   opts.push({ value: 'DOCTOR', label: 'Doctor' });
                   opts.push({ value: 'PARAMEDIC', label: 'Paramedic' });
                   opts.push({ value: 'DRIVER', label: 'Driver' });
