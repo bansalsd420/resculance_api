@@ -149,12 +149,18 @@ export const Onboarding = () => {
       const ambulancesWithSessions = await Promise.all(
         ambulancesData.map(async (amb) => {
           try {
-            const sessionsResp = await patientService.getAllSessions({ ambulanceId: amb.id, status: 'active' });
-            const sessions = sessionsResp.data?.data?.sessions || sessionsResp.data?.sessions || [];
+            // Check for onboarded, in_transit, or active sessions
+            const sessionsResp = await patientService.getAllSessions({ 
+              ambulanceId: amb.id
+            });
+            const allSessions = sessionsResp.data?.data?.sessions || sessionsResp.data?.sessions || [];
+            const activeSessions = allSessions.filter(s => 
+              ['active', 'onboarded', 'in_transit'].includes(s.status?.toLowerCase())
+            );
             return {
               ...amb,
-              activeSession: sessions.length > 0 ? sessions[0] : null,
-              hasActiveOnboarding: sessions.length > 0
+              activeSession: activeSessions.length > 0 ? activeSessions[0] : null,
+              hasActiveOnboarding: activeSessions.length > 0
             };
           } catch (err) {
             console.error(`Failed to fetch sessions for ambulance ${amb.id}`, err);
@@ -192,7 +198,9 @@ export const Onboarding = () => {
           try {
             const sessionsResp = await patientService.getSessions(patient.id);
             const sessions = sessionsResp.data?.data?.sessions || sessionsResp.data?.sessions || [];
-            const hasActiveSessions = sessions.some(s => s.status === 'active');
+            const hasActiveSessions = sessions.some(s => 
+              ['active', 'onboarded', 'in_transit'].includes(s.status?.toLowerCase())
+            );
             return {
               ...patient,
               isOnboarded: hasActiveSessions

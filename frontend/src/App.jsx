@@ -13,7 +13,7 @@ import { Users } from './pages/users/Users';
 import { Ambulances } from './pages/ambulances/Ambulances';
 import { Patients } from './pages/patients/Patients';
 import { Onboarding } from './pages/onboarding/Onboarding';
-import { OnboardingDetail } from './pages/onboarding/OnboardingDetail';
+import OnboardingDetail from './pages/onboarding/OnboardingDetailNew';
 import { Collaborations } from './pages/collaborations/Collaborations';
 import Activity from './pages/activity/Activity';
 import { Settings } from './pages/settings/Settings';

@@ -228,14 +228,14 @@ class PatientController {
         ambulanceId,
         organizationId: req.user.organizationId, // The hospital initiating the trip
         destinationHospitalId: destinationHospitalId || req.user.organizationId,
-        pickupLocation,
-        pickupLatitude,
-        pickupLongitude,
-        destinationLocation,
-        destinationLatitude,
-        destinationLongitude,
-        chiefComplaint,
-        initialAssessment,
+        pickupLocation: pickupLocation || null,
+        pickupLatitude: pickupLatitude || null,
+        pickupLongitude: pickupLongitude || null,
+        destinationLocation: destinationLocation || null,
+        destinationLatitude: destinationLatitude || null,
+        destinationLongitude: destinationLongitude || null,
+        chiefComplaint: chiefComplaint || null,
+        initialAssessment: initialAssessment || null,
         onboardedBy: req.user.id,
         status: 'onboarded'
       });
@@ -291,15 +291,18 @@ class PatientController {
 
       await PatientSessionModel.offboard(sessionId, req.user.id, treatmentNotes);
 
-      // Update ambulance status back to active
+      // Update ambulance status back to available (so it can be used again)
       await AmbulanceModel.update(session.ambulance_id, {
-        status: 'active',
+        status: 'available',
         current_hospital_id: null
       });
 
       // Emit socket event
       const io = req.app.get('io');
-      io.to(`ambulance_${session.ambulance_id}`).emit('patient_offboarded', { sessionId });
+      if (io) {
+        io.to(`ambulance_${session.ambulance_id}`).emit('patient_offboarded', { sessionId });
+        io.to(`session_${sessionId}`).emit('session_offboarded', { sessionId });
+      }
 
       res.json({
         success: true,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Video, VideoOff, Mic, MicOff, PhoneOff, Loader, AlertCircle } from 'lucide-react';
+import { Video, VideoOff, Mic, MicOff, PhoneOff, Loader, AlertCircle, X, Maximize2, Minimize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import socketService from '../services/socketService.js';
 import { useAuthStore } from '../store/authStore';
@@ -297,6 +297,27 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
         className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center"
       >
         <div className="w-full h-full max-w-7xl mx-auto p-4 flex flex-col">
+          {/* Header with Close Button */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-white">
+              Video Call - Session {sessionId}
+            </h2>
+            <button
+              onClick={() => {
+                if (callState === 'connected' || callState === 'calling' || callState === 'connecting') {
+                  endCall();
+                } else {
+                  cleanup();
+                  onClose();
+                }
+              }}
+              className="p-2 hover:bg-gray-800 rounded-lg transition-colors text-white"
+              title="Close"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
           {/* Status */}
           <div className="text-white text-center mb-4">
             {callState === 'calling' && <p className="text-lg">Initiating call...</p>}

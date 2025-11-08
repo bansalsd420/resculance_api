@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, Maximize2, AlertCircle, Wifi, WifiOff } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { ambulanceService } from '../../services';
+import cameraService from '../../services/cameraService';
 import { useToast } from '../../hooks/useToast';
 
 export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
@@ -32,29 +33,32 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
       
       setDevices(cameraDevices);
       
-      // Generate video URLs for 808gps devices
+      // Generate video URLs using new 808GPS authentication flow
       const urls = {};
       const statuses = {};
       
-      cameraDevices.forEach((device) => {
-        if (device.device_api && device.device_id) {
-          // Check if device has authenticated session
-          // For 808gps format: http://205.147.109.152/808gps/open/player/video.html?lang=en&devIdno=100000000001&jsession=xxx
-          const baseUrl = device.device_api;
-          const deviceId = device.device_id;
-          
-          // If device has jsession stored, use it; otherwise will need to authenticate
-          if (device.jsession) {
-            urls[device.id] = `${baseUrl}/808gps/open/player/video.html?lang=en&devIdno=${deviceId}&jsession=${device.jsession}`;
-            statuses[device.id] = 'connected';
-          } else {
-            // Need to authenticate first
-            statuses[device.id] = 'needs_auth';
+      for (const device of cameraDevices) {
+        try {
+          // Check if device has required credentials
+          if (!device.device_id || !device.device_username || !device.device_password) {
+            statuses[device.id] = 'not_configured';
+            continue;
           }
-        } else {
-          statuses[device.id] = 'not_configured';
+
+          // Get authenticated stream URL using camera service
+          const streamUrl = await cameraService.getCameraStreamUrl({
+            deviceId: device.device_id,
+            username: device.device_username,
+            password: device.device_password,
+          });
+
+          urls[device.id] = streamUrl;
+          statuses[device.id] = 'connected';
+        } catch (error) {
+          console.error(`Failed to get stream for device ${device.id}:`, error);
+          statuses[device.id] = 'auth_failed';
         }
-      });
+      }
       
       setVideoUrls(urls);
       setDeviceStatus(statuses);
@@ -69,21 +73,27 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
 
   const handleAuthenticateDevice = async (device) => {
     try {
-      // Call backend to authenticate with 808gps API
-      const response = await ambulanceService.authenticateDevice(device.id);
-      const jsession = response.data?.jsession;
-      
-      if (jsession) {
-        setVideoUrls({
-          ...videoUrls,
-          [device.id]: `${device.device_api}/808gps/open/player/video.html?lang=en&devIdno=${device.device_id}&jsession=${jsession}`,
-        });
-        setDeviceStatus({
-          ...deviceStatus,
-          [device.id]: 'connected',
-        });
-        toast.success('Camera authenticated successfully');
+      if (!device.device_id || !device.device_username || !device.device_password) {
+        toast.error('Device credentials not configured');
+        return;
       }
+
+      // Get authenticated stream URL using camera service
+      const streamUrl = await cameraService.getCameraStreamUrl({
+        deviceId: device.device_id,
+        username: device.device_username,
+        password: device.device_password,
+      });
+
+      setVideoUrls({
+        ...videoUrls,
+        [device.id]: streamUrl,
+      });
+      setDeviceStatus({
+        ...deviceStatus,
+        [device.id]: 'connected',
+      });
+      toast.success('Camera authenticated successfully');
     } catch (error) {
       console.error('Failed to authenticate device:', error);
       toast.error('Failed to authenticate camera');
@@ -124,6 +134,13 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-500" />
             <span className="text-xs text-amber-600">Auth Required</span>
+          </div>
+        );
+      case 'auth_failed':
+        return (
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-500" />
+            <span className="text-xs text-red-600">Auth Failed</span>
           </div>
         );
       case 'not_configured':

@@ -112,7 +112,7 @@ class PatientSessionModel {
   static async findActiveByAmbulance(ambulanceId) {
     const [rows] = await db.query(
       `SELECT ps.* FROM patient_sessions ps
-       WHERE ps.ambulance_id = ? AND ps.status IN ('onboarded', 'in_transit')
+       WHERE ps.ambulance_id = ? AND ps.status IN ('active', 'onboarded', 'in_transit')
        ORDER BY ps.onboarded_at DESC
        LIMIT 1`,
       [ambulanceId]
@@ -123,7 +123,7 @@ class PatientSessionModel {
   static async findActiveByPatient(patientId) {
     const [rows] = await db.query(
       `SELECT ps.* FROM patient_sessions ps
-       WHERE ps.patient_id = ? AND ps.status IN ('onboarded', 'in_transit')
+       WHERE ps.patient_id = ? AND ps.status IN ('active', 'onboarded', 'in_transit')
        ORDER BY ps.onboarded_at DESC
        LIMIT 1`,
       [patientId]

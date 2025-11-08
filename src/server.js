@@ -27,9 +27,24 @@ if (missingEnvVars.length > 0) {
 
 const app = express();
 const server = http.createServer(app);
+
+// Normalize socket CORS origins: allow comma-separated lists in env vars and trim spaces
+const socketAllowedOrigins = (process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+console.log('🔒 Socket allowed origins:', socketAllowedOrigins);
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (socketAllowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} not allowed by CORS`), false);
+    },
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -41,16 +56,22 @@ app.use(helmet({
   contentSecurityPolicy: process.env.NODE_ENV === 'production'
 }));
 
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',');
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+console.log('🔒 Express allowed origins:', allowedOrigins);
+
 app.use(cors({
   origin: function(origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      callback(null, true);
+      return callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      return callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true
