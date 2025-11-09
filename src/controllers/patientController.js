@@ -6,6 +6,7 @@ const CommunicationModel = require('../models/Communication');
 const { AppError } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const NotificationService = require('../services/notificationService');
+const db = require('../config/database');
 
 // Helper function to map snake_case to camelCase
 const mapPatientFields = (patient) => {
@@ -320,6 +321,83 @@ class PatientController {
       const session = await PatientSessionModel.findById(sessionId);
       if (!session) {
         return next(new AppError('Session not found', 404));
+      }
+
+      // Authorization: Check if user has access to this session
+      // Superadmin can access all sessions
+      if (req.user.role !== 'superadmin') {
+        let hasAccess = false;
+
+        // 1. Check if user's organization owns the session
+        if (session.organization_id === req.user.organizationId) {
+          hasAccess = true;
+        }
+
+        // 2. Hospital users can access sessions where their hospital is the destination
+        if (!hasAccess && req.user.organizationType === 'hospital') {
+          if (session.destination_hospital_id === req.user.organizationId || 
+              session.hospital_id === req.user.organizationId) {
+            hasAccess = true;
+          }
+        }
+
+        // 3. Check if user is assigned to the ambulance in this session
+        if (!hasAccess) {
+          const [assignments] = await db.query(
+            `SELECT id FROM ambulance_assignments 
+             WHERE ambulance_id = ? AND user_id = ? AND is_active = TRUE`,
+            [session.ambulance_id, req.user.id]
+          );
+          if (assignments.length > 0) {
+            hasAccess = true;
+          }
+        }
+
+        // 4. Check partnership between fleet and hospital
+        if (!hasAccess) {
+          try {
+            // Get the ambulance's fleet organization
+            const [ambRows] = await db.query(
+              'SELECT organization_id FROM ambulances WHERE id = ? LIMIT 1',
+              [session.ambulance_id]
+            );
+            
+            if (ambRows && ambRows[0]) {
+              const ambulanceFleetId = ambRows[0].organization_id;
+              
+              // Check if there's an active partnership
+              const Partnership = require('../models/Partnership');
+              
+              // Hospital user checking partnership with fleet
+              if (req.user.organizationType === 'hospital') {
+                const partnership = await Partnership.findByFleetAndHospital(
+                  ambulanceFleetId,
+                  req.user.organizationId
+                );
+                if (partnership && partnership.status === 'active') {
+                  hasAccess = true;
+                }
+              }
+              
+              // Fleet user checking partnership with destination hospital
+              if (req.user.organizationType === 'fleet_owner' && session.destination_hospital_id) {
+                const partnership = await Partnership.findByFleetAndHospital(
+                  req.user.organizationId,
+                  session.destination_hospital_id
+                );
+                if (partnership && partnership.status === 'active') {
+                  hasAccess = true;
+                }
+              }
+            }
+          } catch (partnershipError) {
+            console.warn('Error checking partnership:', partnershipError);
+          }
+        }
+
+        if (!hasAccess) {
+          return next(new AppError('You do not have access to this session', 403));
+        }
       }
 
       // Get vital signs

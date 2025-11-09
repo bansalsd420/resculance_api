@@ -44,6 +44,7 @@ export default function OnboardingDetail() {
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [pendingVideoCall, setPendingVideoCall] = useState(null); // Store incoming call data
   const [activeTab, setActiveTab] = useState('notes');
   const [controls, setControls] = useState({
     mainPower: false,
@@ -67,13 +68,42 @@ export default function OnboardingDetail() {
   useEffect(() => {
     // connect sockets when token available
     if (token) socketService.connect(token);
-    if (sessionId) fetchSessionDetails();
+    if (sessionId) {
+      fetchSessionDetails();
+      // Join the session room to receive socket events
+      console.log('🔌 Joining session room:', sessionId);
+      socketService.joinSession(sessionId);
+    }
 
     return () => {
-      if (sessionId) socketService.leaveSession(sessionId);
+      if (sessionId) {
+        console.log('👋 Leaving session room:', sessionId);
+        socketService.leaveSession(sessionId);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, token]);
+
+  // Listen for incoming video calls and auto-open the video panel
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const handleIncomingVideoCall = (data) => {
+      if (data.sessionId === sessionId && data.callerId !== user?.id) {
+        console.log('📞 Incoming video call detected, opening video panel');
+        console.log('Video call data:', data);
+        setPendingVideoCall(data); // Store the call data
+        setShowVideoCall(true);
+        toast.info('Incoming video call...');
+      }
+    };
+
+    socketService.onVideoRequest(handleIncomingVideoCall);
+
+    return () => {
+      socketService.socket?.off('video_request', handleIncomingVideoCall);
+    };
+  }, [sessionId, user?.id, toast]);
 
   async function fetchSessionDetails() {
     setLoading(true);
@@ -420,7 +450,15 @@ export default function OnboardingDetail() {
 
       {/* Chat and Video Call Panels */}
       <ChatPanel sessionId={sessionId} isOpen={showChat} onClose={() => setShowChat(false)} />
-      <VideoCallPanel sessionId={sessionId} isOpen={showVideoCall} onClose={() => setShowVideoCall(false)} />
+      <VideoCallPanel 
+        sessionId={sessionId} 
+        isOpen={showVideoCall} 
+        onClose={() => {
+          setShowVideoCall(false);
+          setPendingVideoCall(null); // Clear pending call when closing
+        }}
+        pendingCall={pendingVideoCall} // Pass the pending call data
+      />
 
       {/* Floating Action Buttons - Chat and Video only (hidden while chat/video panels are open to avoid interference) */}
       {(!showChat && !showVideoCall) && (

@@ -150,9 +150,12 @@ router.get(
 router.post(
   '/sessions/:sessionId/messages',
   authorize(
+    ROLES.SUPERADMIN,
+    ROLES.HOSPITAL_ADMIN,
     ROLES.HOSPITAL_PARAMEDIC,
     ROLES.HOSPITAL_DOCTOR,
     ROLES.HOSPITAL_STAFF,
+    ROLES.FLEET_ADMIN,
     ROLES.FLEET_PARAMEDIC,
     ROLES.FLEET_DOCTOR,
     ROLES.FLEET_STAFF,

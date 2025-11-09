@@ -5,7 +5,7 @@ import socketService from '../services/socketService.js';
 import { useAuthStore } from '../store/authStore';
 import { formatRoleName } from '../utils/roleUtils';
 
-const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
+const VideoCallPanel = ({ sessionId, isOpen, onClose, pendingCall }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [peerConnection, setPeerConnection] = useState(null);
@@ -14,6 +14,7 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   const [callState, setCallState] = useState('idle'); // idle, calling, connecting, connected, ended
   const [error, setError] = useState(null);
   const [remoteUser, setRemoteUser] = useState(null);
+  const [processedCallId, setProcessedCallId] = useState(null); // Track which call we've processed
   
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -36,15 +37,52 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
     };
   }, [isOpen, sessionId]);
 
+  // Process pending incoming call when panel opens
+  useEffect(() => {
+    if (isOpen && pendingCall && processedCallId !== pendingCall.callerId) {
+      console.log('🎯 Processing pending video call:', pendingCall);
+      setProcessedCallId(pendingCall.callerId); // Mark as processed
+      handleVideoRequest(pendingCall);
+    }
+  }, [isOpen, pendingCall, processedCallId]);
+
   useEffect(() => {
     if (localVideoRef.current && localStream) {
+      console.log('📹 Assigning local stream to video element');
+      console.log('📹 Local stream tracks:', localStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
       localVideoRef.current.srcObject = localStream;
+      
+      // Debug video element
+      console.log('📹 Video element dimensions:', localVideoRef.current.clientWidth, 'x', localVideoRef.current.clientHeight);
+      console.log('📹 Video element visibility:', window.getComputedStyle(localVideoRef.current).visibility);
+      
+      // Ensure video plays
+      localVideoRef.current.play().catch(err => {
+        console.warn('Could not auto-play local video:', err);
+      });
     }
   }, [localStream]);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+      console.log('🎥 Assigning remote stream to video element');
+      console.log('🎥 Remote stream tracks:', remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState })));
+      
+      // Clear any existing srcObject first
+      remoteVideoRef.current.srcObject = null;
+      
+      // Small delay to ensure cleanup is complete
+      setTimeout(() => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          console.log('🎥 Remote stream assigned to video element');
+          
+          // Ensure video plays
+          remoteVideoRef.current.play().catch(err => {
+            console.warn('Could not auto-play remote video:', err);
+          });
+        }
+      }, 100);
     }
   }, [remoteStream]);
 
@@ -65,7 +103,20 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   const handleVideoRequest = async (data) => {
     if (data.sessionId !== sessionId) return;
     
+    // Ignore if this is our own call request
+    if (data.callerId === user?.id) {
+      console.log('Ignoring own video call request');
+      return;
+    }
+    
     console.log('Incoming video call from:', data);
+    
+    // Validate that offer exists
+    if (!data.offer) {
+      console.error('No offer in video request');
+      return;
+    }
+    
     setRemoteUser({
       id: data.callerId,
       role: data.callerRole
@@ -78,24 +129,42 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   };
 
   const handleVideoAnswer = async (data) => {
-    if (data.sessionId !== sessionId || data.responderId === user?.id) return;
+    if (data.sessionId !== sessionId) return;
     
-    console.log('Video call answer:', data);
+    // Ignore our own answer
+    if (data.responderId === user?.id) {
+      console.log('Ignoring own video answer');
+      return;
+    }
+    
+    console.log('Video call answer received:', data);
     
     if (data.accepted && data.answer && peerConnection) {
       try {
+        console.log('📡 Setting remote description from answer');
+        console.log('📡 Answer type:', data.answer.type);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        console.log('✅ Remote description set successfully');
         setCallState('connected');
+        setRemoteUser({
+          id: data.responderId,
+          role: data.responderRole
+        });
       } catch (error) {
-        console.error('Error setting remote description:', error);
+        console.error('❌ Error setting remote description:', error);
         setError('Failed to establish connection');
       }
-    } else {
+    } else if (!data.accepted) {
       setCallState('rejected');
       setTimeout(() => {
         cleanup();
         onClose();
       }, 2000);
+    } else {
+      console.warn('Missing answer or peer connection:', { 
+        hasAnswer: !!data.answer, 
+        hasPeerConnection: !!peerConnection 
+      });
     }
   };
 
@@ -108,19 +177,62 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   };
 
   const handleIceCandidate = async (data) => {
-    if (data.sessionId !== sessionId || !peerConnection) return;
+    if (data.sessionId !== sessionId) return;
+    
+    // Only process ICE candidates from other users
+    if (data.fromUserId === user?.id) {
+      console.log('Ignoring our own ICE candidate');
+      return;
+    }
+    
+    // Only process if we have a peer connection
+    if (!peerConnection) {
+      console.warn('Received ICE candidate but no peer connection exists yet');
+      return;
+    }
     
     try {
       if (data.candidate) {
+        console.log('🧊 Adding ICE candidate from user:', data.fromUserId);
         await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        console.log('✅ ICE candidate added successfully');
       }
     } catch (error) {
-      console.error('Error adding ICE candidate:', error);
+      console.error('❌ Error adding ICE candidate:', error);
+    }
+  };
+
+  const testCamera = async () => {
+    try {
+      console.log('🧪 Testing camera access...');
+      const testStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false
+      });
+      
+      console.log('✅ Camera test successful');
+      console.log('🧪 Test stream tracks:', testStream.getTracks().length);
+      
+      // Stop test stream
+      testStream.getTracks().forEach(track => track.stop());
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Camera test failed:', error);
+      setError('Camera access denied or unavailable');
+      return false;
     }
   };
 
   const startCall = async () => {
+    // Test camera first
+    const cameraWorking = await testCamera();
+    if (!cameraWorking) {
+      return;
+    }
+
     try {
+      console.log('📞 Starting video call for session:', sessionId);
       setCallState('calling');
       setError(null);
 
@@ -130,57 +242,109 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
         audio: true
       });
       
+      console.log('✅ Got local media stream with tracks:', stream.getTracks().length);
+      console.log('📹 Video tracks:', stream.getVideoTracks().length, 'Audio tracks:', stream.getAudioTracks().length);
+      
+      // Ensure tracks are enabled
+      stream.getVideoTracks().forEach(track => {
+        track.enabled = true;
+        console.log('📹 Enabled video track:', track.label);
+      });
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        console.log('🎤 Enabled audio track:', track.label);
+      });
+      
       setLocalStream(stream);
 
       // Create peer connection
       const pc = new RTCPeerConnection(ICE_SERVERS);
       setPeerConnection(pc);
+      console.log('✅ Created peer connection');
 
       // Add local tracks to peer connection
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
+        console.log('Added track:', track.kind);
       });
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          socketService.sendIceCandidate(sessionId, event.candidate, null);
+          console.log('🧊 Sending ICE candidate');
+          socketService.sendIceCandidate(sessionId, event.candidate, null); // null = broadcast to session
         }
       };
 
-      // Handle remote stream
+      // Handle remote stream - improved handling
+      let remoteStreamTemp = new MediaStream();
+      
       pc.ontrack = (event) => {
-        console.log('Received remote track:', event);
-        setRemoteStream(event.streams[0]);
-        setCallState('connected');
+        console.log('📺 Received remote track:', event.track.kind, 'streams:', event.streams.length);
+        
+        if (event.streams && event.streams[0]) {
+          console.log('📺 Setting remote stream from ontrack event');
+          setRemoteStream(event.streams[0]);
+          setCallState('connected');
+        } else {
+          // Fallback: add track to our own stream
+          console.log('📺 Adding track to temporary stream');
+          remoteStreamTemp.addTrack(event.track);
+          
+          // If this is the first track or we have both audio/video, set the stream
+          if (remoteStreamTemp.getTracks().length >= 1) {
+            console.log('📺 Setting temporary stream as remote stream');
+            setRemoteStream(remoteStreamTemp);
+            setCallState('connected');
+          }
+        }
       };
 
-      // Handle connection state changes
+      // Add connection state monitoring
       pc.onconnectionstatechange = () => {
-        console.log('Connection state:', pc.connectionState);
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        console.log('🔗 Connection state:', pc.connectionState);
+        if (pc.connectionState === 'connected') {
+          console.log('✅ Peer connection established successfully');
+          setCallState('connected');
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          console.log('❌ Connection lost:', pc.connectionState);
           setError('Connection lost');
           endCall();
         }
       };
 
+      // Add ICE connection state monitoring
+      pc.oniceconnectionstatechange = () => {
+        console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      };
+
       // Create and send offer
       const offer = await pc.createOffer();
+      console.log('✅ Created offer:', offer.type);
       await pc.setLocalDescription(offer);
+      console.log('✅ Set local description, sending to session');
       
       setCallState('connecting');
       // Send offer via socket (include offer so server relays to session participants)
       socketService.requestVideoCall(sessionId, null, pc.localDescription); // null = group call
 
     } catch (error) {
-      console.error('Error starting call:', error);
+      console.error('❌ Error starting call:', error);
       setError(error.message || 'Failed to start call');
       setCallState('idle');
     }
   };
 
   const acceptCall = async (callerId, offer) => {
+    // Test camera first
+    const cameraWorking = await testCamera();
+    if (!cameraWorking) {
+      socketService.answerVideoCall(sessionId, callerId, false);
+      return;
+    }
+
     try {
+      console.log('📞 Accepting call from:', callerId);
       setCallState('connecting');
       setError(null);
 
@@ -190,44 +354,90 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
         audio: true
       });
       
+      console.log('✅ Got local media stream with tracks:', stream.getTracks().length);
+      console.log('📹 Video tracks:', stream.getVideoTracks().length, 'Audio tracks:', stream.getAudioTracks().length);
+      
+      // Ensure tracks are enabled
+      stream.getVideoTracks().forEach(track => {
+        track.enabled = true;
+        console.log('📹 Enabled video track:', track.label);
+      });
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        console.log('🎤 Enabled audio track:', track.label);
+      });
+      
       setLocalStream(stream);
 
       // Create peer connection
       const pc = new RTCPeerConnection(ICE_SERVERS);
       setPeerConnection(pc);
+      console.log('✅ Created peer connection');
 
       // Add local tracks
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
+        console.log('Added track:', track.kind);
       });
 
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log('🧊 Sending ICE candidate to caller');
           socketService.sendIceCandidate(sessionId, event.candidate, callerId);
         }
       };
 
-      // Handle remote stream
+      // Handle remote stream - improved handling
+      let remoteStreamTemp = new MediaStream();
+      
       pc.ontrack = (event) => {
-        console.log('Received remote track:', event);
-        setRemoteStream(event.streams[0]);
-        setCallState('connected');
+        console.log('📺 Received remote track in acceptCall:', event.track.kind, 'streams:', event.streams.length);
+        
+        if (event.streams && event.streams[0]) {
+          console.log('📺 Setting remote stream from ontrack event in acceptCall');
+          setRemoteStream(event.streams[0]);
+          setCallState('connected');
+        } else {
+          // Fallback: add track to our own stream
+          console.log('📺 Adding track to temporary stream in acceptCall');
+          remoteStreamTemp.addTrack(event.track);
+          
+          // If this is the first track or we have both audio/video, set the stream
+          if (remoteStreamTemp.getTracks().length >= 1) {
+            console.log('📺 Setting temporary stream as remote stream in acceptCall');
+            setRemoteStream(remoteStreamTemp);
+            setCallState('connected');
+          }
+        }
+      };
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log('🔗 Connection state in acceptCall:', pc.connectionState);
+      };
+
+      // Add ICE connection state monitoring
+      pc.oniceconnectionstatechange = () => {
+        console.log('🧊 ICE connection state in acceptCall:', pc.iceConnectionState);
       };
 
       // Set remote description and create answer
       if (offer) {
+        console.log('✅ Setting remote description from offer');
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
       }
       
       const answer = await pc.createAnswer();
+      console.log('✅ Created answer:', answer.type);
       await pc.setLocalDescription(answer);
+      console.log('✅ Set local description in acceptCall, sending to caller');
 
       // Send answer
       socketService.answerVideoCall(sessionId, callerId, true, pc.localDescription);
 
     } catch (error) {
-      console.error('Error accepting call:', error);
+      console.error('❌ Error accepting call:', error);
       setError(error.message || 'Failed to accept call');
       socketService.answerVideoCall(sessionId, callerId, false);
       cleanup();
@@ -262,6 +472,8 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   };
 
   const cleanup = () => {
+    console.log('🧹 Cleaning up video call resources');
+    
     // Stop all tracks
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
@@ -280,6 +492,7 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
     }
 
     setRemoteUser(null);
+    setProcessedCallId(null); // Reset processed call tracker
   };
 
   if (!isOpen) return null;
@@ -369,6 +582,9 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover"
+                    onLoadedMetadata={() => console.log('🎥 Remote video metadata loaded')}
+                    onCanPlay={() => console.log('🎥 Remote video can play')}
+                    onError={(e) => console.error('🎥 Remote video error:', e)}
                   />
                   {remoteUser && (
                     <div className="absolute top-6 left-6 flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-full border border-white/20">
@@ -399,7 +615,7 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
 
             {/* Picture-in-Picture local video */}
             <div className="absolute bottom-6 right-6 w-72 h-48 bg-gray-900 rounded-xl overflow-hidden shadow-2xl border-2 border-white/20 group hover:scale-105 transition-transform">
-              {localStream && isVideoEnabled ? (
+              {localStream ? (
                 <>
                   <video
                     ref={localVideoRef}
@@ -407,6 +623,9 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
                     playsInline
                     muted
                     className="w-full h-full object-cover scale-x-[-1]"
+                    onLoadedMetadata={() => console.log('📹 Local video metadata loaded')}
+                    onCanPlay={() => console.log('📹 Local video can play')}
+                    onError={(e) => console.error('📹 Local video error:', e)}
                   />
                   <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full">
                     <div className="w-6 h-6 bg-gradient-to-br from-primary to-primary-dark rounded-full flex items-center justify-center">
@@ -416,6 +635,14 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
                     </div>
                     <span className="text-white text-sm font-medium">You</span>
                   </div>
+                  {!isVideoEnabled && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <div className="text-center">
+                        <VideoOff className="w-8 h-8 mx-auto mb-1 text-white/70" />
+                        <p className="text-white/70 text-xs">Camera Off</p>
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
