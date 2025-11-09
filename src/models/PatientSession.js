@@ -79,8 +79,16 @@ class PatientSessionModel {
     const params = [];
 
     if (filters.hospitalId || filters.organizationId) {
-      query += ' AND ps.organization_id = ?';
-      params.push(filters.hospitalId || filters.organizationId);
+      // If caller requests allowDestination, include sessions where the destination hospital
+      // equals the provided organizationId (useful for hospital users who should see inbound trips).
+      if (filters.allowDestination) {
+        query += ' AND (ps.organization_id = ? OR ps.destination_hospital_id = ?)';
+        params.push(filters.hospitalId || filters.organizationId);
+        params.push(filters.hospitalId || filters.organizationId);
+      } else {
+        query += ' AND ps.organization_id = ?';
+        params.push(filters.hospitalId || filters.organizationId);
+      }
     }
 
     if (filters.ambulanceId) {

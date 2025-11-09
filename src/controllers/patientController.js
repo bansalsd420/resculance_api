@@ -402,7 +402,14 @@ class PatientController {
         }
 
         if (!allow) {
-          filters.organizationId = req.user.organizationId;
+          // For hospital users, allow visibility if the session's destination hospital is their organization
+          // by instructing the model to include destination_hospital_id in the filter logic.
+          if (req.user.organizationType === 'hospital') {
+            filters.organizationId = req.user.organizationId;
+            filters.allowDestination = true; // custom flag handled in model
+          } else {
+            filters.organizationId = req.user.organizationId;
+          }
         }
       }
 
@@ -412,6 +419,7 @@ class PatientController {
       if (ambulanceId) countFilters.ambulanceId = ambulanceId;
       if (req.user.role !== 'superadmin') {
         countFilters.organizationId = req.user.organizationId;
+        if (filters && filters.allowDestination) countFilters.allowDestination = true;
       }
       const total = await PatientSessionModel.count(countFilters);
 
@@ -583,8 +591,9 @@ class PatientController {
         return next(new AppError('Session not found', 404));
       }
 
-      // Check if user has access to this session
-      if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
+  // Check if user has access to this session
+  // Allow if user is superadmin, belongs to session.organization_id, or belongs to the destination hospital.
+  if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id && req.user.organizationId !== session.destination_hospital_id) {
         // Not same organization - allow if the user is assigned to the ambulance for this session,
         // or if the user is a fleet_owner owning the ambulance, or if the user's hospital has a partnership
         // with the ambulance's fleet (so hospital staff/admin can view partnered fleet sessions).
@@ -641,8 +650,9 @@ class PatientController {
         return next(new AppError('Session not found', 404));
       }
 
-      // Check if user has access to this session
-      if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
+  // Check if user has access to this session
+  // Allow if user is superadmin, belongs to session.organization_id, or belongs to the destination hospital.
+  if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id && req.user.organizationId !== session.destination_hospital_id) {
         // Allow if user is assigned to the ambulance for this session,
         // or if the user is the fleet owner of the ambulance, or if the user's hospital is partnered.
         try {
@@ -745,8 +755,9 @@ class PatientController {
         return next(new AppError('Session not found', 404));
       }
 
-      // Access check same as other message endpoints
-      if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
+  // Access check same as other message endpoints
+  // Allow if user is superadmin, belongs to session.organization_id, or belongs to the destination hospital.
+  if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id && req.user.organizationId !== session.destination_hospital_id) {
         try {
           const AmbulanceModel = require('../models/Ambulance');
           const assigned = await AmbulanceModel.getAssignedUsers(session.ambulance_id);
