@@ -24,6 +24,11 @@ router.get('/:id', UserController.getById);
 
 router.put('/:id', requirePermission(PERMISSIONS.UPDATE_USER), UserController.update);
 
+const uploadProfile = require('../middleware/multerProfile');
+
+// Upload profile image for a specific user (admin/superadmin)
+router.post('/:id/profile-image', requirePermission(PERMISSIONS.UPDATE_USER), uploadProfile.single('avatar'), UserController.uploadProfileImageForUser);
+
 router.patch(
   '/:id/approve',
   requirePermission(PERMISSIONS.APPROVE_USER),

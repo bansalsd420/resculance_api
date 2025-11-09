@@ -343,7 +343,7 @@ class PatientController {
 
   static async getSessions(req, res, next) {
     try {
-      const { status, limit = 50, offset = 0 } = req.query;
+      const { status, limit = 50, offset = 0, ambulanceId } = req.query;
 
       const filters = {
         status,
@@ -351,13 +351,20 @@ class PatientController {
         offset
       };
 
+      // If ambulanceId is provided in query, include it in filters
+      if (ambulanceId) {
+        filters.ambulanceId = ambulanceId;
+      }
+
       // Superadmin sees all sessions, others see only their organization's sessions
       if (req.user.role !== 'superadmin') {
         filters.organizationId = req.user.organizationId;
       }
 
       const sessions = await PatientSessionModel.findAll(filters);
+
       const countFilters = { status };
+      if (ambulanceId) countFilters.ambulanceId = ambulanceId;
       if (req.user.role !== 'superadmin') {
         countFilters.organizationId = req.user.organizationId;
       }

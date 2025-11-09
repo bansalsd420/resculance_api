@@ -3,6 +3,5 @@ export { Input } from './Input';
 export { Card } from './Card';
 export { Modal } from './Modal';
 export { Table } from './Table';
-export { ResponsiveTable } from './ResponsiveTable';
 export { Toast, ToastContainer } from './Toast';
 export { Loader } from './Loader';

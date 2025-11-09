@@ -30,13 +30,9 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
     setError(null);
 
     try {
-      console.log('Fetching camera devices for ambulance:', ambulance.id);
-
       // Fetch devices from backend
       const response = await ambulanceService.getDevices(ambulance.id);
       const devices = response.data?.data || response.data || [];
-
-      console.log('Devices fetched:', devices);
 
       // Find active camera device
       const camera = devices.find(
@@ -49,7 +45,6 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
         return;
       }
 
-      console.log('Camera device found:', camera);
       setCameraDevice(camera);
 
       // Check if device has required credentials
@@ -59,17 +54,12 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
         return;
       }
 
-      console.log('Authenticating camera:', camera.device_id);
-
       // Authenticate and get stream URL
       const streamUrl = await cameraService.getCameraStreamUrl({
         deviceId: camera.device_id,
         username: camera.device_username,
         password: camera.device_password,
       });
-
-      console.log('Camera authenticated successfully!');
-      console.log('Stream URL:', streamUrl);
 
       setCameraUrl(streamUrl);
       setLoading(false);
@@ -83,7 +73,7 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
 
   if (loading) {
     return (
-      <div className="relative w-full h-full min-h-[400px] bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center">
+      <div className="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center">
         <div className="text-center">
           <RefreshCw className="w-16 h-16 text-primary animate-spin mx-auto mb-4" />
           <p className="text-white text-lg font-medium">Loading Camera Feed...</p>
@@ -95,7 +85,7 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
 
   if (error) {
     return (
-      <div className="relative w-full h-full min-h-[400px] bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center">
+      <div className="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center">
         <div className="text-center px-6">
           <AlertCircle className="w-16 h-16 text-error mx-auto mb-4" />
           <p className="text-white text-lg font-medium mb-2">Camera Unavailable</p>
@@ -113,7 +103,7 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
 
   return (
     <div 
-      className="relative w-full h-full min-h-[400px] bg-gray-900 rounded-xl overflow-hidden cursor-pointer group"
+      className="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden cursor-pointer group"
       onClick={() => onCameraClick && onCameraClick(cameraDevice)}
     >
       {/* Live indicator */}
@@ -137,16 +127,18 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
         </div>
       </div>
 
-      {/* Full screen camera feed */}
-      <iframe
-        src={cameraUrl}
-        className="w-full h-full min-h-[400px]"
-        frameBorder="0"
-        allow="camera; microphone; autoplay; fullscreen"
-        title="808GPS Live Camera Feed"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-        style={{ border: 'none' }}
-      />
+      {/* Camera feed iframe - properly contained */}
+      <div className="absolute inset-0 w-full h-full">
+        <iframe
+          src={cameraUrl}
+          className="absolute inset-0 w-full h-full"
+          frameBorder="0"
+          allow="camera; microphone; autoplay; fullscreen"
+          title="808GPS Live Camera Feed"
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+          style={{ border: 'none', objectFit: 'contain' }}
+        />
+      </div>
     </div>
   );
 };

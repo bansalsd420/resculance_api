@@ -6,6 +6,7 @@ import { useAuthStore } from '../../store/authStore';
 import { dashboardService } from '../../services';
 import { useToast } from '../../hooks/useToast';
 import getErrorMessage from '../../utils/getErrorMessage';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 
 const StatCard = ({ title, value, icon: Icon, trend, color = 'primary' }) => {
   const colors = {
@@ -41,6 +42,7 @@ export const Dashboard = () => {
   const { toast } = useToast();
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const runWithLoader = useWithGlobalLoader();
 
   useEffect(() => {
     fetchStats();
@@ -62,16 +64,18 @@ export const Dashboard = () => {
   }, []);
 
   const fetchStats = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await dashboardService.getStats();
-      if (response.data?.success) {
-        setStats(response.data.data);
-      }
+      await runWithLoader(async () => {
+        const response = await dashboardService.getStats();
+        if (response.data?.success) {
+          setStats(response.data.data);
+        }
+      }, 'Loading dashboard...');
     } catch (error) {
       console.error('Error fetching dashboard stats:', error);
-  const msg = getErrorMessage(error, 'Failed to load dashboard statistics');
-  toast.error(msg);
+      const msg = getErrorMessage(error, 'Failed to load dashboard statistics');
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

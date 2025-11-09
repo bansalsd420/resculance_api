@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Moon,
   Sun,
+  Shield,
 } from 'lucide-react';
 import useWithGlobalLoader from '../hooks/useWithGlobalLoader';
 import { useAuthStore } from '../store/authStore';
@@ -29,7 +30,9 @@ import { Loader } from '../components/ui';
 import Tooltip from '../components/ui/Tooltip';
 import { useToast, ToastProvider } from '../hooks/useToast';
 import { ToastContainer } from '../components/ui/Toast';
+import { formatRoleName } from '../utils/roleUtils';
 import { getAllowedSidebarItems } from '../utils/permissions';
+import notificationService from '../services/notificationService';
 
 const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }) => {
   const location = useLocation();
@@ -45,6 +48,7 @@ const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }
     { path: '/onboarding', icon: Activity, label: 'Onboarding', key: 'onboarding' },
     { path: '/collaborations', icon: Building2, label: 'Partnerships', key: 'collaborations' },
     { path: '/activity', icon: ClipboardList, label: 'Activity Logs', key: 'activity' },
+    { path: '/permissions', icon: Shield, label: 'Permissions', key: 'permissions' },
   ];
 
   // Filter menu items based on user role permissions
@@ -200,7 +204,6 @@ const Topbar = ({ toggleSidebar }) => {
 
   const fetchNotifications = async () => {
     try {
-      const notificationService = (await import('../services/notificationService')).default;
       const response = await notificationService.getNotifications(20);
       setNotifications(response.notifications || []);
     } catch (error) {
@@ -210,7 +213,6 @@ const Topbar = ({ toggleSidebar }) => {
 
   const fetchUnreadCount = async () => {
     try {
-      const notificationService = (await import('../services/notificationService')).default;
       const response = await notificationService.getUnreadCount();
       setUnreadCount(response.count || 0);
     } catch (error) {
@@ -220,7 +222,6 @@ const Topbar = ({ toggleSidebar }) => {
 
   const handleMarkAllRead = async () => {
     try {
-      const notificationService = (await import('../services/notificationService')).default;
       await notificationService.markAllAsRead();
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
@@ -233,7 +234,6 @@ const Topbar = ({ toggleSidebar }) => {
   const handleNotificationClick = async (notification) => {
     if (!notification.is_read) {
       try {
-        const notificationService = (await import('../services/notificationService')).default;
         await notificationService.markAsRead(notification.id);
         setNotifications(prev => prev.map(n => 
           n.id === notification.id ? { ...n, is_read: true } : n
@@ -353,7 +353,7 @@ const Topbar = ({ toggleSidebar }) => {
           {/* Left-most welcome compact text - hidden on the smallest screens */}
           <div className="hidden sm:flex flex-col mr-2 leading-tight">
             <span className="text-sm font-medium text-text">Welcome, {user?.firstName || 'User'}</span>
-            <span className="text-xs text-text-secondary">{user?.role ? user.role.toString().replace('_', ' ').toLowerCase() : ''}</span>
+            <span className="text-xs text-text-secondary">{formatRoleName(user?.role)}</span>
           </div>
           <button onClick={toggleSidebar} className="lg:hidden p-3 md:p-2 bg-background hover:bg-border rounded-xl transition-colors flex items-center justify-center h-10">
             <Menu className="w-5 h-5 text-text" />
@@ -522,9 +522,10 @@ const Topbar = ({ toggleSidebar }) => {
               className="flex items-center gap-3 p-2 md:p-1 hover:bg-background rounded-xl transition-colors h-10"
             >
                 <img
-                  src={`https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=14b8a6&color=fff&bold=true`}
+                  src={user?.profileImageUrl || `https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=14b8a6&color=fff&bold=true`}
                   alt="Profile"
-                  className="w-8 h-8 rounded-full ring-1 ring-border"
+                  className="w-8 h-8 rounded-full ring-1 ring-border object-cover"
+                  onError={(e) => { e.currentTarget.src = `https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=14b8a6&color=fff&bold=true`; }}
                 />
             </button>
 
@@ -541,7 +542,7 @@ const Topbar = ({ toggleSidebar }) => {
                     {user?.firstName} {user?.lastName}
                   </p>
                   <p className="text-xs text-text-secondary">{user?.email}</p>
-                  <p className="text-xs text-primary mt-1">{user?.role}</p>
+                  <p className="text-xs text-primary mt-1">{formatRoleName(user?.role)}</p>
                 </div>
                 <Link
                   to="/settings"

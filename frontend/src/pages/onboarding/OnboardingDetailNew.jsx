@@ -78,7 +78,6 @@ export default function OnboardingDetail() {
   async function fetchSessionDetails() {
     setLoading(true);
     try {
-      console.log('Fetching session details for sessionId:', sessionId);
       const sessionRes = await patientService.getSessionById(sessionId);
       const sessionData = sessionRes?.data?.data?.session || sessionRes?.data?.session || sessionRes?.data;
       if (!sessionData || !sessionData.id) throw new Error('Session data not found or invalid');
@@ -246,12 +245,37 @@ export default function OnboardingDetail() {
 
             <div className="mt-6 pt-6 border-t border-border">
               <h3 className="text-sm font-semibold text-text mb-3">Patient Vitals</h3>
-              <div className="space-y-2 text-sm">
-                <div className="space-y-1">
-                  <div className="flex justify-between"><span className="text-text-secondary">Heart Rate</span><span className="font-medium text-text">{vitals.heartRate} bpm</span></div>
-                  <div className="flex justify-between"><span className="text-text-secondary">SpO₂</span><span className="font-medium text-text">{vitals.spo2}%</span></div>
-                  <div className="flex justify-between"><span className="text-text-secondary">Blood Pressure</span><span className="font-medium text-text">{vitals.bloodPressure} mmHg</span></div>
-                  <div className="flex justify-between"><span className="text-text-secondary">Temperature</span><span className="font-medium text-text">{vitals.temp}°C</span></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-background rounded-lg p-3 border border-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-text-secondary">Heart Rate</span>
+                    <Heart className="w-4 h-4 text-error" />
+                  </div>
+                  <p className="text-lg font-bold text-text">{vitals.heartRate} <span className="text-sm font-normal text-text-secondary">bpm</span></p>
+                </div>
+                
+                <div className="bg-background rounded-lg p-3 border border-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-text-secondary">SpO₂</span>
+                    <Activity className="w-4 h-4 text-success" />
+                  </div>
+                  <p className="text-lg font-bold text-text">{vitals.spo2}<span className="text-sm font-normal text-text-secondary">%</span></p>
+                </div>
+                
+                <div className="bg-background rounded-lg p-3 border border-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-text-secondary">Blood Pressure</span>
+                    <Activity className="w-4 h-4 text-primary" />
+                  </div>
+                  <p className="text-lg font-bold text-text">{vitals.bloodPressure}</p>
+                </div>
+                
+                <div className="bg-background rounded-lg p-3 border border-border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-text-secondary">Temperature</span>
+                    <Activity className="w-4 h-4 text-warning" />
+                  </div>
+                  <p className="text-lg font-bold text-text">{vitals.temp}<span className="text-sm font-normal text-text-secondary">°C</span></p>
                 </div>
               </div>
             </div>
@@ -352,7 +376,8 @@ export default function OnboardingDetail() {
             <p className="text-xs text-text-secondary mb-6">System alerts & anomalies</p>
 
             <div className="space-y-2">
-              <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-text-secondary pb-2 border-b border-border">
+              {/* Mobile-friendly header - hidden on larger screens */}
+              <div className="hidden md:grid md:grid-cols-5 gap-2 text-xs font-semibold text-text-secondary pb-2 border-b border-border">
                 <div>#</div>
                 <div>Time</div>
                 <div>Level</div>
@@ -360,14 +385,30 @@ export default function OnboardingDetail() {
               </div>
 
               {sosAlerts.map((alert) => (
-                <div key={alert.id} className="grid grid-cols-5 gap-2 text-xs py-2 hover:bg-background rounded transition-colors items-center">
-                  <div className="font-mono text-text">{alert.id}</div>
-                  <div className="text-text">{alert.time}</div>
-                  <div>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${alert.level === 'Critical' ? 'bg-error/20 text-error' : alert.level === 'Warning' ? 'bg-warning/20 text-warning' : 'bg-info/20 text-info'}`}>{alert.level}</span>
+                <div key={alert.id} className="border border-border rounded-lg p-3 hover:bg-background transition-colors">
+                  {/* Mobile layout */}
+                  <div className="md:hidden space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-sm text-text">#{alert.id}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${alert.level === 'Critical' ? 'bg-error/20 text-error' : alert.level === 'Warning' ? 'bg-warning/20 text-warning' : 'bg-info/20 text-info'}`}>{alert.level}</span>
+                    </div>
+                    <div className="text-sm text-text">{alert.note}</div>
+                    <div className="flex items-center justify-between text-xs text-text-secondary">
+                      <span>{alert.time}</span>
+                      <Button size="sm" variant="link" className="text-primary text-xs p-0 h-auto">{alert.action}</Button>
+                    </div>
                   </div>
-                  <div className="text-text">{alert.note}</div>
-                  <div className="text-right"><Button size="sm" variant="link" className="text-primary text-xs">{alert.action}</Button></div>
+
+                  {/* Desktop layout */}
+                  <div className="hidden md:grid md:grid-cols-5 gap-2 text-xs items-center">
+                    <div className="font-mono text-text">{alert.id}</div>
+                    <div className="text-text">{alert.time}</div>
+                    <div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${alert.level === 'Critical' ? 'bg-error/20 text-error' : alert.level === 'Warning' ? 'bg-warning/20 text-warning' : 'bg-info/20 text-info'}`}>{alert.level}</span>
+                    </div>
+                    <div className="text-text col-span-1">{alert.note}</div>
+                    <div className="text-right"><Button size="sm" variant="link" className="text-primary text-xs">{alert.action}</Button></div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -383,13 +424,27 @@ export default function OnboardingDetail() {
 
       {/* Floating Action Buttons - Chat and Video only */}
       <div className="fixed bottom-8 right-8 flex flex-col gap-4 z-[9999]">
-        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setShowChat(true)} className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-2xl flex items-center justify-center relative group transition-all" title="Open Group Chat">
+        <motion.button 
+          whileHover={{ scale: 1.1 }} 
+          whileTap={{ scale: 0.9 }} 
+          onClick={() => setShowChat(true)} 
+          className="w-16 h-16 rounded-full bg-primary hover:bg-primary-hover text-white shadow-2xl flex items-center justify-center relative group transition-all"
+          title="Open Group Chat"
+          aria-label="Open Group Chat"
+        >
           <MessageCircle className="w-7 h-7" />
-          <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse">3</span>
+          <span className="absolute -top-1 -right-1 w-6 h-6 bg-error text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse">3</span>
           <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">Group Chat</span>
         </motion.button>
 
-        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setShowVideoCall(true)} className="w-16 h-16 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-2xl flex items-center justify-center relative group transition-all" title="Start Video Call">
+        <motion.button 
+          whileHover={{ scale: 1.1 }} 
+          whileTap={{ scale: 0.9 }} 
+          onClick={() => setShowVideoCall(true)} 
+          className="w-16 h-16 rounded-full bg-success hover:bg-success-hover text-white shadow-2xl flex items-center justify-center relative group transition-all"
+          title="Start Video Call"
+          aria-label="Start Video Call"
+        >
           <Video className="w-7 h-7" />
           <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">Video Call</span>
         </motion.button>

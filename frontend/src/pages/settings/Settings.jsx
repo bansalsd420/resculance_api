@@ -17,6 +17,7 @@ import { Card } from '../../components/ui/Card';
 import { authService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
+import { useRef } from 'react';
 
 const profileSchema = yup.object({
   firstName: yup.string().required('First name is required'),
@@ -45,8 +46,11 @@ export const Settings = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const { user, setUser, updateProfile } = useAuthStore();
+  const { user, setUser, updateProfile, getProfile } = useAuthStore();
   const { toast } = useToast();
+  const fileInputRef = useRef(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
 
   const {
     register: registerProfile,
@@ -179,9 +183,55 @@ export const Settings = () => {
                 <form onSubmit={handleSubmitProfile(onSubmitProfile)} className="space-y-6">
                   {/* Profile Picture */}
                   <div className="flex items-center gap-6">
-                    <div className="w-24 h-24 bg-primary text-white rounded-full flex items-center justify-center text-3xl font-bold">
-                      {user?.firstName?.[0]}{user?.lastName?.[0]}
-                    </div>
+                      <div className="relative">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const objectUrl = URL.createObjectURL(file);
+                              setPreviewUrl(objectUrl);
+                              setUploading(true);
+                              const fd = new FormData();
+                              fd.append('avatar', file);
+                              const resp = await authService.uploadProfileImage(fd);
+                              // Refresh profile in store
+                              await getProfile();
+                              toast.success('Profile image updated');
+                              setPreviewUrl(null);
+                            } catch (err) {
+                              console.error('Failed to upload avatar', err);
+                              toast.error('Failed to upload image');
+                            } finally {
+                              setUploading(false);
+                            }
+                          }}
+                        />
+
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => fileInputRef.current?.click()}
+                          onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+                          className="w-24 h-24 bg-primary text-white rounded-full flex items-center justify-center text-3xl font-bold cursor-pointer overflow-hidden"
+                          title="Click to upload avatar"
+                        >
+                          {previewUrl ? (
+                            <img src={previewUrl} alt="avatar preview" className="w-full h-full object-cover" onError={() => setPreviewUrl(null)} />
+                          ) : user?.profileImageUrl ? (
+                            <img src={user.profileImageUrl} alt="avatar" className="w-full h-full object-cover" onError={() => setPreviewUrl(null)} />
+                          ) : (
+                            <>
+                              {user?.firstName?.[0]}{user?.lastName?.[0]}
+                            </>
+                          )}
+                        </div>
+                        {uploading && <div className="absolute inset-0 flex items-center justify-center"><span className="text-sm text-white">Uploading...</span></div>}
+                      </div>
                     <div>
                       <p className="font-semibold text-lg">
                         {user?.firstName} {user?.lastName}

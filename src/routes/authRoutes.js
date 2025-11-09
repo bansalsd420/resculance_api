@@ -11,6 +11,10 @@ router.post('/refresh-token', AuthController.refreshToken);
 router.post('/forgot-password', AuthController.forgotPassword);
 router.get('/profile', authenticate, AuthController.getProfile);
 router.put('/profile', authenticate, AuthController.updateProfile);
+
+// Profile image upload
+const uploadProfile = require('../middleware/multerProfile');
+router.post('/profile/image', authenticate, uploadProfile.single('avatar'), AuthController.uploadProfileImage);
 router.put('/change-password', authenticate, changePasswordValidation, validate, AuthController.changePassword);
 
 module.exports = router;

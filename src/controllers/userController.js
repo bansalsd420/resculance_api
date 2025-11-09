@@ -195,6 +195,11 @@ class UserController {
 
       const updateData = { firstName, lastName, phone, status };
 
+      // Allow updating profile image URL via admin/superadmin
+      if (req.body.profileImageUrl) {
+        updateData.profileImageUrl = req.body.profileImageUrl;
+      }
+
       // Allow role updates only when requester is superadmin
       if (role && req.user.role === 'superadmin') {
         // Determine orgType for normalization: if superadmin provided organizationId in body, use that org's type
@@ -232,6 +237,45 @@ class UserController {
         success: true,
         message: 'User updated successfully'
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadProfileImageForUser(req, res, next) {
+    try {
+      const { id } = req.params;
+      if (!req.file) return next(new AppError('No file uploaded', 400));
+
+      // Permission: must be superadmin or admin of same org
+      const target = await UserModel.findById(id);
+      if (!target) return next(new AppError('User not found', 404));
+
+      if (req.user.role !== 'superadmin' && target.organization_id !== req.user.organizationId) {
+        return next(new AppError('Access denied', 403));
+      }
+
+      const filename = req.file.filename;
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/profiles/${filename}`;
+
+      // Remove old file if present
+      if (target && target.profile_image_url) {
+        try {
+          const path = require('path');
+          const fs = require('fs');
+          const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'profiles');
+          const old = target.profile_image_url;
+          const oldFilename = old.includes('/uploads/profiles/') ? old.split('/uploads/profiles/').pop() : null;
+          if (oldFilename) {
+            const oldPath = path.join(uploadsDir, oldFilename);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+        } catch (e) { console.warn('Failed to remove old profile image for user:', e.message); }
+      }
+
+      await UserModel.update(id, { profileImageUrl: fileUrl });
+
+      res.json({ success: true, data: { profileImageUrl: fileUrl } });
     } catch (error) {
       next(error);
     }

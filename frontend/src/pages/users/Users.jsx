@@ -31,6 +31,8 @@ export const Users = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
   const [assignmentUser, setAssignmentUser] = useState(null);
@@ -188,6 +190,7 @@ export const Users = () => {
       // Normalize
       const normalized = usersRaw.map(u => ({
         ...u,
+        profileImageUrl: u.profileImageUrl || u.profile_image_url || null,
         firstName: u.firstName || u.first_name || (u.email ? u.email.split('@')[0] : ''),
         lastName: u.lastName || u.last_name || '',
         organization_name: u.organization_name || u.organizationName || u.organization_name,
@@ -392,8 +395,12 @@ export const Users = () => {
       accessor: 'firstName',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-semibold">
-            {row.firstName?.[0]}{row.lastName?.[0]}
+          <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-semibold overflow-hidden">
+            {row.profileImageUrl ? (
+              <img src={row.profileImageUrl} alt="avatar" className="w-full h-full object-cover" />
+            ) : (
+              <>{row.firstName?.[0]}{row.lastName?.[0]}</>
+            )}
           </div>
           <div>
             <p className="font-medium">{row.firstName} {row.lastName}</p>
@@ -505,6 +512,7 @@ export const Users = () => {
     setSelectedUser(userData);
     if (userData) {
       reset(userData);
+      setAvatarPreview(userData.profileImageUrl || null);
     } else {
       // For non-superadmin, pre-fill organizationId
       const defaultData = user?.role === 'superadmin' ? {} : { organizationId: user?.organizationId };
@@ -517,6 +525,8 @@ export const Users = () => {
     setIsModalOpen(false);
     setSelectedUser(null);
     reset({});
+    setAvatarFile(null);
+    setAvatarPreview(null);
   };
 
   const onSubmit = async (data) => {
@@ -550,12 +560,27 @@ export const Users = () => {
           else delete submitData.organizationId;
         }
       }
+        let newUserId = null;
         if (selectedUser) {
           await userService.update(selectedUser.id, submitData);
           toast.success('User updated successfully');
+          newUserId = selectedUser.id;
         } else {
-          await userService.create(submitData);
+          const resp = await userService.create(submitData);
           toast.success('User created successfully');
+          newUserId = resp.data?.data?.userId || null;
+        }
+
+        // If avatar file selected, upload it for the created/updated user
+        if (avatarFile && newUserId) {
+          try {
+            const fd = new FormData();
+            fd.append('avatar', avatarFile);
+            await userService.uploadProfileImage(newUserId, fd);
+          } catch (err) {
+            console.error('Failed to upload avatar for user:', err);
+            toast.error('User saved but avatar upload failed');
+          }
         }
         // Force refresh cache after create/update
         await fetchUsers(true);
@@ -752,6 +777,29 @@ export const Users = () => {
               {...register('lastName')}
               error={errors.lastName?.message}
             />
+          </div>
+
+          {/* Avatar upload */}
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">Profile Image</label>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 bg-background-card rounded-full overflow-hidden">
+                {avatarPreview ? (
+                  <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-sm text-text-secondary">No image</div>
+                )}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                  setAvatarFile(f);
+                  if (f) setAvatarPreview(URL.createObjectURL(f));
+                }}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Calendar, User, Activity as ActivityIcon, Filter, RefreshCw } from 'lucide-react';
 import api from '../../services/api';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 import { Table } from '../../components/ui/Table';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -30,6 +31,7 @@ const Activity = () => {
   const [users, setUsers] = useState([]);
 
   const { toast } = useToast();
+  const runWithLoader = useWithGlobalLoader();
 
   useEffect(() => {
     fetchActivities();
@@ -37,28 +39,32 @@ const Activity = () => {
   }, [pagination.page, selectedActivity, selectedUser, startDate, endDate, search]);
 
   const fetchActivities = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const params = {
-        page: pagination.page,
-        limit: pagination.limit
-      };
+      await runWithLoader(async () => {
+      try {
+        const params = {
+          page: pagination.page,
+          limit: pagination.limit
+        };
 
-      if (search) params.search = search;
-      if (selectedActivity) params.activity = selectedActivity;
-      if (selectedUser) params.userId = selectedUser;
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
+        if (search) params.search = search;
+        if (selectedActivity) params.activity = selectedActivity;
+        if (selectedUser) params.userId = selectedUser;
+        if (startDate) params.startDate = startDate;
+        if (endDate) params.endDate = endDate;
 
-      const response = await api.get('/activities', { params });
-      setActivities(response.data.activities || []);
-      setPagination(prev => ({
-        ...prev,
-        ...response.data.pagination
-      }));
-    } catch (error) {
-  toast.error('Failed to fetch activities');
-      console.error('Error fetching activities:', error);
+        const response = await api.get('/activities', { params });
+        setActivities(response.data.activities || []);
+        setPagination(prev => ({
+          ...prev,
+          ...response.data.pagination
+        }));
+      } catch (error) {
+        toast.error('Failed to fetch activities');
+        console.error('Error fetching activities:', error);
+      }
+    }, 'Loading activities...');
     } finally {
       setLoading(false);
     }

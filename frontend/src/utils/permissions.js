@@ -267,6 +267,7 @@ export const getAllowedSidebarItems = (role) => {
   // Activity logs (superadmin only)
   if (hasPermission(role, PERMISSIONS.VIEW_ACTIVITY_LOGS)) {
     items.push('activity');
+    items.push('permissions'); // Permissions page also for superadmin
   }
   
   return items;

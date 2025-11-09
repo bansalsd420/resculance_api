@@ -21,11 +21,16 @@ class ActivityLogService {
     req = null
   }) {
     try {
+      // Handle both camelCase and snake_case user field names
+      const firstName = user.firstName || user.first_name || '';
+      const lastName = user.lastName || user.last_name || '';
+      const userName = `${firstName} ${lastName}`.trim() || 'Unknown User';
+
       const logData = {
         activity,
         comments,
         userId: user.id,
-        userName: `${user.first_name} ${user.last_name}`,
+        userName,
         organizationId: organization?.id || null,
         organizationName: organization?.name || null,
         metadata,

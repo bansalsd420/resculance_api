@@ -1,6 +1,7 @@
 import { RefreshCw } from 'lucide-react';
+import { Loader } from './Loader';
 
-export const Table = ({ columns, data, onRowClick, onRefresh, isRefreshing }) => {
+export const Table = ({ columns, data, onRowClick, onRefresh, isRefreshing, loading = false }) => {
   return (
     <div className="table-container">
       <div className="overflow-x-auto">
@@ -29,7 +30,13 @@ export const Table = ({ columns, data, onRowClick, onRefresh, isRefreshing }) =>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {data.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-8 text-center">
+                  <Loader inline message="Loading..." />
+                </td>
+              </tr>
+            ) : data.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-text-secondary">
                   No data available

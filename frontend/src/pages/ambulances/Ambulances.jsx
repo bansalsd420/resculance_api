@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Search, Ambulance as AmbulanceIcon, MapPin, User, Trash2, X, UserPlus, UserMinus } from 'lucide-react';
+import { Plus, Search, Ambulance as AmbulanceIcon, MapPin, User, Trash2, X, UserPlus, UserMinus, Users, AlertCircle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Table } from '../../components/ui/Table';
@@ -13,6 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
+import { formatRoleName } from '../../utils/roleUtils';
 
 const DEVICE_TYPES = [
   { value: 'CAMERA', label: 'Camera' },
@@ -1193,108 +1194,149 @@ export const Ambulances = () => {
         </form>
       </Modal>
 
-      {/* Assignment Modal */}
+      {/* Assignment Modal - Enhanced Design */}
       <Modal
         isOpen={isAssignmentModalOpen}
         onClose={handleCloseAssignmentModal}
-        title={`Assign Staff to ${assignmentAmbulance?.registration_number || assignmentAmbulance?.vehicleNumber}`}
-        size="lg"
+        title={
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary-dark rounded-xl flex items-center justify-center">
+              <UserPlus className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">Assign Staff</h3>
+              <p className="text-sm text-text-secondary font-normal">
+                {assignmentAmbulance?.registration_number || assignmentAmbulance?.vehicleNumber}
+              </p>
+            </div>
+          </div>
+        }
+        size="xl"
       >
         <div className="space-y-6">
           {assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId && (
-            <div className="p-3 bg-yellow-50 border border-yellow-100 rounded">
-              <p className="text-sm text-yellow-800">This ambulance is currently active for <strong>{assignmentAmbulance.current_hospital_name || 'another hospital'}</strong> and cannot be assigned by your organization until it becomes available.</p>
+            <div className="p-4 bg-warning/10 border-2 border-warning/30 rounded-xl flex items-start gap-3">
+              <div className="w-8 h-8 bg-warning/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-warning" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-text">Ambulance Currently In Use</p>
+                <p className="text-sm text-text-secondary mt-1">
+                  This ambulance is active for <strong>{assignmentAmbulance.current_hospital_name || 'another hospital'}</strong> and cannot be assigned until it becomes available.
+                </p>
+              </div>
             </div>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Assigned staff table */}
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Currently Assigned</h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Assigned staff section - Enhanced */}
+            <div className="bg-background-card rounded-2xl border border-border p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                  <div className="w-8 h-8 bg-success/10 rounded-lg flex items-center justify-center">
+                    <Users className="w-4 h-4 text-success" />
+                  </div>
+                  Currently Assigned
+                </h3>
+                <span className="text-xs px-2.5 py-1 bg-success/10 text-success font-semibold rounded-full">
+                  {assignedUsers.length} staff
+                </span>
+              </div>
               {assignedUsers.length === 0 ? (
-                <p className="text-secondary text-sm">No staff currently assigned to this ambulance.</p>
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-background rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <UserMinus className="w-8 h-8 text-text-secondary opacity-30" />
+                  </div>
+                  <p className="text-text-secondary text-sm font-medium">No staff assigned</p>
+                  <p className="text-text-secondary text-xs mt-1">Assign team members from available staff</p>
+                </div>
               ) : (
-                <div className="overflow-auto bg-background-card rounded-lg p-2">
-                  <table className="w-full table-auto">
-                    <thead>
-                      <tr className="text-left text-sm text-secondary">
-                        <th className="px-3 py-2">Name</th>
-                        <th className="px-3 py-2">Role</th>
-                        <th className="px-3 py-2">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {assignedUsers.map(u => (
-                        <tr key={u.id} className="border-t border-gray-200 dark:border-slate-700">
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                                {u.firstName?.[0]}{u.lastName?.[0]}
-                              </div>
-                              <div>
-                                <div className="font-medium">{u.firstName} {u.lastName}</div>
-                                <div className="text-sm text-secondary hidden md:block">{u.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-sm">{u.role || u.roleKey}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="danger" loading={unassigningUserId === u.id} onClick={() => handleUnassignUser(u.id)}>
-                                <UserMinus className="w-4 h-4 mr-1" />
-                                Unassign
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-2">
+                  {assignedUsers.map(u => (
+                    <motion.div
+                      key={u.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="p-3 bg-background rounded-xl border border-border hover:border-primary/50 transition-all group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="w-10 h-10 bg-gradient-to-br from-success to-success/80 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-lg">
+                            {u.firstName?.[0]}{u.lastName?.[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-text truncate">{u.firstName} {u.lastName}</div>
+                            <div className="text-xs text-text-secondary truncate">{formatRoleName(u.role || u.roleKey)}</div>
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="danger" 
+                          loading={unassigningUserId === u.id} 
+                          onClick={() => handleUnassignUser(u.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <UserMinus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               )}
             </div>
 
-            {/* Available staff table */}
-            <div>
-              <h3 className="text-lg font-semibold mb-3">Available Staff</h3>
+            {/* Available staff section - Enhanced */}
+            <div className="bg-background-card rounded-2xl border border-border p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Users className="w-4 h-4 text-primary" />
+                  </div>
+                  Available Staff
+                </h3>
+                <span className="text-xs px-2.5 py-1 bg-primary/10 text-primary font-semibold rounded-full">
+                  {availableUsers.length} available
+                </span>
+              </div>
               {availableUsers.length === 0 ? (
-                <p className="text-secondary text-sm">No staff available for assignment.</p>
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-background rounded-2xl flex items-center justify-center mx-auto mb-3">
+                    <UserPlus className="w-8 h-8 text-text-secondary opacity-30" />
+                  </div>
+                  <p className="text-text-secondary text-sm font-medium">No staff available</p>
+                  <p className="text-text-secondary text-xs mt-1">All team members are assigned</p>
+                </div>
               ) : (
-                <div className="overflow-auto bg-background-card rounded-lg p-2 max-h-[420px]">
-                  <table className="w-full table-auto">
-                    <thead>
-                      <tr className="text-left text-sm text-secondary">
-                        <th className="px-3 py-2">Name</th>
-                        <th className="px-3 py-2">Role</th>
-                        <th className="px-3 py-2">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {availableUsers.map(u => (
-                        <tr key={u.id} className="border-t border-gray-200 dark:border-slate-700">
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                                {u.firstName?.[0]}{u.lastName?.[0]}
-                              </div>
-                              <div>
-                                <div className="font-medium">{u.firstName} {u.lastName}</div>
-                                <div className="text-sm text-secondary hidden md:block">{u.role}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-sm">{u.role}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="success" loading={assigningUserId === u.id} onClick={() => handleAssignUser(u.id, u.role)} disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}>
-                                <UserPlus className="w-4 h-4 mr-1" />
-                                Assign
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-2">
+                  {availableUsers.map(u => (
+                    <motion.div
+                      key={u.id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="p-3 bg-background rounded-xl border border-border hover:border-primary/50 transition-all group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center text-white text-sm font-bold shadow-lg">
+                            {u.firstName?.[0]}{u.lastName?.[0]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-text truncate">{u.firstName} {u.lastName}</div>
+                            <div className="text-xs text-text-secondary truncate">{formatRoleName(u.role)}</div>
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="success" 
+                          loading={assigningUserId === u.id} 
+                          onClick={() => handleAssignUser(u.id, u.role)} 
+                          disabled={!!(assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
               )}
             </div>

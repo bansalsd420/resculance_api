@@ -57,6 +57,8 @@ export const Organizations = () => {
         // Normalize backend keys (contact_email/contact_phone, zip_code) to frontend-friendly names
         const normalized = raw.map(org => ({
           ...org,
+          // canonicalize code field from various backend shapes
+          code: org.code || org.organization_code || org.org_code || org.organizationCode || null,
           phone: org.phone || org.contact_phone || org.contactPhone || null,
           email: org.email || org.contact_email || org.contactEmail || null,
           city: org.city || org.city_name || org.cityName || null,
@@ -163,6 +165,13 @@ export const Organizations = () => {
           </div>
         </div>
       ),
+    },
+    {
+      header: 'Code',
+      accessor: 'code',
+      render: (row) => (
+        <div className="text-sm font-medium">{row.code || '-'}</div>
+      )
     },
     {
       header: 'Type',

@@ -3,6 +3,7 @@ import { Video, VideoOff, Mic, MicOff, PhoneOff, Loader, AlertCircle, X, Maximiz
 import { motion, AnimatePresence } from 'framer-motion';
 import socketService from '../services/socketService.js';
 import { useAuthStore } from '../store/authStore';
+import { formatRoleName } from '../utils/roleUtils';
 
 const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   const [localStream, setLocalStream] = useState(null);
@@ -291,147 +292,213 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 bg-black/95 backdrop-blur-sm z-[9999] flex items-center justify-center"
       >
-        <div className="w-full h-full max-w-7xl mx-auto p-4 flex flex-col">
-          {/* Header with Close Button */}
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold text-white">
-              Video Call - Session {sessionId}
-            </h2>
-            <button
-              onClick={() => {
-                if (callState === 'connected' || callState === 'calling' || callState === 'connecting') {
-                  endCall();
-                } else {
-                  cleanup();
-                  onClose();
-                }
-              }}
-              className="p-2 hover:bg-gray-800 rounded-lg transition-colors text-white"
-              title="Close"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Status */}
-          <div className="text-white text-center mb-4">
-            {callState === 'calling' && <p className="text-lg">Initiating call...</p>}
-            {callState === 'receiving' && <p className="text-lg">Incoming call...</p>}
-            {callState === 'connecting' && <p className="text-lg">Connecting...</p>}
-            {callState === 'connected' && <p className="text-green-400 text-lg">Connected</p>}
-            {callState === 'rejected' && <p className="text-red-400 text-lg">Call Rejected</p>}
-            {callState === 'ended' && <p className="text-gray-400 text-lg">Call Ended</p>}
-            {error && (
-              <div className="flex items-center justify-center gap-2 text-red-400 mt-2">
-                <AlertCircle className="w-5 h-5" />
-                <span>{error}</span>
+        <div className="w-full h-full max-w-7xl mx-auto p-6 flex flex-col">
+          {/* Professional Header with Enhanced Design */}
+          <div className="flex items-center justify-between mb-6 bg-black/30 backdrop-blur-xl p-4 rounded-2xl border border-white/10">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-primary via-primary-dark to-primary-dark/80 rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 relative">
+                <Video className="w-7 h-7 text-white" />
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-success rounded-full border-2 border-black/50 animate-pulse" />
               </div>
-            )}
-          </div>
-
-          {/* Video Grid */}
-          <div className="flex-1 grid grid-cols-2 gap-4 mb-4">
-            {/* Remote Video */}
-            <div className="relative bg-gray-900 rounded-xl overflow-hidden">
-              {remoteStream ? (
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <Video className="w-16 h-16 mx-auto mb-2" />
-                    <p>Waiting for remote video...</p>
-                  </div>
-                </div>
-              )}
-              {remoteUser && (
-                <div className="absolute top-4 left-4 bg-black bg-opacity-50 px-3 py-1 rounded-full text-white text-sm">
-                  {remoteUser.role}
-                </div>
-              )}
-            </div>
-
-            {/* Local Video */}
-            <div className="relative bg-gray-900 rounded-xl overflow-hidden">
-              {localStream && isVideoEnabled ? (
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover mirror"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <VideoOff className="w-16 h-16 mx-auto mb-2" />
-                    <p>Camera Off</p>
-                  </div>
-                </div>
-              )}
-              <div className="absolute top-4 left-4 bg-black bg-opacity-50 px-3 py-1 rounded-full text-white text-sm">
-                You ({user?.role})
+              <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">
+                  Video Conference
+                </h2>
+                <p className="text-sm text-white/70 font-medium">Session #{sessionId?.slice(0, 8)}</p>
               </div>
             </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center justify-center gap-4">
-            {callState === 'idle' ? (
+            <div className="flex items-center gap-3">
+              {/* Enhanced Status indicator */}
+              <div className="flex items-center gap-2.5 px-5 py-2.5 bg-white/10 rounded-xl backdrop-blur-md border border-white/20 shadow-lg">
+                <span className={`w-2.5 h-2.5 rounded-full shadow-lg ${
+                  callState === 'connected' ? 'bg-success shadow-success/50 animate-pulse' :
+                  callState === 'connecting' || callState === 'calling' ? 'bg-warning shadow-warning/50 animate-pulse' :
+                  'bg-error shadow-error/50'
+                }`} />
+                <span className="text-white font-semibold text-sm capitalize">
+                  {callState === 'connected' ? 'Live' :
+                   callState === 'connecting' ? 'Connecting...' :
+                   callState === 'calling' ? 'Calling...' :
+                   callState === 'receiving' ? 'Incoming...' :
+                   callState === 'ended' ? 'Ended' :
+                   callState === 'rejected' ? 'Rejected' :
+                   'Ready'}
+                </span>
+              </div>
               <button
+                onClick={() => {
+                  if (callState === 'connected' || callState === 'calling' || callState === 'connecting') {
+                    endCall();
+                  } else {
+                    cleanup();
+                    onClose();
+                  }
+                }}
+                className="p-3 hover:bg-white/20 rounded-xl transition-all duration-200 text-white hover:scale-110"
+                title="Close"
+                aria-label="Close video call"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+
+          {/* Error Display */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 p-4 bg-error/20 border-2 border-error/40 rounded-2xl flex items-center gap-3 text-white backdrop-blur-md shadow-lg"
+            >
+              <div className="w-10 h-10 bg-error/30 rounded-xl flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-error flex-shrink-0" />
+              </div>
+              <span className="font-medium">{error}</span>
+            </motion.div>
+          )}
+
+          {/* Video Grid - Enhanced Layout */}
+          <div className="flex-1 relative mb-6">
+            {/* Main remote video with improved styling */}
+            <div className="absolute inset-0 bg-gradient-to-br from-gray-900/80 to-gray-800/80 rounded-3xl overflow-hidden backdrop-blur-sm border-2 border-white/10 shadow-2xl">
+              {remoteStream ? (
+                <>
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  {remoteUser && (
+                    <div className="absolute top-6 left-6 flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-full border border-white/20">
+                      <div className="w-8 h-8 bg-gradient-to-br from-success to-success/80 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">
+                          {remoteUser.role?.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-white font-medium text-sm">{formatRoleName(remoteUser.role) || 'Participant'}</p>
+                        <p className="text-white/60 text-xs">Remote</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+                      <Video className="w-10 h-10 text-white/50" />
+                    </div>
+                    <p className="text-white/70 text-lg font-medium">Waiting for participant...</p>
+                    <p className="text-white/40 text-sm mt-2">They will appear here once connected</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Picture-in-Picture local video */}
+            <div className="absolute bottom-6 right-6 w-72 h-48 bg-gray-900 rounded-xl overflow-hidden shadow-2xl border-2 border-white/20 group hover:scale-105 transition-transform">
+              {localStream && isVideoEnabled ? (
+                <>
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover scale-x-[-1]"
+                  />
+                  <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                    <div className="w-6 h-6 bg-gradient-to-br from-primary to-primary-dark rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">
+                        {user?.firstName?.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="text-white text-sm font-medium">You</span>
+                  </div>
+                </>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+                  <div className="text-center">
+                    <VideoOff className="w-12 h-12 mx-auto mb-2 text-white/40" />
+                    <p className="text-white/60 text-sm">Camera Off</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Professional Controls Bar */}
+          <div className="flex items-center justify-center gap-3">
+            {callState === 'idle' ? (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={startCall}
-                className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white rounded-full flex items-center gap-2 transition-colors"
+                className="px-8 py-4 bg-gradient-to-r from-success to-success/90 hover:from-success-dark hover:to-success text-white rounded-full flex items-center gap-3 shadow-2xl transition-all font-semibold text-lg"
               >
                 <Video className="w-6 h-6" />
-                <span className="font-semibold">Start Video Call</span>
-              </button>
+                <span>Start Video Call</span>
+              </motion.button>
             ) : callState !== 'ended' && callState !== 'rejected' ? (
-              <>
-                <button
+              <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md p-3 rounded-full border border-white/10">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={toggleVideo}
-                  className={`p-4 rounded-full transition-colors ${
+                  className={`p-4 rounded-full transition-all shadow-lg ${
                     isVideoEnabled
-                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                      : 'bg-red-600 hover:bg-red-700 text-white'
+                      ? 'bg-white/10 hover:bg-white/20 text-white'
+                      : 'bg-error hover:bg-error-dark text-white'
                   }`}
+                  title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
+                  aria-label={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
                 >
                   {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={toggleAudio}
-                  className={`p-4 rounded-full transition-colors ${
+                  className={`p-4 rounded-full transition-all shadow-lg ${
                     isAudioEnabled
-                      ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                      : 'bg-red-600 hover:bg-red-700 text-white'
+                      ? 'bg-white/10 hover:bg-white/20 text-white'
+                      : 'bg-error hover:bg-error-dark text-white'
                   }`}
+                  title={isAudioEnabled ? 'Mute microphone' : 'Unmute microphone'}
+                  aria-label={isAudioEnabled ? 'Mute microphone' : 'Unmute microphone'}
                 >
                   {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-                </button>
+                </motion.button>
 
-                <button
+                <div className="w-px h-10 bg-white/20" />
+
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={endCall}
-                  className="p-4 bg-red-600 hover:bg-red-700 rounded-full text-white transition-colors"
+                  className="p-4 bg-error hover:bg-error-dark rounded-full text-white transition-all shadow-lg"
+                  title="End call"
+                  aria-label="End call"
                 >
                   <PhoneOff className="w-6 h-6" />
-                </button>
-              </>
+                </motion.button>
+              </div>
             ) : (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={onClose}
-                className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white rounded-full transition-colors"
+                className="px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all font-semibold"
               >
                 Close
-              </button>
+              </motion.button>
             )}
           </div>
         </div>

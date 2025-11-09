@@ -96,6 +96,7 @@ class AuthController {
             email: user.email,
             firstName: user.first_name,
             lastName: user.last_name,
+            profileImageUrl: user.profile_image_url || null,
             role: user.role,
             organization: {
               id: user.organization_id,
@@ -202,6 +203,7 @@ class AuthController {
         username: user.username,
         email: user.email,
         firstName: user.first_name,
+        profileImageUrl: user.profile_image_url || null,
         lastName: user.last_name,
         phone: user.phone,
         role: user.role,
@@ -239,6 +241,68 @@ class AuthController {
         success: true,
         message: 'Profile updated successfully'
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadProfileImage(req, res, next) {
+    try {
+      if (!req.file) {
+        return next(new AppError('No file uploaded', 400));
+      }
+
+      const filename = req.file.filename;
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/profiles/${filename}`;
+
+      // Fetch current user to remove old image if present
+      const existing = await UserModel.findById(req.user.id);
+      if (existing && existing.profile_image_url) {
+        try {
+          const path = require('path');
+          const fs = require('fs');
+          const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'profiles');
+          const old = existing.profile_image_url;
+          // If stored as full URL, extract filename
+          const oldFilename = old.includes('/uploads/profiles/') ? old.split('/uploads/profiles/').pop() : null;
+          if (oldFilename) {
+            const oldPath = path.join(uploadsDir, oldFilename);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+        } catch (e) {
+          // Log but don't block upload
+          console.warn('Failed to remove old profile image:', e.message);
+        }
+      }
+
+      // Persist new profile image URL
+      try {
+        await UserModel.update(req.user.id, { profileImageUrl: fileUrl });
+      } catch (err) {
+        // If the DB doesn't have the profile_image_url column, attempt to run the idempotent migration and retry once
+        if (err && err.code === 'ER_BAD_FIELD_ERROR' && (err.message || '').includes('profile_image_url')) {
+          try {
+            console.warn('profile_image_url column missing. Attempting to run migration and retry update...');
+            const migr = require('../database/alter-add-profile-image');
+            if (migr && typeof migr.migrate === 'function') {
+              await migr.migrate();
+              // retry update after migration
+              await UserModel.update(req.user.id, { profileImageUrl: fileUrl });
+            } else {
+              console.error('Migration module does not expose migrate()');
+              throw err;
+            }
+          } catch (migErr) {
+            console.error('Automatic migration attempt failed:', migErr.message || migErr);
+            // rethrow the original DB error so error handler can surface it
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      res.json({ success: true, data: { profileImageUrl: fileUrl } });
     } catch (error) {
       next(error);
     }

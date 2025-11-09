@@ -26,6 +26,7 @@ import { collaborationService, organizationService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
 import getErrorMessage from '../../utils/getErrorMessage';
+import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 
 // --- Validation Schema ---
 
@@ -49,6 +50,7 @@ export const Collaborations = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false); // For Create Modal
   const { toast } = useToast();
+  const runWithLoader = useWithGlobalLoader();
   
   // State for the Action Confirmation Modal
   const [actionModal, setActionModal] = useState({
@@ -92,12 +94,13 @@ export const Collaborations = () => {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const [collabsRes, orgsAllRes] = await Promise.all([
-        collaborationService.getAll(),
-        organizationService.getAll(),
-      ]);
+      await runWithLoader(async () => {
+        const [collabsRes, orgsAllRes] = await Promise.all([
+          collaborationService.getAll(),
+          organizationService.getAll(),
+        ]);
 
       // Backend returns { success: true, data: { requests: [...] } } or similar
       const collabData = collabsRes.data?.data?.requests || collabsRes.data?.requests || collabsRes.data || [];
@@ -117,6 +120,7 @@ export const Collaborations = () => {
   setFleetOwners(fleets);
   setHospitals(hosps);
 
+      }, 'Loading collaborations...');
     } catch (error) {
       console.error('Failed to fetch data:', error);
   const msg = getErrorMessage(error, 'Failed to load collaborations');

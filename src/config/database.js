@@ -6,6 +6,9 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || process.env.DB_USERNAME || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || process.env.DB_DATABASE || 'resculance_db',
+  // connection timeouts (ms)
+  connectTimeout: parseInt(process.env.DB_CONNECT_TIMEOUT_MS, 10) || 10000,
+  acquireTimeout: parseInt(process.env.DB_ACQUIRE_TIMEOUT_MS, 10) || 10000,
   waitForConnections: true,
   connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
   queueLimit: 0,

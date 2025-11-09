@@ -27,6 +27,8 @@ if (missingEnvVars.length > 0) {
 
 const app = express();
 const server = http.createServer(app);
+const path = require('path');
+const fs = require('fs');
 
 // Normalize socket CORS origins: allow comma-separated lists in env vars and trim spaces
 const socketAllowedOrigins = (process.env.SOCKET_CORS_ORIGIN || process.env.CORS_ORIGIN || 'http://localhost:5173')
@@ -81,6 +83,18 @@ app.use(compression());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Ensure uploads directory exists and serve it as static
+const uploadsPath = path.join(__dirname, '..', 'uploads');
+try {
+  if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
+  const profilesPath = path.join(uploadsPath, 'profiles');
+  if (!fs.existsSync(profilesPath)) fs.mkdirSync(profilesPath, { recursive: true });
+} catch (e) {
+  console.warn('Could not ensure uploads directory exists:', e.message);
+}
+
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // Rate limiting
 // const limiter = rateLimit({
