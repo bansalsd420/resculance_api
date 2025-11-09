@@ -21,12 +21,24 @@ const Select = (props) => {
     option: (base, state) => ({
       ...base,
       padding: '10px 12px',
-      background: state.isFocused ? (isDark ? '#06242e' : 'linear-gradient(90deg,#14b8a6,#06b6d4)') : state.isSelected ? (isDark ? 'rgba(14,165,140,0.08)' : 'rgba(20,184,166,0.06)') : (isDark ? '#071022' : '#ffffff'),
-      color: state.isFocused || state.isSelected ? (isDark ? '#e6eef9' : '#ffffff') : (isDark ? '#e6eef9' : '#0f172a'),
+      background: state.isFocused ? (isDark ? '#06242e' : '#f0fdfa') : state.isSelected ? (isDark ? 'rgba(14,165,140,0.08)' : 'rgba(20,184,166,0.06)') : (isDark ? '#071022' : '#ffffff'),
+      color: state.isFocused ? (isDark ? '#e6eef9' : '#0f172a') : state.isSelected ? (isDark ? '#14b8a6' : '#0f766e') : (isDark ? '#e6eef9' : '#0f172a'),
     }),
     singleValue: (base) => ({ ...base, color: isDark ? '#e6eef9' : '#0f172a' }),
-    menuList: (base) => ({ ...base, background: isDark ? '#071022' : '#ffffff' })
+    menuList: (base) => ({ ...base, background: isDark ? '#071022' : '#ffffff' }),
+    placeholder: (base) => ({ ...base, color: isDark ? '#6b7280' : '#9ca3af' }),
+    input: (base) => ({ ...base, color: isDark ? '#e6eef9' : '#0f172a' })
   };
+
+  // Merge custom styles properly: custom styles should not override theme-aware defaults
+  const mergedStyles = Object.keys(defaultStyles).reduce((acc, key) => {
+    acc[key] = (base, state) => {
+      const defaultStyle = defaultStyles[key](base, state);
+      const customStyle = props.styles?.[key]?.(base, state) || {};
+      return { ...defaultStyle, ...customStyle };
+    };
+    return acc;
+  }, {});
 
   return (
     <ReactSelect
@@ -34,7 +46,7 @@ const Select = (props) => {
       menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
       menuPosition="fixed"
       classNamePrefix={props.classNamePrefix || 'react-select'}
-      styles={{ ...(props.styles || {}), ...defaultStyles }}
+      styles={mergedStyles}
     />
   );
 };

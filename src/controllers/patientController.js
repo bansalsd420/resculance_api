@@ -36,10 +36,15 @@ class PatientController {
   static async create(req, res, next) {
     try {
       const {
-        firstName, lastName, age, gender, bloodGroup, phone,
+        firstName, lastName, age, gender, bloodGroup, phone, email,
           emergencyContactName, emergencyContactPhone, address,
         medicalHistory, allergies, currentMedications
       } = req.body;
+
+      // Only firstName is required
+      if (!firstName || !firstName.trim()) {
+        return next(new AppError('First name is required', 400));
+      }
 
       const patientCode = `PAT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
@@ -60,19 +65,20 @@ class PatientController {
         organizationId,
         patientCode,
         firstName,
-        lastName,
+        lastName: lastName || null,
         dateOfBirth: req.body.dateOfBirth || null,
-        age,
-        gender,
-        bloodGroup,
-        phone,
-        emergencyContactName,
-        emergencyContactPhone,
+        age: age || null,
+        gender: gender || null,
+        bloodGroup: bloodGroup || null,
+        phone: phone || null,
+        email: email || null,
+        emergencyContactName: emergencyContactName || null,
+        emergencyContactPhone: emergencyContactPhone || null,
         emergencyContactRelation: req.body.emergencyContactRelation || null,
-        address,
-        medicalHistory,
-        allergies,
-        currentMedications,
+        address: address || null,
+        medicalHistory: medicalHistory || null,
+        allergies: allergies || null,
+        currentMedications: currentMedications || null,
         createdBy: req.user.id
       });
 

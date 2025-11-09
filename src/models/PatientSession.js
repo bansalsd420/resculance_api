@@ -34,7 +34,7 @@ class PatientSessionModel {
       `SELECT ps.*, 
               p.first_name as patient_first_name, p.last_name as patient_last_name,
               p.age, p.gender, p.blood_group, p.medical_history, p.allergies, p.current_medications,
-              a.ambulance_code, a.registration_number,
+              a.ambulance_code, a.registration_number, a.vehicle_model, a.vehicle_type,
               org.name as organization_name, org.type as organization_type,
               dest_org.name as destination_hospital_name
        FROM patient_sessions ps
@@ -45,7 +45,27 @@ class PatientSessionModel {
        WHERE ps.id = ?`,
       [id]
     );
-    return rows[0];
+    
+    const session = rows[0];
+    if (session) {
+      // Fetch the assigned crew members for this ambulance
+      const [crew] = await db.query(
+        `SELECT u.id, u.first_name, u.last_name, u.role, u.email, u.phone,
+                aa.role as assignment_role, aa.assigned_at
+         FROM ambulance_assignments aa
+         JOIN users u ON aa.user_id = u.id
+         WHERE aa.ambulance_id = ? AND aa.is_active = TRUE`,
+        [session.ambulance_id]
+      );
+      session.crew = crew || [];
+      
+      // Separate crew by role for easier frontend access
+      session.doctors = crew.filter(c => c.role && c.role.toLowerCase().includes('doctor'));
+      session.paramedics = crew.filter(c => c.role && c.role.toLowerCase().includes('paramedic'));
+      session.drivers = crew.filter(c => c.role && c.role.toLowerCase().includes('driver'));
+    }
+    
+    return session;
   }
 
   static async findByCode(code) {
@@ -114,6 +134,25 @@ class PatientSessionModel {
     }
 
     const [rows] = await db.query(query, params);
+    
+    // For each session, fetch the assigned crew members
+    for (let i = 0; i < rows.length; i++) {
+      const [crew] = await db.query(
+        `SELECT u.id, u.first_name, u.last_name, u.role, u.email, u.phone,
+                aa.role as assignment_role
+         FROM ambulance_assignments aa
+         JOIN users u ON aa.user_id = u.id
+         WHERE aa.ambulance_id = ? AND aa.is_active = TRUE`,
+        [rows[i].ambulance_id]
+      );
+      rows[i].crew = crew || [];
+      
+      // Separate crew by role for easier frontend access
+      rows[i].doctors = crew.filter(c => c.role && c.role.toLowerCase().includes('doctor'));
+      rows[i].paramedics = crew.filter(c => c.role && c.role.toLowerCase().includes('paramedic'));
+      rows[i].drivers = crew.filter(c => c.role && c.role.toLowerCase().includes('driver'));
+    }
+    
     return rows;
   }
 
@@ -143,16 +182,37 @@ class PatientSessionModel {
     const [rows] = await db.query(
       `SELECT ps.*, 
               p.first_name as patient_first_name, p.last_name as patient_last_name,
-              a.ambulance_code, a.registration_number,
-              org.name as organization_name
+              a.ambulance_code, a.registration_number, a.vehicle_model, a.vehicle_type,
+              org.name as organization_name, org.type as organization_type,
+              dest_org.name as destination_hospital_name
        FROM patient_sessions ps
        JOIN patients p ON ps.patient_id = p.id
        JOIN ambulances a ON ps.ambulance_id = a.id
        JOIN organizations org ON ps.organization_id = org.id
+       LEFT JOIN organizations dest_org ON ps.destination_hospital_id = dest_org.id
        WHERE ps.patient_id = ?
        ORDER BY ps.created_at DESC`,
       [patientId]
     );
+    
+    // For each session, fetch the assigned crew members
+    for (let i = 0; i < rows.length; i++) {
+      const [crew] = await db.query(
+        `SELECT u.id, u.first_name, u.last_name, u.role, u.email, u.phone,
+                aa.role as assignment_role
+         FROM ambulance_assignments aa
+         JOIN users u ON aa.user_id = u.id
+         WHERE aa.ambulance_id = ? AND aa.is_active = TRUE`,
+        [rows[i].ambulance_id]
+      );
+      rows[i].crew = crew || [];
+      
+      // Separate crew by role for easier frontend access
+      rows[i].doctors = crew.filter(c => c.role && c.role.toLowerCase().includes('doctor'));
+      rows[i].paramedics = crew.filter(c => c.role && c.role.toLowerCase().includes('paramedic'));
+      rows[i].drivers = crew.filter(c => c.role && c.role.toLowerCase().includes('driver'));
+    }
+    
     return rows;
   }
 

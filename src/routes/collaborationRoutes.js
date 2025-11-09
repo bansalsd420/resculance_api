@@ -9,12 +9,17 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Allow both hospital and fleet org users to create collaboration requests.
+// The controller itself validates that non-superadmin users can only create
+// requests from their own organization (hospital -> fleet, fleet -> hospital),
+// so we only restrict by roles here and not by org type.
 router.post(
   '/',
-  requireOrgType(ORG_TYPES.HOSPITAL),
   authorize(
     ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF
+    ROLES.HOSPITAL_STAFF,
+    ROLES.FLEET_ADMIN,
+    ROLES.FLEET_STAFF
   ),
   createCollaborationRequestValidation,
   validate,

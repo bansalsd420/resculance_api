@@ -31,25 +31,25 @@ import getErrorMessage from '../../utils/getErrorMessage';
 
 const patientSchema = yup.object({
   firstName: yup.string().required('First name is required'),
-  lastName: yup.string(),
-  dateOfBirth: yup.date(),
-  gender: yup.string(),
-  bloodGroup: yup.string(),
-  phone: yup.string(),
-  email: yup.string().email('Invalid email'),
-  address: yup.string(),
-  emergencyContactName: yup.string(),
-  emergencyContactPhone: yup.string(),
-  emergencyContactRelation: yup.string(),
+  lastName: yup.string().nullable(),
+  dateOfBirth: yup.date().nullable(),
+  gender: yup.string().nullable(),
+  bloodGroup: yup.string().nullable(),
+  phone: yup.string().nullable(),
+  email: yup.string().email('Invalid email').nullable(),
+  address: yup.string().nullable(),
+  emergencyContactName: yup.string().nullable(),
+  emergencyContactPhone: yup.string().nullable(),
+  emergencyContactRelation: yup.string().nullable(),
 });
 
 const vitalSignsSchema = yup.object({
-  heartRate: yup.number().required('Heart rate is required').positive(),
-  bloodPressureSystolic: yup.number().required('Systolic BP is required').positive(),
-  bloodPressureDiastolic: yup.number().required('Diastolic BP is required').positive(),
-  temperature: yup.number().required('Temperature is required').positive(),
-  oxygenSaturation: yup.number().required('Oxygen saturation is required').min(0).max(100),
-  respiratoryRate: yup.number().required('Respiratory rate is required').positive(),
+  heartRate: yup.number().positive().nullable(),
+  bloodPressureSystolic: yup.number().positive().nullable(),
+  bloodPressureDiastolic: yup.number().positive().nullable(),
+  temperature: yup.number().positive().nullable(),
+  oxygenSaturation: yup.number().min(0).max(100).nullable(),
+  respiratoryRate: yup.number().positive().nullable(),
 });
 
 export const Patients = () => {
@@ -943,34 +943,123 @@ export const Patients = () => {
             {/* Sessions History */}
             <div>
               <h3 className="font-semibold mb-4">Ambulance Sessions</h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-3 max-h-96 overflow-y-auto">
                 {(!Array.isArray(sessions) || sessions.length === 0) ? (
                   <p className="text-secondary text-center py-8">No sessions found</p>
                 ) : (
                   sessions.map((session, index) => (
                     <div
                       key={index}
-                      className="p-4 border border-border rounded-2xl hover:bg-background-card transition-colors"
+                      className="p-4 border-2 border-border rounded-2xl hover:bg-background-card transition-colors space-y-3"
                     >
+                      {/* Session Header */}
                       <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-semibold">{session.chiefComplaint}</p>
+                        <div className="flex-1">
+                          <p className="font-semibold text-lg">{session.chiefComplaint || session.chief_complaint || 'N/A'}</p>
                           <p className="text-sm text-secondary mt-1">
-                            Pickup: {session.pickupLocation}
+                            📍 Pickup: {session.pickupLocation || session.pickup_location || 'N/A'}
                           </p>
+                          {(session.destination_hospital_name || session.destinationHospitalName) && (
+                            <p className="text-sm text-secondary">
+                              🏥 Destination: {session.destination_hospital_name || session.destinationHospitalName}
+                            </p>
+                          )}
                         </div>
                         <span
                           className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            session.status === 'active'
-                              ? 'bg-green-50 text-green-700'
-                              : 'bg-gray-100 text-gray-700'
+                            session.status === 'active' || session.status === 'onboarded' || session.status === 'in_transit'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : session.status === 'offboarded'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
                           }`}
                         >
                           {session.status}
                         </span>
                       </div>
-                      <p className="text-xs text-secondary mt-2">
-                        {new Date(session.startTime).toLocaleString()}
+
+                      {/* Ambulance Info */}
+                      <div className="bg-background rounded-xl p-3 border border-border">
+                        <p className="text-xs font-medium text-secondary mb-2">🚑 Ambulance Details</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-secondary">Registration:</span>
+                            <span className="ml-2 font-medium text-text">
+                              {session.registration_number || session.ambulance_code || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-secondary">Model:</span>
+                            <span className="ml-2 font-medium text-text">
+                              {session.vehicle_model || session.vehicleModel || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-secondary">Type:</span>
+                            <span className="ml-2 font-medium text-text">
+                              {session.vehicle_type || session.vehicleType || 'Basic'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-secondary">Owner:</span>
+                            <span className="ml-2 font-medium text-text">
+                              {session.organization_name || session.organizationName || 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Crew Information */}
+                      {(session.crew && session.crew.length > 0) && (
+                        <div className="bg-background rounded-xl p-3 border border-border">
+                          <p className="text-xs font-medium text-secondary mb-2">👥 Crew Members</p>
+                          <div className="space-y-2">
+                            {session.doctors && session.doctors.length > 0 && (
+                              <div>
+                                <span className="text-xs text-secondary">Doctors:</span>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {session.doctors.map((doc, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-medium">
+                                      Dr. {doc.first_name} {doc.last_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {session.paramedics && session.paramedics.length > 0 && (
+                              <div>
+                                <span className="text-xs text-secondary">Paramedics:</span>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {session.paramedics.map((para, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-xs font-medium">
+                                      {para.first_name} {para.last_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {session.drivers && session.drivers.length > 0 && (
+                              <div>
+                                <span className="text-xs text-secondary">Drivers:</span>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {session.drivers.map((driver, idx) => (
+                                    <span key={idx} className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-lg text-xs font-medium">
+                                      {driver.first_name} {driver.last_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Session Timestamp */}
+                      <p className="text-xs text-secondary flex items-center gap-1">
+                        <span>⏰</span>
+                        {session.startTime || session.start_time || session.createdAt || session.created_at 
+                          ? new Date(session.startTime || session.start_time || session.createdAt || session.created_at).toLocaleString()
+                          : 'N/A'}
                       </p>
                     </div>
                   ))

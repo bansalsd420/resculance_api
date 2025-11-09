@@ -17,7 +17,9 @@ import {
   Volume2,
   Wind,
   Heart,
-  Navigation
+  Navigation,
+  Ambulance as AmbulanceIcon,
+  UserPlus
 } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
@@ -246,6 +248,94 @@ export default function OnboardingDetail() {
           </Card>
         </div>
 
+        {/* Ambulance & Crew Info Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Ambulance Details */}
+          <Card className="p-6">
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <AmbulanceIcon className="w-5 h-5" /> Ambulance Details
+            </h2>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-secondary mb-1">Registration</p>
+                  <p className="text-sm font-medium text-text">{session.ambulance_code || session.ambulanceCode || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary mb-1">Model</p>
+                  <p className="text-sm font-medium text-text">{session.vehicle_model || session.vehicleModel || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary mb-1">Type</p>
+                  <p className="text-sm font-medium text-text">{session.vehicle_type || session.vehicleType || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary mb-1">Owner</p>
+                  <p className="text-sm font-medium text-text">{session.ambulance_owner_name || session.ambulanceOwnerName || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Crew Members */}
+          <Card className="p-6">
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <UserPlus className="w-5 h-5" /> Crew Members
+            </h2>
+            {session.crew && session.crew.length > 0 ? (
+              <div className="space-y-3">
+                {session.doctors && session.doctors.length > 0 && (
+                  <div>
+                    <p className="text-xs text-secondary mb-2">Doctors</p>
+                    <div className="flex flex-wrap gap-2">
+                      {session.doctors.map((doc) => (
+                        <span 
+                          key={doc.id} 
+                          className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
+                        >
+                          {doc.first_name || doc.firstName} {doc.last_name || doc.lastName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {session.paramedics && session.paramedics.length > 0 && (
+                  <div>
+                    <p className="text-xs text-secondary mb-2">Paramedics</p>
+                    <div className="flex flex-wrap gap-2">
+                      {session.paramedics.map((para) => (
+                        <span 
+                          key={para.id} 
+                          className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+                        >
+                          {para.first_name || para.firstName} {para.last_name || para.lastName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {session.drivers && session.drivers.length > 0 && (
+                  <div>
+                    <p className="text-xs text-secondary mb-2">Drivers</p>
+                    <div className="flex flex-wrap gap-2">
+                      {session.drivers.map((driver) => (
+                        <span 
+                          key={driver.id} 
+                          className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200"
+                        >
+                          {driver.first_name || driver.firstName} {driver.last_name || driver.lastName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-secondary">No crew members assigned</p>
+            )}
+          </Card>
+        </div>
+
         {/* Second Row: Patient Flow, Medical Reports, Live Location */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Patient Flow */}
@@ -458,6 +548,7 @@ export default function OnboardingDetail() {
           setPendingVideoCall(null); // Clear pending call when closing
         }}
         pendingCall={pendingVideoCall} // Pass the pending call data
+        session={session} // Pass session data for crew information
       />
 
       {/* Floating Action Buttons - Chat and Video only (hidden while chat/video panels are open to avoid interference) */}

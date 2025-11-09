@@ -193,7 +193,7 @@ const ChatPanel = ({ sessionId, isOpen, onClose }) => {
         className="fixed right-0 top-0 h-full w-full sm:w-[420px] bg-background-card shadow-2xl z-[9990] flex flex-col border-l border-border"
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary via-primary to-primary-dark text-white p-5 flex items-center justify-between border-b border-white/10 shadow-lg">
+        <div className="bg-primary text-white p-5 flex items-center justify-between border-b border-white/10 shadow-lg">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm shadow-inner relative">
               <Users className="w-6 h-6" />
@@ -211,7 +211,7 @@ const ChatPanel = ({ sessionId, isOpen, onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-white/20 rounded-xl transition-all duration-200 hover:scale-110"
+            className="p-2 hover:bg-white/20 rounded-xl transition-all duration-200 hover:scale-110 text-white"
             aria-label="Close chat"
           >
             <X className="w-5 h-5" />
@@ -250,7 +250,7 @@ const ChatPanel = ({ sessionId, isOpen, onClose }) => {
                     <div className={`max-w-[80%] ${isOwnMessage ? 'items-end' : 'items-start'} flex flex-col gap-1.5`}>
                       {!isOwnMessage && (
                         <div className="flex items-center gap-2 px-3">
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white text-[10px] font-bold shadow-md">
+                          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[10px] font-bold shadow-md">
                             {msg.sender_first_name?.[0]}{msg.sender_last_name?.[0]}
                           </div>
                           <span className={`text-xs font-semibold ${getRoleColor(msg.sender_role)}`}>
@@ -264,7 +264,7 @@ const ChatPanel = ({ sessionId, isOpen, onClose }) => {
                       <div
                         className={`rounded-2xl px-4 py-3 shadow-md transition-all hover:shadow-lg ${
                           isOwnMessage
-                            ? 'bg-gradient-to-br from-primary to-primary-dark text-white rounded-br-md'
+                            ? 'bg-primary text-white rounded-br-md'
                             : 'bg-background-card text-text border border-border rounded-bl-md hover:border-primary/30'
                         }`}
                       >
@@ -325,7 +325,7 @@ const ChatPanel = ({ sessionId, isOpen, onClose }) => {
               whileTap={{ scale: 0.95 }}
               type="submit"
               disabled={!newMessage.trim() || sending}
-              className="p-3.5 bg-gradient-to-br from-primary to-primary-dark text-white rounded-2xl hover:shadow-xl disabled:bg-border disabled:cursor-not-allowed transition-all shadow-lg disabled:shadow-none disabled:from-border disabled:to-border"
+              className="p-3.5 bg-primary text-white rounded-2xl hover:shadow-xl disabled:bg-border disabled:cursor-not-allowed transition-all shadow-lg disabled:shadow-none disabled:from-border disabled:to-border"
               aria-label="Send message"
             >
               {sending ? (

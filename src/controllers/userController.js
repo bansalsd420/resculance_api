@@ -106,13 +106,18 @@ class UserController {
       // If requester is superadmin and they are NOT explicitly requesting superadmins,
       // require an organizationId to be provided to scope results. This prevents returning
       // all users across organizations when a superadmin has not selected an organization.
+      // Exception: allow fetching all pending users without organizationId
       const originalRole = role;
-      if (req.user.role === 'superadmin' && !(originalRole && String(originalRole).trim().toLowerCase() === 'superadmin') && !req.query.organizationId) {
+      const isPendingRequest = status && String(status).toLowerCase() === 'pending';
+      if (req.user.role === 'superadmin' && !(originalRole && String(originalRole).trim().toLowerCase() === 'superadmin') && !req.query.organizationId && !isPendingRequest) {
         return next(new AppError('organizationId is required when superadmin is viewing non-superadmin users', 400));
       }
 
       // Users can only view users from their organization (except superadmin)
-      const organizationId = req.user.role === 'superadmin'
+      // For superadmin viewing pending users, don't scope to organization
+      const organizationId = (req.user.role === 'superadmin' && isPendingRequest)
+        ? undefined  // Allow viewing all pending users across organizations
+        : req.user.role === 'superadmin'
         ? req.query.organizationId
         : req.user.organizationId;
 

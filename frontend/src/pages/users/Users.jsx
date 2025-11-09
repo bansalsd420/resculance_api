@@ -47,15 +47,12 @@ export const Users = () => {
   const watchRole = watch('role');
   const [showConfirmSuperadmin, setShowConfirmSuperadmin] = useState(false);
   const roleInfoRef = useRef(null);
-  const prefetchedSuperadminsRef = useRef(false);
 
   const tabs = [
-    { id: 'all', label: 'All Users' },
-    { id: 'DOCTOR', label: 'Doctors' },
-    { id: 'PARAMEDIC', label: 'Paramedics' },
-    { id: 'DRIVER', label: 'Drivers' },
+    { id: 'all', label: 'All' },
     { id: 'pending', label: 'Pending Approval' },
-    ...(user?.role === 'superadmin' ? [{ id: 'superadmins', label: 'Superadmins' }] : []),
+    { id: 'active', label: 'Active' },
+    { id: 'deactivated', label: 'Deactivated' },
   ];
 
   const mapRoleLabel = (role) => {
@@ -85,7 +82,7 @@ export const Users = () => {
     fetchUsers();
     fetchOrganizations();
     // Note: intentionally not re-fetching on tab changes; tabs will be filtered client-side from cached users.
-  }, [selectedOrgId, orgTypeFilter]);
+  }, [selectedOrgId, orgTypeFilter, activeTab]);
 
   // Listen for global cache reset: clear users cache and force refetch
   useEffect(() => {
@@ -105,7 +102,7 @@ export const Users = () => {
     };
     window.addEventListener('global:cache-reset', handler);
     return () => window.removeEventListener('global:cache-reset', handler);
-  }, [selectedOrgId, orgTypeFilter, user]);
+  }, [selectedOrgId, orgTypeFilter, user, activeTab]);
 
   
 
@@ -148,10 +145,12 @@ export const Users = () => {
     setLoading(true);
     showLoader('Loading users...');
     try {
-      // If current user is superadmin and they're not viewing the Superadmins tab,
-      // require that they select an organization before loading any users. This prevents
-      // loading global results and enforces the scoped workflow.
-      if (user?.role === 'superadmin' && activeTab !== 'superadmins' && !selectedOrgId) {
+      // Special case: superadmin can view all pending users without organization selection
+      const isPendingTabForSuperadmin = user?.role === 'superadmin' && activeTab === 'pending';
+      
+      // If current user is superadmin and they haven't selected an organization,
+      // and they're not viewing pending users, require organization selection
+      if (user?.role === 'superadmin' && !selectedOrgId && !isPendingTabForSuperadmin) {
         // clear any previous users and don't call the API
         setUsers([]);
         return;
@@ -159,7 +158,7 @@ export const Users = () => {
 
       // Build a cache key based on organization scope. Non-superadmin users are scoped to their org.
       const scopeKey = user?.role === 'superadmin'
-        ? `org:${selectedOrgId || 'none'}`
+        ? `org:${selectedOrgId || 'none'}:tab:${activeTab}`
         : `org:${user?.organizationId || 'own'}`;
 
       // If cache exists and not forcing, use it and avoid network call
@@ -177,12 +176,19 @@ export const Users = () => {
       }
 
       // For superadmin users: if they selected an organization, fetch that org's users
-      if (user?.role === 'superadmin' && selectedOrgId) {
+      // Or if viewing pending users, don't scope to organization (show all pending)
+      if (user?.role === 'superadmin' && selectedOrgId && !isPendingTabForSuperadmin) {
         params.organizationId = selectedOrgId;
       }
 
-      // If specifically viewing superadmins, ask backend for superadmins across scope
-      if (activeTab === 'superadmins') params.role = 'superadmin';
+      // Add status filter based on active tab
+      if (activeTab === 'pending') {
+        params.status = 'pending';
+      } else if (activeTab === 'active') {
+        params.status = 'active';
+      } else if (activeTab === 'deactivated') {
+        params.status = 'deactivated';
+      }
 
       const response = await userService.getAll(params);
       const usersRaw = response.data?.data?.users || response.data?.users || response.data || [];
@@ -211,43 +217,6 @@ export const Users = () => {
       hideLoader();
     }
   };
-
-  // Prefetch superadmins once when the user becomes available (avoid empty tab on first visit)
-  useEffect(() => {
-    if (!user) return;
-    // Only prefetch for users who can view superadmins (typically superadmins)
-    if (prefetchedSuperadminsRef.current) return;
-    prefetchedSuperadminsRef.current = true;
-
-    const prefetch = async () => {
-      try {
-        const resp = await userService.getAll({ role: 'superadmin' });
-        const usersRaw = resp.data?.data?.users || resp.data?.users || resp.data || [];
-        const normalized = usersRaw.map(u => ({
-          ...u,
-          firstName: u.firstName || u.first_name || (u.email ? u.email.split('@')[0] : ''),
-          lastName: u.lastName || u.last_name || '',
-          organization_name: u.organization_name || u.organizationName || u.organization_name,
-          organization_code: u.organization_code || u.organizationCode || u.organization_code,
-          role: u.role,
-          status: u.status
-        }));
-
-        // Cache under the same scope key fetchUsers uses for superadmins (superadmin: org:none initially)
-        const scopeKey = `org:${selectedOrgId || 'none'}`;
-        setUsersCache(prev => ({ ...prev, [scopeKey]: normalized }));
-
-        // Inform the user that the list is cached and clicking refresh will fetch latest
-        toast.info('Superadmins list is cached locally. Click the refresh icon to fetch the latest data.');
-      } catch (err) {
-        // ignore silently; user can manually refresh when they view the tab
-        console.error('Prefetch superadmins failed', err);
-      }
-    };
-
-    // Only prefetch when the current user is a superadmin (no need for others)
-    if ((user?.role || '').toString().toLowerCase() === 'superadmin') prefetch();
-  }, [user]);
 
   const handleApprove = async (id) => {
     try {
@@ -460,20 +429,39 @@ export const Users = () => {
     },
     {
       header: 'Actions',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          {(row.status === 'pending' || row.status === 'pending_approval') ? (
-            <>
-              <Button size="sm" variant="success" onClick={() => handleApprove(row.id)}>
-                <UserCheck className="w-4 h-4 mr-1" />
-                Approve
-              </Button>
-              <Button size="sm" variant="danger" onClick={() => handleReject(row.id)}>
-                <UserX className="w-4 h-4 mr-1" />
-                Reject
-              </Button>
-            </>
-          ) : (
+      render: (row) => {
+        // Check if user was created by an org admin (not by superadmin or self-signup)
+        const createdByOrgAdmin = row.creator_role && (
+          row.creator_role.toLowerCase().includes('hospital_admin') || 
+          row.creator_role.toLowerCase().includes('fleet_admin')
+        );
+        
+        return (
+          <div className="flex items-center gap-2">
+            {(row.status === 'pending' || row.status === 'pending_approval') ? (
+              <>
+                <Button 
+                  size="sm" 
+                  variant="success" 
+                  onClick={() => handleApprove(row.id)}
+                  disabled={createdByOrgAdmin && user?.role !== 'superadmin'}
+                  title={createdByOrgAdmin && user?.role !== 'superadmin' ? 'Accounts created by organization admins are auto-approved and cannot be manually approved' : ''}
+                >
+                  <UserCheck className="w-4 h-4 mr-1" />
+                  Approve
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="danger" 
+                  onClick={() => handleReject(row.id)}
+                  disabled={createdByOrgAdmin && user?.role !== 'superadmin'}
+                  title={createdByOrgAdmin && user?.role !== 'superadmin' ? 'Accounts created by organization admins cannot be rejected here' : ''}
+                >
+                  <UserX className="w-4 h-4 mr-1" />
+                  Reject
+                </Button>
+              </>
+            ) : (
             <>
               <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
                 Edit
@@ -504,7 +492,8 @@ export const Users = () => {
             </>
           )}
         </div>
-      ),
+        );
+      },
     },
   ];
 
@@ -765,6 +754,25 @@ export const Users = () => {
           </>
         }
       >
+        <div className="max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+          <style>
+            {`
+              .custom-scrollbar::-webkit-scrollbar {
+                width: 8px;
+              }
+              .custom-scrollbar::-webkit-scrollbar-track {
+                background: var(--background);
+                border-radius: 4px;
+              }
+              .custom-scrollbar::-webkit-scrollbar-thumb {
+                background: var(--primary);
+                border-radius: 4px;
+              }
+              .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                background: var(--primary-dark);
+              }
+            `}
+          </style>
         <form className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
@@ -944,6 +952,7 @@ export const Users = () => {
             />
           )}
         </form>
+        </div>
       </Modal>
 
       {/* Confirm creating Superadmin */}
@@ -979,15 +988,15 @@ export const Users = () => {
 
             {/* Already-assigned ambulances */}
             <div>
-              <h4 className="text-sm font-medium">Already assigned ambulances</h4>
+              <h4 className="text-sm font-medium text-text mb-2">Already assigned ambulances</h4>
               {assignedAmbulances.length === 0 ? (
                 <p className="text-xs text-secondary">No ambulances are currently assigned to this user.</p>
               ) : (
                 <div className="space-y-2">
                   {assignedAmbulances.map(a => (
-                    <div key={a.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <div key={a.id} className="flex items-center justify-between p-2 bg-background-card border border-border rounded">
                       <div>
-                        <p className="font-medium">{a.registration_number || a.vehicleNumber}</p>
+                        <p className="font-medium text-text">{a.registration_number || a.vehicleNumber}</p>
                         <p className="text-xs text-secondary">{a.vehicle_model || a.vehicleModel} • {a.status}</p>
                       </div>
                       <div className="flex items-center gap-2">

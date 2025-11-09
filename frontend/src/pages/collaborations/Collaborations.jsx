@@ -31,10 +31,18 @@ import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 // --- Validation Schema ---
 
 const collaborationSchema = yup.object({
-  fleetId: yup.number().typeError('Fleet owner is required').required('Fleet owner is required'),
-  // hospitalId is required only when superadmin is creating the partnership (handled via resolver context)
+  // For non-superadmin users we require a single targetOrgId (they pick the counterpart org).
+  // For superadmin users, targetOrgId is not required; instead both hospitalId and fleetId are required.
+  targetOrgId: yup.number().when('$isSuper', (isSuper, schema) => {
+    return isSuper ? schema.notRequired() : schema.typeError('Organization is required').required('Organization is required');
+  }),
+  // hospitalId is required only when superadmin is creating the partnership
   hospitalId: yup.number().when('$isSuper', (isSuper, schema) => {
     return isSuper ? schema.typeError('Hospital is required').required('Hospital is required') : schema.notRequired();
+  }),
+  // fleetId is required only when superadmin is creating the partnership
+  fleetId: yup.number().when('$isSuper', (isSuper, schema) => {
+    return isSuper ? schema.typeError('Fleet is required').required('Fleet is required') : schema.notRequired();
   }),
   terms: yup.string().required('Terms are required'),
   duration: yup.number().typeError('Duration must be a number').required('Duration is required').positive('Duration must be positive'),
@@ -97,17 +105,51 @@ export const Collaborations = () => {
     setLoading(true);
     try {
       await runWithLoader(async () => {
-        const [collabsRes, orgsAllRes] = await Promise.all([
-          collaborationService.getAll(),
-          organizationService.getAll(),
-        ]);
+        // Decide what organizations to fetch for dropdowns:
+        // - superadmin: fetch all organizations
+        // - hospital admin: fetch all fleet_owner orgs (so hospital can pick a fleet)
+        // - fleet admin: fetch all hospital orgs (so fleet can pick a hospital)
+        const collabsPromise = collaborationService.getAll();
+        let orgsPromise;
+        if (user?.role === 'superadmin') {
+          orgsPromise = organizationService.getAll();
+        } else if (user?.organizationType === 'hospital') {
+          orgsPromise = organizationService.getAll({ type: 'fleet_owner', is_active: true, limit: 500 });
+        } else if (user?.organizationType === 'fleet_owner') {
+          orgsPromise = organizationService.getAll({ type: 'hospital', is_active: true, limit: 500 });
+        } else {
+          orgsPromise = organizationService.getAll();
+        }
+
+        const [collabsRes, orgsAllRes] = await Promise.all([collabsPromise, orgsPromise]);
 
       // Backend returns { success: true, data: { requests: [...] } } or similar
       const collabData = collabsRes.data?.data?.requests || collabsRes.data?.requests || collabsRes.data || [];
   const orgData = orgsAllRes.data?.data?.organizations || orgsAllRes.data?.organizations || orgsAllRes.data || [];
 
+  // orgData may already be filtered by backend for non-superadmin callers
   let fleets = Array.isArray(orgData) ? orgData.filter(o => (o.type || '').toString().toLowerCase() === 'fleet_owner') : [];
   let hosps = Array.isArray(orgData) ? orgData.filter(o => (o.type || '').toString().toLowerCase() === 'hospital') : [];
+
+  // If the backend returned only the requested type for non-superadmin, map accordingly
+  if (user?.role !== 'superadmin') {
+    if (user.organizationType === 'hospital') {
+      // orgData contains fleet owners for hospital admins
+      fleets = Array.isArray(orgData) ? orgData : [];
+      // hospitals should include the caller's own org for context
+      hosps = Array.isArray(orgData) ? orgData.filter(o => (o.type || '').toString().toLowerCase() === 'hospital') : [];
+      // ensure hospital list includes current org
+      if (!hosps || hosps.length === 0) {
+        // we can add the user's org into hosps for UI display by fetching it if needed
+        // but collaborations table already shows hospital info from collaboration records
+      }
+    }
+    if (user.organizationType === 'fleet_owner') {
+      // orgData contains hospitals for fleet admins
+      hosps = Array.isArray(orgData) ? orgData : [];
+      fleets = Array.isArray(orgData) ? orgData.filter(o => (o.type || '').toString().toLowerCase() === 'fleet_owner') : [];
+    }
+  }
 
   // If superadmin has an organization attached, remove it from the selectable lists
   if (user?.role === 'superadmin' && user?.organizationId) {
@@ -135,24 +177,39 @@ export const Collaborations = () => {
   const onSubmit = async (data) => {
     try {
       setLoading(true);
-      // Prepare payload mapping frontend field names to backend expected names
+      // Prepare payload based on user role - always send both hospitalId and fleetId
       const payloadBase = { requestType: 'partnership' };
-  // fleetId is now the canonical field from the form
-  payloadBase.fleetId = data.fleetId;
       payloadBase.terms = data.terms;
       payloadBase.message = data.message || '';
       payloadBase.duration = data.duration;
 
-      // Hospital id: superadmin must select, non-superadmin uses their org
       if (user?.role === 'superadmin') {
-        if (!data.hospitalId) {
-          toast.error('Please select a Hospital for the partnership');
+        // Superadmin must specify both organizations
+        if (!data.hospitalId || !data.fleetId) {
+          toast.error('Please select both Hospital and Fleet for the partnership');
           setLoading(false);
           return;
         }
         payloadBase.hospitalId = data.hospitalId;
-      } else {
-        payloadBase.hospitalId = user.organizationId;
+        payloadBase.fleetId = data.fleetId;
+      } else if (user?.organizationType === 'hospital') {
+        // Hospital admin selecting a fleet - hospital is requester, fleet is target
+        if (!data.targetOrgId) {
+          toast.error('Please select a Fleet Owner for the partnership');
+          setLoading(false);
+          return;
+        }
+        payloadBase.hospitalId = user.organizationId; // Requester
+        payloadBase.fleetId = data.targetOrgId; // Target
+      } else if (user?.organizationType === 'fleet_owner') {
+        // Fleet admin selecting a hospital - fleet is requester, hospital is target
+        if (!data.targetOrgId) {
+          toast.error('Please select a Hospital for the partnership');
+          setLoading(false);
+          return;
+        }
+        payloadBase.fleetId = user.organizationId; // Requester
+        payloadBase.hospitalId = data.targetOrgId; // Target
       }
 
       await collaborationService.create(payloadBase);
@@ -293,6 +350,7 @@ export const Collaborations = () => {
           <div>
             <div className="font-medium text-gray-900">{collab.hospital_name || collab.hospitalName || 'N/A'}</div>
             <div className="text-sm text-gray-500">{collab.hospital_code || collab.hospitalCode || ''}</div>
+            <div className="text-xs text-gray-400">{collab.hospital_city || collab.hospitalCity || ''}</div>
           </div>
         </div>
       ),
@@ -302,9 +360,15 @@ export const Collaborations = () => {
       accessor: 'fleet',
       render: (collab) => {
         return (
-          <div>
-            <div className="font-medium text-gray-900">{collab.fleet_name || collab.fleetName || 'N/A'}</div>
-            <div className="text-sm text-gray-500">{collab.fleet_code || collab.fleetCode || ''}</div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-xl flex items-center justify-center">
+              <Handshake className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="font-medium text-gray-900">{collab.fleet_name || collab.fleetName || 'N/A'}</div>
+              <div className="text-sm text-gray-500">{collab.fleet_code || collab.fleetCode || ''}</div>
+              <div className="text-xs text-gray-400">{collab.fleet_city || collab.fleetCity || ''}</div>
+            </div>
           </div>
         );
       },
@@ -403,6 +467,24 @@ export const Collaborations = () => {
             Partnership Management
           </h1>
           <p className="text-gray-600">Manage hospital-fleet collaborations and partnerships</p>
+          
+          {/* User guidance */}
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <Building2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-blue-800">
+                {user?.role === 'superadmin' && (
+                  <p>As a superadmin, you can create partnerships between any hospital and fleet, and manage all partnership requests.</p>
+                )}
+                {user?.organizationType === 'hospital' && (
+                  <p>As a hospital admin, you can send partnership requests to fleet owners and manage your existing partnerships.</p>
+                )}
+                {user?.organizationType === 'fleet_owner' && (
+                  <p>As a fleet admin, you can send partnership requests to hospitals and manage your existing partnerships.</p>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
         <Button onClick={() => setShowModal(true)} className="gap-2">
           <Plus className="w-5 h-5" />
@@ -537,7 +619,7 @@ export const Collaborations = () => {
       <Modal
         isOpen={showModal}
         onClose={handleCloseModal}
-        title="Create New Partnership"
+        title={`Create New Partnership ${user?.organizationType === 'hospital' ? 'with Fleet' : user?.organizationType === 'fleet_owner' ? 'with Hospital' : ''}`}
         size="lg"
         footer={
           <>
@@ -560,7 +642,11 @@ export const Collaborations = () => {
                   control={control}
                   defaultValue={''}
                   render={({ field }) => {
-                    const options = hospitals.map(o => ({ value: o.id, label: `${o.name} - ${o.city || o.code || ''}` }));
+                    const options = hospitals.map(o => ({ 
+                      value: o.id, 
+                      label: `${o.name} (${o.code})`, 
+                      details: `${o.city || 'N/A'}, ${o.state || ''} • ${o.phone || 'No phone'}` 
+                    }));
                     const value = options.find(o => o.value === field.value) || null;
                     return (
                       <Select
@@ -570,6 +656,14 @@ export const Collaborations = () => {
                         onChange={(opt) => field.onChange(opt ? opt.value : '')}
                         placeholder="Select Hospital"
                         isClearable
+                        formatOptionLabel={(option, { context }) => (
+                          <div>
+                            <div className="font-medium">{option.label}</div>
+                            {context === 'menu' && (
+                              <div className="text-xs text-gray-500 mt-1">{option.details}</div>
+                            )}
+                          </div>
+                        )}
                       />
                     );
                   }}
@@ -578,34 +672,92 @@ export const Collaborations = () => {
                       <p className="mt-1 text-sm text-red-500">{errors.hospitalId.message}</p>
                     )}
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fleet Owner</label>
+                <Controller
+                  name="fleetId"
+                  control={control}
+                  defaultValue={''}
+                  render={({ field }) => {
+                    const options = fleetOwners.map(o => ({ 
+                      value: o.id, 
+                      label: `${o.name} (${o.code})`, 
+                      details: `${o.city || 'N/A'}, ${o.state || ''} • ${o.phone || 'No phone'}` 
+                    }));
+                    const value = options.find(o => o.value === field.value) || null;
+                    return (
+                      <Select
+                        classNamePrefix="react-select"
+                        options={options}
+                        value={value}
+                        onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                        placeholder="Select Fleet Owner"
+                        isClearable
+                        formatOptionLabel={(option, { context }) => (
+                          <div>
+                            <div className="font-medium">{option.label}</div>
+                            {context === 'menu' && (
+                              <div className="text-xs text-gray-500 mt-1">{option.details}</div>
+                            )}
+                          </div>
+                        )}
+                      />
+                    );
+                  }}
+                />
+                {errors.fleetId && (
+                  <p className="mt-1 text-sm text-red-500">{errors.fleetId.message}</p>
+                )}
+              </div>
             </div>
           )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Fleet Owner
-            </label>
-            <Controller
-              name="fleetId"
-              control={control}
-              defaultValue={''}
-              render={({ field }) => {
-                const options = fleetOwners.length ? fleetOwners.map(o => ({ value: o.id, label: `${o.name} - ${o.city || o.code || ''}` })) : organizations.map(o => ({ value: o.id, label: `${o.name} - ${o.city || o.code || ''}` }));
-                const value = options.find(o => o.value === field.value) || null;
-                return (
-                  <Select
-                    classNamePrefix="react-select"
-                    options={options}
-                    value={value}
-                    onChange={(opt) => field.onChange(opt ? opt.value : '')}
-                    placeholder="Select Fleet Owner"
-                  />
-                );
-              }}
-            />
-            {errors.fleetId && (
-              <p className="mt-1 text-sm text-red-500">{errors.fleetId.message}</p>
-            )}
-          </div>
+
+          {(user?.organizationType === 'hospital' || user?.organizationType === 'fleet_owner') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                {user?.organizationType === 'hospital' ? 'Fleet Owner' : 'Hospital'}
+              </label>
+              <Controller
+                name="targetOrgId"
+                control={control}
+                defaultValue={''}
+                  render={({ field }) => {
+                    const options = user?.organizationType === 'hospital' 
+                      ? fleetOwners.map(o => ({ 
+                          value: o.id, 
+                          label: `${o.name} (${o.code})`, 
+                          details: `${o.city || 'N/A'}, ${o.state || ''} • ${o.phone || 'No phone'}` 
+                        }))
+                      : hospitals.map(o => ({ 
+                          value: o.id, 
+                          label: `${o.name} (${o.code})`, 
+                          details: `${o.city || 'N/A'}, ${o.state || ''} • ${o.phone || 'No phone'}` 
+                        }));
+                    const value = options.find(o => o.value === field.value) || null;
+                    return (
+                      <Select
+                        classNamePrefix="react-select"
+                        options={options}
+                        value={value}
+                        onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                        placeholder={`Select ${user?.organizationType === 'hospital' ? 'Fleet Owner' : 'Hospital'}`}
+                        formatOptionLabel={(option, { context }) => (
+                          <div>
+                            <div className="font-medium">{option.label}</div>
+                            {context === 'menu' && (
+                              <div className="text-xs text-gray-500 mt-1">{option.details}</div>
+                            )}
+                          </div>
+                        )}
+                      />
+                    );
+                  }}
+              />
+              {errors.targetOrgId && (
+                <p className="mt-1 text-sm text-red-500">{errors.targetOrgId.message}</p>
+              )}
+            </div>
+          )}
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -655,7 +807,13 @@ export const Collaborations = () => {
         <div className="space-y-4">
           <p className="flex items-start gap-2 text-gray-700">
             <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-1" />
-            Are you sure you want to **{actionModal.type}** the partnership with **{currentActionCollab?.fleetOwnerName || 'N/A'}**? 
+            Are you sure you want to **{actionModal.type}** the partnership request 
+            {currentActionCollab && (
+              <>
+                {' '}from <strong>{currentActionCollab.hospital_name || currentActionCollab.hospitalName || 'Unknown Hospital'}</strong> 
+                to <strong>{currentActionCollab.fleet_name || currentActionCollab.fleetName || 'Unknown Fleet'}</strong>
+              </>
+            )}?
             This action cannot be undone.
           </p>
           

@@ -50,7 +50,18 @@ export const Organizations = () => {
     setLoading(true);
     try {
       await runWithLoader(async () => {
-        const params = filterType !== 'all' ? { type: filterType } : {};
+        const params = {};
+        
+        // Handle type filter
+        if (filterType && filterType !== 'all' && filterType !== 'suspended') {
+          params.type = filterType;
+        }
+        
+        // Handle suspended filter
+        if (filterType === 'suspended') {
+          params.status = 'suspended';
+        }
+        
         const response = await organizationService.getAll(params);
         // API returns { success: true, data: { organizations: [...], pagination: {...} } }
         const raw = response.data?.data?.organizations || response.data?.organizations || response.data || [];
@@ -138,13 +149,14 @@ export const Organizations = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this organization?')) {
+    if (window.confirm('Are you sure you want to deactivate this organization? This will disable all ambulances, suspend all users, cancel partnerships, and offboard all patients.')) {
       try {
-        await organizationService.delete(id);
+        await organizationService.deactivate(id);
+        toast.success('Organization deactivated successfully');
         fetchOrganizations();
       } catch (error) {
-        console.error('Failed to delete organization:', error);
-        const msg = error?.response?.data?.message || 'Cannot perform the action right now. Please try again later.';
+        console.error('Failed to deactivate organization:', error);
+        const msg = error?.response?.data?.message || error?.message || 'Cannot perform the action right now. Please try again later.';
         toast.error(msg);
       }
     }
@@ -229,7 +241,7 @@ export const Organizations = () => {
             Edit
           </Button>
           <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>
-            Delete
+            Deactivate
           </Button>
         </div>
       ),
@@ -292,6 +304,14 @@ export const Organizations = () => {
               }`}
             >
               Fleets
+            </button>
+            <button
+              onClick={() => setFilterType('suspended')}
+              className={`px-4 py-2 rounded-2xl font-medium transition-all ${
+                filterType === 'suspended' ? 'bg-primary text-white' : 'bg-background-card'
+              }`}
+            >
+              Suspended
             </button>
           </div>
         </div>

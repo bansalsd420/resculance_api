@@ -11,20 +11,41 @@ const { emitBulkNotifications } = require('../socket/socketHandler');
 class CollaborationController {
   static async create(req, res, next) {
     try {
-      const { fleetId, hospitalId: bodyHospitalId, requestType = 'partnership', message, terms } = req.body;
+      const { fleetId, hospitalId, requestType = 'partnership', message, terms } = req.body;
 
-      // Find fleet by ID
-      const fleet = await OrganizationModel.findById(fleetId);
+      // Validate that both organization IDs are provided
+      if (!fleetId || !hospitalId) {
+        return next(new AppError('Both hospital and fleet must be specified', 400));
+      }
+
+      // Validate organizations exist and are of correct types
+      const [fleet, hospital] = await Promise.all([
+        OrganizationModel.findById(fleetId),
+        OrganizationModel.findById(hospitalId)
+      ]);
+
       if (!fleet || fleet.type !== 'fleet_owner') {
         return next(new AppError('Fleet owner not found', 404));
       }
 
-      // Allow superadmin to create request on behalf of a hospital by passing hospitalId in the body
-      const hospitalId = (req.user.role === 'superadmin' && bodyHospitalId) ? bodyHospitalId : req.user.organizationId;
+      if (!hospital || hospital.type !== 'hospital') {
+        return next(new AppError('Hospital not found', 404));
+      }
+
+      // For non-superadmin users, ensure they can only create requests involving their organization
+      if (req.user.role !== 'superadmin') {
+        const userOrgId = req.user.organizationId;
+        if (req.user.organizationType === 'hospital' && hospitalId !== userOrgId) {
+          return next(new AppError('Hospital admins can only create requests from their own hospital', 403));
+        }
+        if (req.user.organizationType === 'fleet_owner' && fleetId !== userOrgId) {
+          return next(new AppError('Fleet admins can only create requests from their own fleet', 403));
+        }
+      }
 
       const requestId = await CollaborationRequestModel.create({
         hospitalId,
-        fleetId: fleet.id,
+        fleetId,
         requestType,
         message,
         terms,
@@ -32,12 +53,14 @@ class CollaborationController {
         status: 'pending'
       });
 
-      // Notify fleet admins about new collaboration request
+      // Notify the target organization admins about new collaboration request
       try {
-        const hospital = await OrganizationModel.findById(hospitalId);
-        await NotificationService.notifyAdminsCollaborationRequest(fleet.id, {
+        const requesterOrg = req.user.organizationType === 'hospital' ? hospital : fleet;
+        const targetOrg = req.user.organizationType === 'hospital' ? fleet : hospital;
+        
+        await NotificationService.notifyAdminsCollaborationRequest(targetOrg.id, {
           id: requestId,
-          requesterOrgName: hospital.name
+          requesterOrgName: requesterOrg.name
         });
       } catch (notifError) {
         console.error('Failed to send collaboration request notification:', notifError);
@@ -61,12 +84,12 @@ class CollaborationController {
 
       // Superadmin sees all requests
       if (req.user.role !== 'superadmin') {
-        // Hospital users see requests they created
+        // Hospital and fleet users see all requests involving their organization
+        // This includes requests they created and requests sent to them
         if (req.user.organizationType === 'hospital') {
           filters.hospitalId = req.user.organizationId;
         }
 
-        // Fleet owner users see requests sent to them
         if (req.user.organizationType === 'fleet_owner') {
           filters.fleetId = req.user.organizationId;
         }

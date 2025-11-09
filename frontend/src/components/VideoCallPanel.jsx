@@ -5,7 +5,7 @@ import socketService from '../services/socketService.js';
 import { useAuthStore } from '../store/authStore';
 import { formatRoleName } from '../utils/roleUtils';
 
-const VideoCallPanel = ({ sessionId, isOpen, onClose, pendingCall }) => {
+const VideoCallPanel = ({ sessionId, isOpen, onClose, pendingCall, session }) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [peerConnection, setPeerConnection] = useState(null);
@@ -236,6 +236,24 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose, pendingCall }) => {
       setCallState('calling');
       setError(null);
 
+      // Find target user (first available crew member)
+      let targetUserId = null;
+      if (session?.crew && session.crew.length > 0) {
+        // Prefer paramedics first, then doctors, then drivers
+        const paramedic = session.crew.find(c => c.role?.toLowerCase().includes('paramedic'));
+        const doctor = session.crew.find(c => c.role?.toLowerCase().includes('doctor'));
+        const driver = session.crew.find(c => c.role?.toLowerCase().includes('driver'));
+        
+        targetUserId = paramedic?.id || doctor?.id || driver?.id || session.crew[0].id;
+        console.log('🎯 Targeting user for video call:', targetUserId);
+      }
+
+      if (!targetUserId) {
+        setError('No crew members available for video call');
+        setCallState('idle');
+        return;
+      }
+
       // Get local media stream
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -271,8 +289,8 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose, pendingCall }) => {
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log('🧊 Sending ICE candidate');
-          socketService.sendIceCandidate(sessionId, event.candidate, null); // null = broadcast to session
+          console.log('🧊 Sending ICE candidate to target user');
+          socketService.sendIceCandidate(sessionId, event.candidate, targetUserId);
         }
       };
 
@@ -325,8 +343,8 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose, pendingCall }) => {
       console.log('✅ Set local description, sending to session');
       
       setCallState('connecting');
-      // Send offer via socket (include offer so server relays to session participants)
-      socketService.requestVideoCall(sessionId, null, pc.localDescription); // null = group call
+      // Send offer to specific target user
+      socketService.requestVideoCall(sessionId, targetUserId, pc.localDescription);
 
     } catch (error) {
       console.error('❌ Error starting call:', error);

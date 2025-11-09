@@ -21,8 +21,8 @@ class CollaborationRequestModel {
   static async findById(id) {
     const [rows] = await db.query(
       `SELECT cr.*, 
-              h.name as hospital_name, h.code as hospital_code,
-              f.name as fleet_name, f.code as fleet_code,
+              h.name as hospital_name, h.code as hospital_code, h.city as hospital_city, h.state as hospital_state,
+              f.name as fleet_name, f.code as fleet_code, f.city as fleet_city, f.state as fleet_state,
               u.first_name as requester_first_name, u.last_name as requester_last_name,
               approver.first_name as approver_first_name, approver.last_name as approver_last_name
        FROM collaboration_requests cr
@@ -38,8 +38,8 @@ class CollaborationRequestModel {
 
   static async findAll(filters = {}) {
     let query = `SELECT cr.*, 
-                        h.name as hospital_name, h.code as hospital_code,
-                        f.name as fleet_name, f.code as fleet_code
+                        h.name as hospital_name, h.code as hospital_code, h.city as hospital_city, h.state as hospital_state,
+                        f.name as fleet_name, f.code as fleet_code, f.city as fleet_city, f.state as fleet_state
                  FROM collaboration_requests cr
                  JOIN organizations h ON cr.hospital_id = h.id
                  JOIN organizations f ON cr.fleet_id = f.id

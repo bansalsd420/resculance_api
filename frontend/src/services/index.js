@@ -82,6 +82,11 @@ export const organizationService = {
     const response = await api.patch(`/organizations/${id}/activate`);
     return response;
   },
+
+  deactivate: async (id) => {
+    const response = await api.patch(`/organizations/${id}/deactivate`);
+    return response;
+  },
 };
 
 export const userService = {

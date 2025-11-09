@@ -26,9 +26,11 @@ class UserModel {
 
   static async findById(id) {
     const [rows] = await db.query(
-      `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type
+      `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
+       creator.role as creator_role
        FROM users u
        JOIN organizations o ON u.organization_id = o.id
+       LEFT JOIN users creator ON u.created_by = creator.id
        WHERE u.id = ?`,
       [id]
     );
@@ -37,9 +39,11 @@ class UserModel {
 
   static async findByEmail(email) {
     const [rows] = await db.query(
-      `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type
+      `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
+       creator.role as creator_role
        FROM users u
        JOIN organizations o ON u.organization_id = o.id
+       LEFT JOIN users creator ON u.created_by = creator.id
        WHERE u.email = ?`,
       [email]
     );
@@ -48,9 +52,11 @@ class UserModel {
 
   static async findByUsername(username) {
     const [rows] = await db.query(
-      `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type
+      `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
+       creator.role as creator_role
        FROM users u
        JOIN organizations o ON u.organization_id = o.id
+       LEFT JOIN users creator ON u.created_by = creator.id
        WHERE u.username = ?`,
       [username]
     );
@@ -58,9 +64,11 @@ class UserModel {
   }
 
   static async findAll(filters = {}) {
-    let query = `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type
+    let query = `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
+                 creator.role as creator_role
                  FROM users u
                  JOIN organizations o ON u.organization_id = o.id
+                 LEFT JOIN users creator ON u.created_by = creator.id
                  WHERE 1=1`;
     const params = [];
 

@@ -70,12 +70,27 @@ class OrganizationController {
   static async getAll(req, res, next) {
     try {
       const { type, status, limit = 50, offset = 0, is_active } = req.query;
-
-      // If user is not superadmin, only return their own organization
+      // Build filters
       let filters = { type, status, limit, offset, is_active };
-      
+
+      // If user is not superadmin, normally only return their own organization.
+      // However, allow requesting organizations by `type` (e.g. all fleet_owner or hospital)
+      // so UI pages like Collaborations can fetch all fleets or all hospitals for partnership creation.
       if (req.user.role !== 'superadmin') {
-        // Non-superadmin users can only see their own organization
+        if (type) {
+          // Respect type filter even for non-superadmin callers
+          const orgs = await OrganizationModel.findAll(filters);
+          const total = await OrganizationModel.count({ type, status, is_active });
+          return res.json({
+            success: true,
+            data: {
+              organizations: orgs,
+              pagination: { total, limit: parseInt(limit), offset: parseInt(offset), hasMore: (parseInt(offset) + orgs.length) < total }
+            }
+          });
+        }
+
+        // No type requested: return only the caller's own organization
         const userOrg = await OrganizationModel.findById(req.user.organizationId);
         if (!userOrg) {
           return res.json({
@@ -86,7 +101,7 @@ class OrganizationController {
             }
           });
         }
-        
+
         return res.json({
           success: true,
           data: {
@@ -143,7 +158,7 @@ class OrganizationController {
   static async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, address, contactPerson, contactEmail, contactPhone, status, city, state, zipCode, licenseNumber } = req.body;
+      const { name, address, contactPerson, contactEmail, contactPhone, status, city, state, zipCode, licenseNumber, email, phone } = req.body;
 
       // contact person is required on update as well
       const contactPersonValue = contactPerson || req.body.contact_person;
@@ -152,7 +167,8 @@ class OrganizationController {
       }
 
       // email uniqueness check (exclude current org)
-      const emailToCheck = contactEmail || req.body.email || req.body.contact_email;
+      // Check all possible email field names from frontend
+      const emailToCheck = email || contactEmail || req.body.contact_email;
       if (emailToCheck) {
         const existing = await OrganizationModel.findByEmail(emailToCheck);
         if (existing && existing.id !== parseInt(id)) {
@@ -165,6 +181,9 @@ class OrganizationController {
         return next(new AppError('Organization not found', 404));
       }
 
+      // Prepare phone value from multiple possible field names
+      const phoneValue = phone || contactPhone || req.body.contact_phone;
+
       await OrganizationModel.update(id, {
         name,
         address,
@@ -175,17 +194,18 @@ class OrganizationController {
         pincode: zipCode || req.body.postalCode || null,
         license_number: licenseNumber,
         contact_person: contactPersonValue,
-        // include both naming variants
-        email: contactEmail,
-        phone: contactPhone,
-        contact_email: contactEmail,
-        contact_phone: contactPhone,
+        // include both naming variants for email
+        email: emailToCheck,
+        contact_email: emailToCheck,
+        // include both naming variants for phone
+        phone: phoneValue,
+        contact_phone: phoneValue,
         status
       });
 
       // Log activity
       const updatedOrg = await OrganizationModel.findById(id);
-      await ActivityLogService.logOrgUpdated(req.user, updatedOrg, { name, address, city, state }, req);
+      await ActivityLogService.logOrgUpdated(req.user, updatedOrg, { name, address, city, state, email: emailToCheck, phone: phoneValue }, req);
 
       res.json({
         success: true,

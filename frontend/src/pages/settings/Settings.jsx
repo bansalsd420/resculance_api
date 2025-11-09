@@ -409,8 +409,8 @@ export const Settings = () => {
 
                 <div className="space-y-4">
                   <div className="p-4 border border-border rounded-2xl">
-                    <p className="text-sm text-secondary mb-1">Organization ID</p>
-                    <p className="font-semibold">{user?.organizationId || 'N/A'}</p>
+                    <p className="text-sm text-secondary mb-1">Organization Name</p>
+                    <p className="font-semibold">{user?.organizationName || user?.organization_name || 'N/A'}</p>
                   </div>
 
                   <div className="p-4 border border-border rounded-2xl">

@@ -252,32 +252,41 @@ const socketHandler = (io) => {
     socket.on(SOCKET_EVENTS.VIDEO_REQUEST, (data) => {
       const { sessionId, receiverId, offer } = data;
       
-      io.to(`session_${sessionId}`).emit(SOCKET_EVENTS.VIDEO_REQUEST, {
+      const messageData = {
         sessionId,
         callerId: socket.user.id,
         callerRole: socket.user.role,
         receiverId,
         offer,
         timestamp: new Date().toISOString()
-      });
+      };
 
-      console.log(`Video call request from ${socket.user.id} to ${receiverId} in session ${sessionId}`);
+      // If receiverId is specified, send only to that user, otherwise broadcast to session
+      if (receiverId) {
+        io.to(`user_${receiverId}`).emit(SOCKET_EVENTS.VIDEO_REQUEST, messageData);
+        console.log(`Video call request from ${socket.user.id} to specific user ${receiverId} in session ${sessionId}`);
+      } else {
+        io.to(`session_${sessionId}`).emit(SOCKET_EVENTS.VIDEO_REQUEST, messageData);
+        console.log(`Video call request from ${socket.user.id} broadcast to session ${sessionId}`);
+      }
     });
 
     // Handle video call answer
     socket.on(SOCKET_EVENTS.VIDEO_ANSWER, (data) => {
       const { sessionId, callerId, accepted, answer } = data;
       
-      io.to(`session_${sessionId}`).emit(SOCKET_EVENTS.VIDEO_ANSWER, {
+      const messageData = {
         sessionId,
         responderId: socket.user.id,
         callerId,
         accepted,
         answer,
         timestamp: new Date().toISOString()
-      });
+      };
 
-      console.log(`Video call ${accepted ? 'accepted' : 'rejected'} in session ${sessionId}`);
+      // Send answer back to the caller
+      io.to(`user_${callerId}`).emit(SOCKET_EVENTS.VIDEO_ANSWER, messageData);
+      console.log(`Video call ${accepted ? 'accepted' : 'rejected'} from ${socket.user.id} to caller ${callerId} in session ${sessionId}`);
     });
 
     // Handle video call end
@@ -297,13 +306,21 @@ const socketHandler = (io) => {
     socket.on('ice_candidate', (data) => {
       const { sessionId, candidate, targetUserId } = data;
       
-      io.to(`session_${sessionId}`).emit('ice_candidate', {
+      const messageData = {
         sessionId,
         fromUserId: socket.user.id,
         candidate,
         targetUserId
-      });
-      console.log(`🧩 ICE candidate relayed by ${socket.user.id} for session ${sessionId} to target ${targetUserId || 'group'}`);
+      };
+
+      // If targetUserId is specified, send only to that user, otherwise broadcast to session
+      if (targetUserId) {
+        io.to(`user_${targetUserId}`).emit('ice_candidate', messageData);
+        console.log(`🧩 ICE candidate from ${socket.user.id} sent to specific user ${targetUserId} for session ${sessionId}`);
+      } else {
+        io.to(`session_${sessionId}`).emit('ice_candidate', messageData);
+        console.log(`🧩 ICE candidate from ${socket.user.id} broadcast to session ${sessionId}`);
+      }
     });
 
     // Handle emergency alerts
