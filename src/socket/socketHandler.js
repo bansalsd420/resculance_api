@@ -9,6 +9,7 @@ const authenticateSocket = (socket, next) => {
     const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
     
     if (!token) {
+      console.warn('Socket authentication failed: no token provided in handshake');
       return next(new Error('Authentication error: No token provided'));
     }
 
@@ -16,6 +17,8 @@ const authenticateSocket = (socket, next) => {
     socket.user = decoded;
     next();
   } catch (error) {
+    // Log non-sensitive error information to help debugging (do not log raw token)
+    console.warn('Socket authentication failed:', error.message);
     next(new Error('Authentication error: Invalid token'));
   }
 };
@@ -129,6 +132,7 @@ const socketHandler = (io) => {
         userRole: socket.user.role,
         isTyping: true
       });
+      console.log(`📝 User ${socket.user.id} started typing in session ${sessionId}`);
     });
 
     socket.on('typing_stop', (data) => {
@@ -138,6 +142,7 @@ const socketHandler = (io) => {
         userId: socket.user.id,
         isTyping: false
       });
+      console.log(`📝 User ${socket.user.id} stopped typing in session ${sessionId}`);
     });
 
     // Handle message read receipts (group chat)
@@ -149,6 +154,7 @@ const socketHandler = (io) => {
         userId: socket.user.id,
         readAt: new Date().toISOString()
       });
+      console.log(`📖 User ${socket.user.id} read message ${messageId} in session ${sessionId}`);
     });
 
     // Get online users in a session
@@ -173,6 +179,7 @@ const socketHandler = (io) => {
       }
       
       socket.emit('online_users', { sessionId, users: onlineUsers });
+      console.log(`👥 Online users requested for session ${sessionId} by user ${socket.user.id}. Count: ${onlineUsers.length}`);
     });
 
     // Broadcast when user joins session (for online status)
@@ -296,6 +303,7 @@ const socketHandler = (io) => {
         candidate,
         targetUserId
       });
+      console.log(`🧩 ICE candidate relayed by ${socket.user.id} for session ${sessionId} to target ${targetUserId || 'group'}`);
     });
 
     // Handle emergency alerts

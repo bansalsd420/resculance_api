@@ -356,9 +356,54 @@ class PatientController {
         filters.ambulanceId = ambulanceId;
       }
 
-      // Superadmin sees all sessions, others see only their organization's sessions
+      // Superadmin sees all sessions. For non-superadmins, normally scope by organizationId.
+      // However, when ambulanceId is provided, allow users who are actively assigned to that ambulance
+      // (e.g., paramedics/doctors assigned to the ambulance) to view its sessions even if their
+      // organizationId differs. This enables onboarded crew to see sessions for their ambulance.
       if (req.user.role !== 'superadmin') {
-        filters.organizationId = req.user.organizationId;
+        // By default we scope to the user's organization. However when ambulanceId is provided
+        // allow additional visibility in these cases:
+        // - user is assigned to the ambulance
+        // - user is a hospital staff/admin and the hospital has an active partnership with the ambulance's fleet
+        // - user is a fleet_owner and owns the ambulance
+        let allow = false;
+        if (ambulanceId) {
+          try {
+            const AmbulanceModel = require('../models/Ambulance');
+            const assigned = await AmbulanceModel.getAssignedUsers(ambulanceId);
+            if (Array.isArray(assigned) && assigned.some(u => parseInt(u.id) === parseInt(req.user.id))) {
+              allow = true;
+            } else {
+              // Not assigned; check ambulance owner and partnership
+              const db = require('../config/database');
+              const [ambRows] = await db.query('SELECT organization_id FROM ambulances WHERE id = ? LIMIT 1', [ambulanceId]);
+              if (ambRows && ambRows[0]) {
+                const ambulanceOwnerOrg = ambRows[0].organization_id;
+                // Fleet owner who owns the ambulance
+                if (req.user.organizationType === 'fleet_owner' && parseInt(req.user.organizationId) === parseInt(ambulanceOwnerOrg)) {
+                  allow = true;
+                }
+
+                // Hospital staff: check partnership between fleet and hospital
+                if (req.user.organizationType === 'hospital') {
+                  try {
+                    const Partnership = require('../models/Partnership');
+                    const partnership = await Partnership.findByFleetAndHospital(ambulanceOwnerOrg, req.user.organizationId);
+                    if (partnership) allow = true;
+                  } catch (e) {
+                    console.warn('Failed to check partnership for session visibility:', e.message || e);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to check ambulance assignments/partnership for session visibility:', e.message || e);
+          }
+        }
+
+        if (!allow) {
+          filters.organizationId = req.user.organizationId;
+        }
       }
 
       const sessions = await PatientSessionModel.findAll(filters);
@@ -540,7 +585,36 @@ class PatientController {
 
       // Check if user has access to this session
       if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
-        return next(new AppError('Access denied to this session', 403));
+        // Not same organization - allow if the user is assigned to the ambulance for this session,
+        // or if the user is a fleet_owner owning the ambulance, or if the user's hospital has a partnership
+        // with the ambulance's fleet (so hospital staff/admin can view partnered fleet sessions).
+        try {
+          const AmbulanceModel = require('../models/Ambulance');
+          const assigned = await AmbulanceModel.getAssignedUsers(session.ambulance_id);
+          let allowed = false;
+          if (Array.isArray(assigned) && assigned.some(u => parseInt(u.id) === parseInt(req.user.id))) {
+            allowed = true;
+          } else {
+            // fleet owner who owns the ambulance
+            if (req.user.organizationType === 'fleet_owner' && parseInt(req.user.organizationId) === parseInt(session.ambulance.organization_id)) {
+              allowed = true;
+            }
+            // hospital staff/admin: check partnership
+            if (!allowed && req.user.organizationType === 'hospital') {
+              try {
+                const Partnership = require('../models/Partnership');
+                const partnership = await Partnership.findByFleetAndHospital(session.ambulance.organization_id, req.user.organizationId);
+                if (partnership) allowed = true;
+              } catch (err) {
+                console.warn('Failed to check partnership for session messages:', err.message || err);
+              }
+            }
+          }
+          if (!allowed) return next(new AppError('Access denied to this session', 403));
+        } catch (e) {
+          console.warn('Failed to verify ambulance assignment/partnership for session messages:', e.message || e);
+          return next(new AppError('Access denied to this session', 403));
+        }
       }
 
       const messages = await CommunicationModel.findBySession(sessionId, parseInt(limit));
@@ -559,16 +633,49 @@ class PatientController {
       const { sessionId } = req.params;
       const { messageType, message, metadata } = req.body;
 
+      console.log(`[sendSessionMessage] User ${req.user?.id} attempting to send message to session ${sessionId}`);
+
       const session = await PatientSessionModel.findById(sessionId);
       if (!session) {
+        console.warn(`[sendSessionMessage] Session ${sessionId} not found (requested by ${req.user?.id})`);
         return next(new AppError('Session not found', 404));
       }
 
       // Check if user has access to this session
       if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
-        return next(new AppError('Access denied to this session', 403));
+        // Allow if user is assigned to the ambulance for this session,
+        // or if the user is the fleet owner of the ambulance, or if the user's hospital is partnered.
+        try {
+          const AmbulanceModel = require('../models/Ambulance');
+          const assigned = await AmbulanceModel.getAssignedUsers(session.ambulance_id);
+          let allowed = false;
+          if (Array.isArray(assigned) && assigned.some(u => parseInt(u.id) === parseInt(req.user.id))) {
+            allowed = true;
+          } else {
+            if (req.user.organizationType === 'fleet_owner' && parseInt(req.user.organizationId) === parseInt(session.ambulance.organization_id)) {
+              allowed = true;
+            }
+            if (!allowed && req.user.organizationType === 'hospital') {
+              try {
+                const Partnership = require('../models/Partnership');
+                const partnership = await Partnership.findByFleetAndHospital(session.ambulance.organization_id, req.user.organizationId);
+                if (partnership) allowed = true;
+              } catch (err) {
+                console.warn('Failed to check partnership for sending message', err.message || err);
+              }
+            }
+          }
+          if (!allowed) {
+            console.warn(`[sendSessionMessage] Access denied for user ${req.user?.id} to session ${sessionId} (not assigned/org mismatch/no partnership)`);
+            return next(new AppError('Access denied to this session', 403));
+          }
+        } catch (e) {
+          console.warn('Failed to verify ambulance assignment/partnership for sending message:', e.message || e);
+          return next(new AppError('Access denied to this session', 403));
+        }
       }
-
+      
+      console.log(`[sendSessionMessage] Permission granted for user ${req.user?.id} to send to session ${sessionId}`);
       const communicationId = await CommunicationModel.create({
         sessionId,
         senderId: req.user.id,
@@ -592,6 +699,8 @@ class PatientController {
         metadata,
         createdAt: new Date()
       });
+
+      console.log(`[sendSessionMessage] Message ${communicationId} emitted to session ${sessionId} by user ${req.user?.id}`);
 
       res.status(201).json({
         success: true,
@@ -634,6 +743,35 @@ class PatientController {
       const session = await PatientSessionModel.findById(sessionId);
       if (!session) {
         return next(new AppError('Session not found', 404));
+      }
+
+      // Access check same as other message endpoints
+      if (req.user.role !== 'superadmin' && req.user.organizationId !== session.organization_id) {
+        try {
+          const AmbulanceModel = require('../models/Ambulance');
+          const assigned = await AmbulanceModel.getAssignedUsers(session.ambulance_id);
+          let allowed = false;
+          if (Array.isArray(assigned) && assigned.some(u => parseInt(u.id) === parseInt(req.user.id))) {
+            allowed = true;
+          } else {
+            if (req.user.organizationType === 'fleet_owner' && parseInt(req.user.organizationId) === parseInt(session.ambulance.organization_id)) {
+              allowed = true;
+            }
+            if (!allowed && req.user.organizationType === 'hospital') {
+              try {
+                const Partnership = require('../models/Partnership');
+                const partnership = await Partnership.findByFleetAndHospital(session.ambulance.organization_id, req.user.organizationId);
+                if (partnership) allowed = true;
+              } catch (err) {
+                console.warn('Failed to check partnership for unread count', err.message || err);
+              }
+            }
+          }
+          if (!allowed) return next(new AppError('Access denied to this session', 403));
+        } catch (e) {
+          console.warn('Failed to verify ambulance assignment/partnership for unread count:', e.message || e);
+          return next(new AppError('Access denied to this session', 403));
+        }
       }
 
       const count = await CommunicationModel.getUnreadCount(sessionId, req.user.id);
