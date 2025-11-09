@@ -196,8 +196,23 @@ const Topbar = ({ toggleSidebar }) => {
 
       socketService.onNotification(handleNotification);
 
+      // Show socket connection errors and successes in the UI so it's easy to diagnose real-time issues
+      const handleSocketError = (err) => {
+        console.error('Socket connect_error:', err);
+        try { toast.error('Real-time connection error. Check server / token / CORS.', 5000); } catch(e) { /* ignore */ }
+      };
+
+      const handleSocketConnect = () => {
+        try { toast.success('Real-time connected', 2000); } catch(e) { /* ignore */ }
+      };
+
+      socketService.on('connect_error', handleSocketError);
+      socketService.on('connect', handleSocketConnect);
+
       return () => {
         socketService.offNotification(handleNotification);
+        socketService.off('connect_error', handleSocketError);
+        socketService.off('connect', handleSocketConnect);
       };
     }
   }, [token, user, toast]);

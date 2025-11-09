@@ -422,33 +422,35 @@ export default function OnboardingDetail() {
       <ChatPanel sessionId={sessionId} isOpen={showChat} onClose={() => setShowChat(false)} />
       <VideoCallPanel sessionId={sessionId} isOpen={showVideoCall} onClose={() => setShowVideoCall(false)} />
 
-      {/* Floating Action Buttons - Chat and Video only */}
-      <div className="fixed bottom-8 right-8 flex flex-col gap-4 z-[9999]">
-        <motion.button 
-          whileHover={{ scale: 1.1 }} 
-          whileTap={{ scale: 0.9 }} 
-          onClick={() => setShowChat(true)} 
-          className="w-16 h-16 rounded-full bg-primary hover:bg-primary-hover text-white shadow-2xl flex items-center justify-center relative group transition-all"
-          title="Open Group Chat"
-          aria-label="Open Group Chat"
-        >
-          <MessageCircle className="w-7 h-7" />
-          <span className="absolute -top-1 -right-1 w-6 h-6 bg-error text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse">3</span>
-          <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">Group Chat</span>
-        </motion.button>
+      {/* Floating Action Buttons - Chat and Video only (hidden while chat/video panels are open to avoid interference) */}
+      {(!showChat && !showVideoCall) && (
+        <div className="fixed bottom-8 right-8 flex flex-col gap-4 z-[9999]">
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            onClick={() => setShowChat(true)} 
+            className="w-16 h-16 rounded-full bg-primary hover:bg-primary-hover text-white shadow-2xl flex items-center justify-center relative group transition-all"
+            title="Open Group Chat"
+            aria-label="Open Group Chat"
+          >
+            <MessageCircle className="w-7 h-7" />
+            <span className="absolute -top-1 -right-1 w-6 h-6 bg-error text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse">3</span>
+            <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">Group Chat</span>
+          </motion.button>
 
-        <motion.button 
-          whileHover={{ scale: 1.1 }} 
-          whileTap={{ scale: 0.9 }} 
-          onClick={() => setShowVideoCall(true)} 
-          className="w-16 h-16 rounded-full bg-success hover:bg-success-hover text-white shadow-2xl flex items-center justify-center relative group transition-all"
-          title="Start Video Call"
-          aria-label="Start Video Call"
-        >
-          <Video className="w-7 h-7" />
-          <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">Video Call</span>
-        </motion.button>
-      </div>
+          <motion.button 
+            whileHover={{ scale: 1.1 }} 
+            whileTap={{ scale: 0.9 }} 
+            onClick={() => setShowVideoCall(true)} 
+            className="w-16 h-16 rounded-full bg-success hover:bg-success-hover text-white shadow-2xl flex items-center justify-center relative group transition-all"
+            title="Start Video Call"
+            aria-label="Start Video Call"
+          >
+            <Video className="w-7 h-7" />
+            <span className="absolute right-full mr-3 px-3 py-1.5 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">Video Call</span>
+          </motion.button>
+        </div>
+      )}
 
       {/* Camera Modal */}
       <CameraFeedModal isOpen={showCameraModal} onClose={() => setShowCameraModal(false)} session={session} ambulance={ambulance} selectedCamera={selectedCamera} />

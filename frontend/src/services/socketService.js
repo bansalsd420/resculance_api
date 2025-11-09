@@ -128,7 +128,11 @@ class SocketService {
   // Video call methods
   requestVideoCall(sessionId, receiverId = null) {
     if (!this.socket) return;
-    this.socket.emit('video_request', { sessionId, receiverId });
+    // If an offer is passed as the third argument, include it so the server can relay it to peers
+    const offer = arguments.length >= 3 ? arguments[2] : null;
+    const payload = { sessionId, receiverId };
+    if (offer) payload.offer = offer;
+    this.socket.emit('video_request', payload);
   }
 
   answerVideoCall(sessionId, callerId, accepted, answer = null) {

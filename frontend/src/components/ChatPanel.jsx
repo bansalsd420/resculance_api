@@ -190,7 +190,7 @@ const ChatPanel = ({ sessionId, isOpen, onClose }) => {
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 300 }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="fixed right-0 top-0 h-full w-full sm:w-[420px] bg-background-card shadow-2xl z-[9999] flex flex-col border-l border-border"
+        className="fixed right-0 top-0 h-full w-full sm:w-[420px] bg-background-card shadow-2xl z-[9990] flex flex-col border-l border-border"
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-primary via-primary to-primary-dark text-white p-5 flex items-center justify-between border-b border-white/10 shadow-lg">

@@ -169,13 +169,8 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
       await pc.setLocalDescription(offer);
       
       setCallState('connecting');
-      socketService.requestVideoCall(sessionId, null); // null = group call
-      
-      // Send offer via socket
-      socketService.emit('video_offer', {
-        sessionId,
-        offer: pc.localDescription
-      });
+      // Send offer via socket (include offer so server relays to session participants)
+      socketService.requestVideoCall(sessionId, null, pc.localDescription); // null = group call
 
     } catch (error) {
       console.error('Error starting call:', error);
@@ -296,7 +291,7 @@ const VideoCallPanel = ({ sessionId, isOpen, onClose }) => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 bg-black/95 backdrop-blur-sm z-[9999] flex items-center justify-center"
+        className="fixed inset-0 bg-black/95 backdrop-blur-sm z-[9990] flex items-center justify-center"
       >
         <div className="w-full h-full max-w-7xl mx-auto p-6 flex flex-col">
           {/* Professional Header with Enhanced Design */}
