@@ -275,6 +275,9 @@ export const getAllowedSidebarItems = (role) => {
   if (hasAnyPermission(role, PERMISSIONS.ONBOARD_PATIENT, PERMISSIONS.OFFBOARD_PATIENT)) {
     items.push('onboarding');
   }
+
+  // Sessions History - Available to all authenticated users
+  items.push('sessions');
   
   if (hasPermission(role, PERMISSIONS.VIEW_COLLABORATIONS)) {
     items.push('collaborations');

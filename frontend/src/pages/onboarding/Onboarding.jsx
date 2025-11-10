@@ -10,6 +10,7 @@ import {
   Eye,
   UserPlus,
   Search,
+  Power,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
@@ -53,6 +54,23 @@ export const Onboarding = () => {
     fetchOrganizations();
     fetchHospitals();
   }, []);
+
+  // Offboard handler for table (must be top-level, not inside useEffect)
+  const handleOffboardFromTable = async (row) => {
+    const sessionId = row.activeSession?.id;
+    if (!sessionId) return;
+    if (!window.confirm('Are you sure you want to offboard this patient?')) return;
+    try {
+      await patientService.offboard(sessionId, { treatmentNotes: 'Patient offboarded from table view' });
+      toast.success('Patient offboarded successfully');
+      // Refresh ambulances and patients
+      await fetchAmbulances();
+      await fetchPatients();
+    } catch (error) {
+      console.error('Failed to offboard patient:', error);
+      toast.error('Failed to offboard patient');
+    }
+  };
 
   useEffect(() => {
     // Fetch ambulances and patients when organization is selected
@@ -349,14 +367,25 @@ export const Onboarding = () => {
             Onboard Patient
           </Button>
           {row.hasActiveOnboarding && (
-            <Button 
-              size="sm" 
-              variant="secondary"
-              onClick={() => handleViewOnboarding(row)}
-            >
-              <Eye className="w-4 h-4 mr-1" />
-              View
-            </Button>
+            <>
+              <Button 
+                size="sm" 
+                variant="secondary"
+                onClick={() => handleViewOnboarding(row)}
+              >
+                <Eye className="w-4 h-4 mr-1" />
+                View
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => handleOffboardFromTable(row)}
+                className="ml-1"
+              >
+                <Power className="w-4 h-4 mr-1" />
+                Offboard
+              </Button>
+            </>
           )}
         </div>
       ),

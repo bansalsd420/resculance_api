@@ -19,6 +19,8 @@ import Activity from './pages/activity/Activity';
 import { Settings } from './pages/settings/Settings';
 import { PermissionsManagement } from './pages/settings/PermissionsManagement';
 import Notifications from './pages/notifications/Notifications';
+import Sessions from './pages/sessions/Sessions';
+import SessionDetail from './pages/sessions/SessionDetail';
 import { useAuthStore } from './store/authStore';
 import { PERMISSIONS } from './utils/permissions';
 
@@ -168,6 +170,28 @@ function App() {
               <ProtectedRoute>
                 <MainLayout>
                   <Notifications />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/sessions"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Sessions />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/sessions/:sessionId"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <SessionDetail />
                 </MainLayout>
               </ProtectedRoute>
             }

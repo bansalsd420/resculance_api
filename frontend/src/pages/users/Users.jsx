@@ -460,7 +460,7 @@ export const Users = () => {
         const isTargetAdmin = targetRole.includes('admin');
         const isSuperadmin = user?.role === 'superadmin';
         const isAdmin = targetRole.includes('admin');
-        
+
         // Suspended users: show only Activate button (superadmin only for admins, org admins can activate their org's users)
         if (isSuspended) {
           const canActivate = isSuperadmin || (!isTargetAdmin && user?.organizationId === row.organization_id);
@@ -478,47 +478,36 @@ export const Users = () => {
             </div>
           );
         }
-        
+
         // Check if user was created by an org admin (not by superadmin or self-signup)
         const createdByOrgAdmin = row.creator_role && (
           row.creator_role.toLowerCase().includes('hospital_admin') || 
           row.creator_role.toLowerCase().includes('fleet_admin')
         );
-        
+
+        // Approve/Reject logic: org admins can approve any non-admin (not just doctor/paramedic/driver/staff)
+        const canApprove = isSuperadmin || (!isTargetAdmin && user?.organizationId === row.organization_id);
+
         return (
           <div className="flex items-center gap-2">
-            {isPending ? (
+            {isPending && canApprove ? (
               <>
-                {/* Admins can only approve doctors and paramedics, not other admins */}
-                {(() => {
-                  const canApprove = isSuperadmin || 
-                    (!isTargetAdmin && (targetRole.includes('doctor') || targetRole.includes('paramedic')) && user?.organizationId === row.organization_id);
-                  
-                  return canApprove && (
-                    <>
-                      <Button 
-                        size="sm" 
-                        variant="success" 
-                        onClick={() => handleApprove(row.id)}
-                        disabled={createdByOrgAdmin && !isSuperadmin}
-                        title={createdByOrgAdmin && !isSuperadmin ? 'Accounts created by organization admins are auto-approved and cannot be manually approved' : ''}
-                      >
-                        <UserCheck className="w-4 h-4 mr-1" />
-                        Approve
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="danger" 
-                        onClick={() => handleReject(row.id)}
-                        disabled={createdByOrgAdmin && !isSuperadmin}
-                        title={createdByOrgAdmin && !isSuperadmin ? 'Accounts created by organization admins cannot be rejected here' : ''}
-                      >
-                        <UserX className="w-4 h-4 mr-1" />
-                        Reject
-                      </Button>
-                    </>
-                  );
-                })()}
+                <Button 
+                  size="sm" 
+                  variant="success" 
+                  onClick={() => handleApprove(row.id)}
+                >
+                  <UserCheck className="w-4 h-4 mr-1" />
+                  Approve
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="danger" 
+                  onClick={() => handleReject(row.id)}
+                >
+                  <UserX className="w-4 h-4 mr-1" />
+                  Reject
+                </Button>
               </>
             ) : (
             <>

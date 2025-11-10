@@ -46,6 +46,7 @@ const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }
     { path: '/ambulances', icon: Ambulance, label: 'Ambulances', key: 'ambulances' },
     { path: '/patients', icon: UserSquare2, label: 'Patients', key: 'patients' },
     { path: '/onboarding', icon: Activity, label: 'Onboarding', key: 'onboarding' },
+    { path: '/sessions', icon: ClipboardList, label: 'Sessions', key: 'sessions' },
     { path: '/collaborations', icon: Building2, label: 'Partnerships', key: 'collaborations' },
     { path: '/activity', icon: ClipboardList, label: 'Activity Logs', key: 'activity' },
     { path: '/permissions', icon: Shield, label: 'Permissions', key: 'permissions' },

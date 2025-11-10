@@ -355,6 +355,23 @@ export const patientService = {
   },
 };
 
+export const sessionService = {
+  getAll: async (params) => {
+    const response = await api.get('/sessions', { params });
+    return response;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/sessions/${id}`);
+    return response;
+  },
+
+  getStats: async () => {
+    const response = await api.get('/sessions/stats');
+    return response;
+  },
+};
+
 export const collaborationService = {
   getAll: async (params) => {
     const response = await api.get('/collaborations', { params });
