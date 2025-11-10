@@ -33,6 +33,7 @@ import { ToastContainer } from '../components/ui/Toast';
 import { formatRoleName } from '../utils/roleUtils';
 import { getAllowedSidebarItems } from '../utils/permissions';
 import notificationService from '../services/notificationService';
+import logo from '../assets/logo.png';
 
 const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }) => {
   const location = useLocation();
@@ -111,8 +112,8 @@ const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               className="flex items-center gap-3 cursor-pointer"
             >
-              <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-xl flex items-center justify-center">
-                <Activity className="w-6 h-6 text-white" />
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center overflow-hidden">
+                <img src={logo} alt="Resculance Logo" className="w-full h-full object-contain" />
               </div>
               {!collapsed && <span className="text-xl font-display font-bold tracking-tight text-text">Resculance</span>}
             </div>

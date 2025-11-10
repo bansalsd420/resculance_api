@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Activity, Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { authService } from '../../services';
+import logo from '../../assets/logo.png';
 
 const schema = yup.object({
   email: yup.string().email('Invalid email').required('Email is required'),
@@ -81,9 +82,9 @@ export const ForgotPassword = () => {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: 'spring' }}
-              className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4"
+              className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 overflow-hidden"
             >
-              <Activity className="w-8 h-8 text-white" />
+              <img src={logo} alt="Resculance Logo" className="w-full h-full object-contain" />
             </motion.div>
             <h1 className="text-3xl font-display font-bold mt-5 mb-2">Forgot Password?</h1>
             <p className="text-secondary text-center">
