@@ -10,7 +10,7 @@ const rateLimit = require('express-rate-limit');
 
 const db = require('./config/database');
 // Optional: auto-run migrations on first boot if core tables are missing
-const { migrateAll } = require('./database/migrate-all');
+const runComprehensiveMigration = require('./database/comprehensive-migration');
 const errorHandler = require('./middleware/errorHandler');
 const routes = require('./routes');
 const socketHandler = require('./socket/socketHandler');
@@ -158,7 +158,7 @@ db.getConnection()
 
       if (!hasUsersTable) {
         console.warn('⚠️  Core table "users" not found. Running migrations now...');
-        await migrateAll();
+        await runComprehensiveMigration();
         console.log('✅ Migrations completed at startup');
       }
     } catch (checkErr) {

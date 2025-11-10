@@ -6,14 +6,11 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "node src/database/migrate-all.js",
-    "migrate:legacy": "node src/database/migrate.js",
-    "seed": "node src/database/seed-all.js",
-    "seed:legacy": "node src/database/seed.js",
-    "seed:comprehensive": "node src/database/seed-all.js",
+    "migrate": "node src/database/comprehensive-migration.js",
+    "seed": "node src/database/seed-superadmin.js",
     "db:reset": "node src/database/reset.js",
-    "db:setup": "npm run db:reset && npm run migrate && npm run seed",
-    "db:setup:ci": "npm run db:reset && npm run migrate && npm run seed"
+    "db:setup": "node src/database/setup-database.js",
+    "schema:export": "node scripts/export-schema.js"
   },
   "keywords": [
     "ambulance",
