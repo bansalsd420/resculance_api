@@ -154,8 +154,9 @@ class PatientController {
     try {
       const { id } = req.params;
       const { 
-        firstName, lastName, dateOfBirth, gender, bloodType, allergies, 
-        medicalConditions, emergencyContact, emergencyPhone, address 
+        firstName, lastName, dateOfBirth, age, gender, bloodGroup, phone, email,
+        emergencyContactName, emergencyContactPhone, emergencyContactRelation,
+        address, medicalHistory, allergies, currentMedications
       } = req.body;
 
       const patient = await PatientModel.findById(id);
@@ -165,16 +166,21 @@ class PatientController {
 
       // Prepare update data - allow null values for most fields
       const updateData = {
-        firstName: firstName || patient.firstName,
+        firstName: firstName || patient.first_name,
         lastName: lastName || null,
         dateOfBirth: dateOfBirth || null,
+        age: age || null,
         gender: gender || null,
-        bloodType: bloodType || null,
+        bloodGroup: bloodGroup || null,
+        phone: phone || null,
+        email: email || null,
+        emergencyContactName: emergencyContactName || null,
+        emergencyContactPhone: emergencyContactPhone || null,
+        emergencyContactRelation: emergencyContactRelation || null,
+        address: address || null,
+        medicalHistory: medicalHistory || null,
         allergies: allergies || null,
-        medicalConditions: medicalConditions || null,
-        emergencyContact: emergencyContact || null,
-        emergencyPhone: emergencyPhone || null,
-        address: address || null
+        currentMedications: currentMedications || null
       };
 
       await PatientModel.update(id, updateData);
