@@ -87,7 +87,9 @@ export const useAuthStore = create(
           return response;
         } catch (error) {
           console.error('AuthStore: Login error:', error);
-          set({ loading: false, error: error.response?.data?.message || 'Login failed' });
+          // Prefer backend 'error' field, then 'message', then fallback to axios message
+          const serverMsg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Login failed';
+          set({ loading: false, error: serverMsg });
           throw error;
         }
       },

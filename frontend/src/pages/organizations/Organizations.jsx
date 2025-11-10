@@ -83,6 +83,16 @@ export const Organizations = () => {
           licenseNumber: org.licenseNumber || org.license_number || org.license || null
         }));
 
+        // Ensure we expose explicit is_active flag to the UI for consistent status rendering
+        normalized.forEach(o => {
+          if (o.is_active === undefined) {
+            // backend may use active/IsActive variants — fallbacks
+            o.is_active = o.active !== undefined ? !!o.active : (o.isActive !== undefined ? !!o.isActive : (o.status ? (o.status.toString().toLowerCase() === 'active') : true));
+          }
+          // normalize status to lowercase string if present
+          if (o.status) o.status = o.status.toString().toLowerCase();
+        });
+
         setOrganizations(normalized);
       }, 'Loading organizations...');
     } catch (error) {
@@ -162,6 +172,19 @@ export const Organizations = () => {
     }
   };
 
+  const handleActivate = async (id) => {
+    if (!window.confirm('Activate this organization? This will re-enable approved ambulances and previously suspended users.')) return;
+    try {
+      await organizationService.activate(id);
+      toast.success('Organization activated successfully');
+      fetchOrganizations();
+    } catch (error) {
+      console.error('Failed to activate organization:', error);
+      const msg = error?.response?.data?.message || error?.message || 'Cannot perform the action right now. Please try again later.';
+      toast.error(msg);
+    }
+  };
+
   const columns = [
     {
       header: 'Name',
@@ -226,25 +249,43 @@ export const Organizations = () => {
       header: 'Status',
       accessor: 'status',
       render: (row) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-          row.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-        }`}>
-          {row.status || 'Active'}
-        </span>
+        // Prefer explicit status; fall back to is_active flag to decide label
+        (() => {
+          const status = row.status ? row.status.toString().toLowerCase() : (row.is_active === false ? 'suspended' : 'active');
+          const isActive = status === 'active';
+          return (
+            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+              isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+            }`}>
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </span>
+          );
+        })()
       ),
     },
     {
       header: 'Actions',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
-            Edit
-          </Button>
-          <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>
-            Deactivate
-          </Button>
-        </div>
-      ),
+      render: (row) => {
+        const isSuspended = (row.status && row.status.toString().toLowerCase() === 'suspended') || row.is_active === false;
+        return (
+          <div className="flex items-center gap-2">
+            {!isSuspended ? (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
+                  Edit
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>
+                  Deactivate
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="primary" onClick={() => handleActivate(row.id)}>
+                Activate
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -343,33 +384,35 @@ export const Organizations = () => {
               {...register('name', { required: 'Name is required' })}
               error={errors.name?.message}
             />
-            <div>
-              <label className="block text-sm font-medium text-text mb-2">Type <span className="text-red-500">*</span></label>
-              <Controller
-                name="type"
-                control={control}
-                defaultValue={selectedOrg?.type || ''}
-                rules={{ required: 'Type is required' }}
-                render={({ field }) => {
-                  const options = [
-                    { value: 'HOSPITAL', label: 'Hospital' },
-                    { value: 'FLEET_OWNER', label: 'Fleet Owner' },
-                  ];
-                  const value = options.find((o) => o.value === field.value) || null;
-                  return (
-                    <Select
-                      classNamePrefix="react-select"
-                      options={options}
-                      value={value}
-                      onChange={(opt) => field.onChange(opt ? opt.value : '')}
-                      placeholder="Select Type"
-                      isDisabled={!!selectedOrg}
-                    />
-                  );
-                }}
-              />
-              {errors.type && <p className="mt-1 text-sm text-red-500">{errors.type.message}</p>}
-            </div>
+            {/* Organization type is only selectable when creating a new organization. When editing, the type is immutable and hidden from the form. */}
+            {!selectedOrg && (
+              <div>
+                <label className="block text-sm font-medium text-text mb-2">Type <span className="text-red-500">*</span></label>
+                <Controller
+                  name="type"
+                  control={control}
+                  defaultValue={''}
+                  rules={{ required: 'Type is required' }}
+                  render={({ field }) => {
+                    const options = [
+                      { value: 'HOSPITAL', label: 'Hospital' },
+                      { value: 'FLEET_OWNER', label: 'Fleet Owner' },
+                    ];
+                    const value = options.find((o) => o.value === field.value) || null;
+                    return (
+                      <Select
+                        classNamePrefix="react-select"
+                        options={options}
+                        value={value}
+                        onChange={(opt) => field.onChange(opt ? opt.value : '')}
+                        placeholder="Select Type"
+                      />
+                    );
+                  }}
+                />
+                {errors.type && <p className="mt-1 text-sm text-red-500">{errors.type.message}</p>}
+              </div>
+            )}
           </div>
 
           {/* License Number removed from form — DB doesn't have a stable column for it */}

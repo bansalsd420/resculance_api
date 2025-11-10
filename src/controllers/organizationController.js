@@ -230,8 +230,8 @@ class OrganizationController {
         return next(new AppError('Cannot delete superadmin organization', 403));
       }
 
-      // Soft delete: set is_active to false instead of actual deletion
-      await OrganizationModel.update(id, { is_active: false });
+  // Soft delete: set is_active to false and mark status as suspended so UI/filtering is consistent
+  await OrganizationModel.update(id, { is_active: false, status: 'suspended' });
 
       // Log activity
       await ActivityLogService.logOrgDeactivated(req.user, organization, req);
@@ -272,9 +272,9 @@ class OrganizationController {
       // Start transaction for atomic operations
       await connection.beginTransaction();
 
-      // 1. Deactivate organization
+      // 1. Deactivate organization - mark both is_active and status so UI/filtering stays consistent
       await connection.query(
-        'UPDATE organizations SET is_active = FALSE WHERE id = ?',
+        "UPDATE organizations SET is_active = FALSE, status = 'suspended' WHERE id = ?",
         [id]
       );
 
@@ -297,9 +297,10 @@ class OrganizationController {
       );
 
       // 5. Offboard all patients by ending active sessions
+      // Offboard sessions: set offboarded_at and status. Some DBs may not have legacy offboard_time column
       await connection.query(
         `UPDATE patient_sessions 
-         SET status = 'offboarded', offboarded_at = NOW(), offboard_time = NOW() 
+         SET status = 'offboarded', offboarded_at = NOW() 
          WHERE organization_id = ? AND status IN ('onboarded', 'in_transit')`,
         [id]
       );
@@ -325,6 +326,7 @@ class OrganizationController {
    * Activate/reactivate an organization
    */
   static async activate(req, res, next) {
+    const connection = await db.getConnection();
     try {
       const { id } = req.params;
 
@@ -333,20 +335,43 @@ class OrganizationController {
         return next(new AppError('Organization not found', 404));
       }
 
-      await OrganizationModel.update(id, { 
-        status: 'active',
-        is_active: true
-      });
+      // Start transaction to reactivate organization and related resources
+      await connection.beginTransaction();
+
+      // 1. Activate organization
+      await connection.query(
+        "UPDATE organizations SET is_active = TRUE, status = 'active' WHERE id = ?",
+        [id]
+      );
+
+      // 2. Reactivate ambulances that were disabled and are approved (approved_at IS NOT NULL)
+      // Leave ambulances that were pending approval unchanged
+      await connection.query(
+        `UPDATE ambulances SET status = 'available' WHERE organization_id = ? AND status = 'disabled' AND approved_at IS NOT NULL`,
+        [id]
+      );
+
+      // 3. Reactivate users that were suspended due to organization deactivation
+      // (this will set suspended users back to active so they can sign in)
+      await connection.query(
+        `UPDATE users SET status = 'active' WHERE organization_id = ? AND status = 'suspended'`,
+        [id]
+      );
+
+      await connection.commit();
 
       // Log activity
       await ActivityLogService.logOrgActivated(req.user, organization, req);
 
       res.json({
         success: true,
-        message: 'Organization activated successfully. Please manually review ambulances, users, and partnerships for reactivation.'
+        message: 'Organization activated successfully. Approved ambulances and previously suspended users have been reactivated where applicable.'
       });
     } catch (error) {
+      await connection.rollback();
       next(error);
+    } finally {
+      connection.release();
     }
   }
 

@@ -39,7 +39,9 @@ export const Login = () => {
       navigate('/dashboard');
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.response?.data?.message || err.message || 'Login failed. Please try again.');
+      // Prefer backend 'error' field (from server error handler), then 'message', then axios message
+      const serverMsg = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Login failed. Please try again.';
+      setError(serverMsg);
     } finally {
       setLoading(false);
     }
