@@ -74,6 +74,20 @@ router.delete(
   AmbulanceController.delete
 );
 
+// Deactivate ambulance (superadmin only)
+router.patch(
+  '/:id/deactivate',
+  authorize(ROLES.SUPERADMIN),
+  AmbulanceController.deactivate
+);
+
+// Activate ambulance (superadmin only)
+router.patch(
+  '/:id/activate',
+  authorize(ROLES.SUPERADMIN),
+  AmbulanceController.activate
+);
+
 // Device management routes
 router.post(
   '/:ambulanceId/devices',

@@ -107,8 +107,11 @@ class UserController {
       // require an organizationId to be provided to scope results. This prevents returning
       // all users across organizations when a superadmin has not selected an organization.
       // Exception: allow fetching all pending users without organizationId
-      const originalRole = role;
-      const isPendingRequest = status && String(status).toLowerCase() === 'pending';
+  const originalRole = role;
+  // Determine if caller is requesting pending users.
+  // Accept both the raw query value 'pending' and the normalized 'pending_approval'.
+  const rawStatus = req.query.status;
+  const isPendingRequest = (rawStatus && String(rawStatus).toLowerCase() === 'pending') || (status && String(status).toLowerCase() === 'pending_approval');
       if (req.user.role === 'superadmin' && !(originalRole && String(originalRole).trim().toLowerCase() === 'superadmin') && !req.query.organizationId && !isPendingRequest) {
         return next(new AppError('organizationId is required when superadmin is viewing non-superadmin users', 400));
       }
@@ -330,6 +333,7 @@ class UserController {
   }
 
   static async suspend(req, res, next) {
+    const connection = await db.getConnection();
     try {
       const { id } = req.params;
 
@@ -356,11 +360,77 @@ class UserController {
         return next(new AppError('You do not have permission to suspend users from other organizations', 403));
       }
 
-      await UserModel.update(id, { status: 'suspended' });
+      await connection.beginTransaction();
+
+      // 1. Unassign from all ambulances
+      const [assignments] = await connection.query(
+        'SELECT ambulance_id FROM ambulance_assignments WHERE user_id = ?',
+        [id]
+      );
+
+      if (assignments.length > 0) {
+        await connection.query(
+          'DELETE FROM ambulance_assignments WHERE user_id = ?',
+          [id]
+        );
+      }
+
+      // 2. Set user status to suspended
+      await connection.query(
+        'UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?',
+        ['suspended', id]
+      );
+
+      await connection.commit();
 
       res.json({
         success: true,
-        message: 'User suspended successfully'
+        message: 'User suspended successfully',
+        data: {
+          userId: id,
+          unassignedAmbulances: assignments.length
+        }
+      });
+    } catch (error) {
+      await connection.rollback();
+      next(error);
+    } finally {
+      connection.release();
+    }
+  }
+
+  static async activate(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const user = await UserModel.findById(id);
+      if (!user) {
+        return next(new AppError('User not found', 404));
+      }
+
+      // Check if user is currently suspended
+      if (user.status !== 'suspended') {
+        return next(new AppError('Only suspended users can be activated', 400));
+      }
+
+      const targetRole = (user.role || '').toString().toLowerCase();
+      const requesterRole = (req.user.role || '').toString().toLowerCase();
+
+      // Only a superadmin may activate admin accounts
+      if (targetRole.includes('admin') && requesterRole !== 'superadmin') {
+        return next(new AppError('Only a superadmin can activate admin accounts', 403));
+      }
+
+      // Non-superadmins may only activate users within their own organization
+      if (req.user.role !== 'superadmin' && user.organization_id !== req.user.organizationId) {
+        return next(new AppError('You do not have permission to activate users from other organizations', 403));
+      }
+
+      await UserModel.update(id, { status: 'active' });
+
+      res.json({
+        success: true,
+        message: 'User activated successfully'
       });
     } catch (error) {
       next(error);

@@ -4,6 +4,8 @@ const UserModel = require('../models/User');
 const { AppError } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const NotificationService = require('../services/notificationService');
+const ActivityLogService = require('../services/activityLogService');
+const pool = require('../config/database');
 
 class AmbulanceController {
   static async create(req, res, next) {
@@ -190,6 +192,7 @@ class AmbulanceController {
   }
 
   static async update(req, res, next) {
+    const connection = await pool.getConnection();
     try {
       const { id } = req.params;
       const { vehicleModel, vehicleType, status } = req.body;
@@ -207,6 +210,66 @@ class AmbulanceController {
 
       if (status === 'inactive' && req.user.role !== 'superadmin') {
         return next(new AppError('Only superadmin can set ambulance to inactive', 403));
+      }
+
+      // If changing to maintenance status, unassign staff and offboard patients
+      if (status === 'maintenance' && ambulance.status !== 'maintenance') {
+        // Only admins and superadmin can set to maintenance
+        if (!['superadmin', 'hospital_admin', 'fleet_admin'].includes(req.user.role)) {
+          return next(new AppError('Only admins can set ambulance to maintenance', 403));
+        }
+
+        await connection.beginTransaction();
+
+        try {
+          // Unassign all users
+          const [assignments] = await connection.query(
+            'SELECT user_id FROM ambulance_assignments WHERE ambulance_id = ?',
+            [id]
+          );
+
+          if (assignments.length > 0) {
+            await connection.query(
+              'DELETE FROM ambulance_assignments WHERE ambulance_id = ?',
+              [id]
+            );
+          }
+
+          // Offboard any active patient sessions
+          const [activeSessions] = await connection.query(
+            'SELECT id FROM patient_sessions WHERE ambulance_id = ? AND status = ?',
+            [id, 'active']
+          );
+
+          if (activeSessions.length > 0) {
+            await connection.query(
+              'UPDATE patient_sessions SET status = ?, end_time = NOW() WHERE ambulance_id = ? AND status = ?',
+              ['offboarded', id, 'active']
+            );
+          }
+
+          // Update ambulance status
+          await connection.query(
+            'UPDATE ambulances SET vehicle_model = ?, vehicle_type = ?, status = ?, updated_at = NOW() WHERE id = ?',
+            [vehicleModel, vehicleType, status, id]
+          );
+
+          await connection.commit();
+
+          return res.json({
+            success: true,
+            message: 'Ambulance set to maintenance. All staff unassigned and patients offboarded.',
+            data: {
+              unassignedUsers: assignments.length,
+              offboardedSessions: activeSessions.length
+            }
+          });
+        } catch (err) {
+          await connection.rollback();
+          throw err;
+        } finally {
+          connection.release();
+        }
       }
 
       // If a hospital is attempting to set ambulance status to 'active', ensure a partnership exists
@@ -321,6 +384,11 @@ class AmbulanceController {
         return next(new AppError('User not found', 404));
       }
 
+      // Prevent assigning suspended users
+      if ((user.status || '').toString().toLowerCase() === 'suspended') {
+        return next(new AppError('Cannot assign suspended users to ambulances', 400));
+      }
+
       // Check if user is a doctor or paramedic (case-insensitive)
       const roleLower = user.role.toLowerCase();
       if (!roleLower.includes('doctor') && !roleLower.includes('paramedic')) {
@@ -330,6 +398,11 @@ class AmbulanceController {
       // Prevent assignments to ambulances that are not yet approved
       if ((ambulance.status || '').toString().toLowerCase() === 'pending_approval') {
         return next(new AppError('Cannot assign staff to an ambulance that is pending approval', 400));
+      }
+
+      // Prevent assignments to ambulances in maintenance
+      if ((ambulance.status || '').toString().toLowerCase() === 'maintenance') {
+        return next(new AppError('Cannot assign staff to an ambulance that is in maintenance', 400));
       }
 
       // Determine which organization is assigning and validate permissions
@@ -416,6 +489,15 @@ class AmbulanceController {
   static async unassignUser(req, res, next) {
     try {
       const { id, userId } = req.params;
+
+      // Check if doctors/paramedics are trying to unassign themselves
+      const targetUserId = parseInt(userId);
+      const requesterId = parseInt(req.user.id);
+      const requesterRole = (req.user.role || '').toString().toLowerCase();
+      
+      if (targetUserId === requesterId && (requesterRole.includes('doctor') || requesterRole.includes('paramedic'))) {
+        return next(new AppError('Doctors and paramedics cannot unassign themselves', 403));
+      }
 
       // Ensure assignment exists and was created by the same organization as the requester
       const [rows] = await require('../config/database').query(
@@ -568,6 +650,142 @@ class AmbulanceController {
 
       const ambulances = await AmbulanceModel.findMappedToUser(userId);
       res.json({ success: true, data: { ambulances } });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Deactivate ambulance (superadmin only) - unassigns staff, offboards patients, sets status to inactive
+  static async deactivate(req, res, next) {
+    const connection = await pool.getConnection();
+    try {
+      // Only superadmin can deactivate
+      if (req.user.role !== 'superadmin') {
+        return next(new AppError('Only superadmin can deactivate ambulances', 403));
+      }
+
+      const { id } = req.params;
+      
+      // Check if ambulance exists
+      const ambulance = await AmbulanceModel.findById(id);
+      if (!ambulance) {
+        return next(new AppError('Ambulance not found', 404));
+      }
+
+      // Check if already inactive
+      if (ambulance.status === 'inactive') {
+        return next(new AppError('Ambulance is already inactive', 400));
+      }
+
+      await connection.beginTransaction();
+
+      // 1. Unassign all users from this ambulance
+      const [assignments] = await connection.query(
+        'SELECT user_id FROM ambulance_assignments WHERE ambulance_id = ?',
+        [id]
+      );
+      
+      if (assignments.length > 0) {
+        await connection.query(
+          'DELETE FROM ambulance_assignments WHERE ambulance_id = ?',
+          [id]
+        );
+      }
+
+      // 2. Offboard any active patient sessions
+      const [activeSessions] = await connection.query(
+        'SELECT id FROM patient_sessions WHERE ambulance_id = ? AND status = ?',
+        [id, 'active']
+      );
+
+      if (activeSessions.length > 0) {
+        await connection.query(
+          'UPDATE patient_sessions SET status = ?, end_time = NOW() WHERE ambulance_id = ? AND status = ?',
+          ['offboarded', id, 'active']
+        );
+      }
+
+      // 3. Set ambulance status to inactive
+      await connection.query(
+        'UPDATE ambulances SET status = ?, updated_at = NOW() WHERE id = ?',
+        ['inactive', id]
+      );
+
+      await connection.commit();
+
+      // Log the activity
+      if (ActivityLogService) {
+        await ActivityLogService.log({
+          userId: req.user.id,
+          action: 'DEACTIVATE_AMBULANCE',
+          resource: 'ambulances',
+          resourceId: id,
+          details: `Deactivated ambulance ${ambulance.registration_number}, unassigned ${assignments.length} users, offboarded ${activeSessions.length} active sessions`,
+          ipAddress: req.ip
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Ambulance deactivated successfully',
+        data: {
+          ambulanceId: id,
+          unassignedUsers: assignments.length,
+          offboardedSessions: activeSessions.length
+        }
+      });
+    } catch (error) {
+      await connection.rollback();
+      next(error);
+    } finally {
+      connection.release();
+    }
+  }
+
+  // Activate ambulance (superadmin only) - sets status to available
+  static async activate(req, res, next) {
+    try {
+      // Only superadmin can activate
+      if (req.user.role !== 'superadmin') {
+        return next(new AppError('Only superadmin can activate ambulances', 403));
+      }
+
+      const { id } = req.params;
+      
+      // Check if ambulance exists
+      const ambulance = await AmbulanceModel.findById(id);
+      if (!ambulance) {
+        return next(new AppError('Ambulance not found', 404));
+      }
+
+      // Check if already active (not inactive)
+      if (ambulance.status !== 'inactive') {
+        return next(new AppError('Only inactive ambulances can be activated', 400));
+      }
+
+      // Update status to available
+      await pool.query(
+        'UPDATE ambulances SET status = ?, updated_at = NOW() WHERE id = ?',
+        ['available', id]
+      );
+
+      // Log the activity
+      if (ActivityLogService) {
+        await ActivityLogService.log({
+          userId: req.user.id,
+          action: 'ACTIVATE_AMBULANCE',
+          resource: 'ambulances',
+          resourceId: id,
+          details: `Activated ambulance ${ambulance.registration_number}`,
+          ipAddress: req.ip
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Ambulance activated successfully',
+        data: { ambulanceId: id }
+      });
     } catch (error) {
       next(error);
     }

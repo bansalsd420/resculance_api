@@ -153,12 +153,29 @@ class PatientController {
   static async update(req, res, next) {
     try {
       const { id } = req.params;
-      const updateData = req.body;
+      const { 
+        firstName, lastName, dateOfBirth, gender, bloodType, allergies, 
+        medicalConditions, emergencyContact, emergencyPhone, address 
+      } = req.body;
 
       const patient = await PatientModel.findById(id);
       if (!patient) {
         return next(new AppError('Patient not found', 404));
       }
+
+      // Prepare update data - allow null values for most fields
+      const updateData = {
+        firstName: firstName || patient.firstName,
+        lastName: lastName || null,
+        dateOfBirth: dateOfBirth || null,
+        gender: gender || null,
+        bloodType: bloodType || null,
+        allergies: allergies || null,
+        medicalConditions: medicalConditions || null,
+        emergencyContact: emergencyContact || null,
+        emergencyPhone: emergencyPhone || null,
+        address: address || null
+      };
 
       await PatientModel.update(id, updateData);
 
@@ -217,6 +234,11 @@ class PatientController {
         return next(new AppError('Ambulance not found', 404));
       }
 
+      // Prevent onboarding on maintenance or inactive ambulances
+      if (['maintenance', 'inactive'].includes(ambulance.status)) {
+        return next(new AppError(`Cannot onboard patient: Ambulance is in ${ambulance.status} status`, 400));
+      }
+
       if (!['active', 'available'].includes(ambulance.status)) {
         return next(new AppError('Ambulance is not available', 400));
       }
@@ -225,6 +247,18 @@ class PatientController {
       const activeSession = await PatientSessionModel.findActiveByAmbulance(ambulanceId);
       if (activeSession) {
         return next(new AppError('Ambulance already has an active patient session', 400));
+      }
+
+      // Ensure patient exists and is active
+      const patient = await PatientModel.findById(patientId);
+      if (!patient) {
+        return next(new AppError('Patient not found or inactive', 404));
+      }
+
+      // Prevent onboarding if patient already has an active session
+      const patientActiveSession = await PatientSessionModel.findActiveByPatient(patientId);
+      if (patientActiveSession) {
+        return next(new AppError('Patient already has an active session', 400));
       }
 
       const sessionCode = `SES-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -258,7 +292,6 @@ class PatientController {
       io.to(`ambulance_${ambulanceId}`).emit('patient_onboarded', { sessionId, sessionCode });
 
       // Notify ambulance crew about patient onboarding
-      const patient = await PatientModel.findById(patientId);
       if (patient) {
         await NotificationService.notifyAmbulanceCrewPatientOnboarded(
           ambulanceId,
@@ -647,17 +680,39 @@ class PatientController {
         return next(new AppError('Patient not found', 404));
       }
 
-      // Prevent deletion if patient has active sessions
+      // Check for active sessions and offboard if exists
       const activeSession = await PatientSessionModel.findActiveByPatient(id);
       if (activeSession) {
-        return next(new AppError('Cannot delete patient with active sessions', 400));
+        // Offboard the patient first
+        await PatientSessionModel.offboard(activeSession.id, req.user.id);
       }
 
-      await PatientModel.delete(id);
+      // Soft delete - deactivate the patient
+      await PatientModel.deactivate(id);
 
       res.json({
         success: true,
-        message: 'Patient deleted successfully'
+        message: 'Patient deactivated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async activate(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const patient = await PatientModel.findById(id);
+      if (!patient) {
+        return next(new AppError('Patient not found', 404));
+      }
+
+      await PatientModel.activate(id);
+
+      res.json({
+        success: true,
+        message: 'Patient activated successfully'
       });
     } catch (error) {
       next(error);

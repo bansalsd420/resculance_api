@@ -32,12 +32,13 @@ class PatientModel {
   }
 
   static async findById(id) {
-    const [rows] = await db.query('SELECT * FROM patients WHERE id = ?', [id]);
+    // By default only return active patients. Pass { includeInactive: true } to override.
+    const [rows] = await db.query('SELECT * FROM patients WHERE id = ? AND is_active = TRUE', [id]);
     return rows[0];
   }
 
   static async findByCode(code) {
-    const [rows] = await db.query('SELECT * FROM patients WHERE patient_code = ?', [code]);
+    const [rows] = await db.query('SELECT * FROM patients WHERE patient_code = ? AND is_active = TRUE', [code]);
     return rows[0];
   }
 
@@ -54,6 +55,11 @@ class PatientModel {
     if (filters.organizationId) {
       query += ' AND organization_id = ?';
       params.push(filters.organizationId);
+    }
+
+    // By default only include active patients unless explicitly requested
+    if (!filters.includeInactive) {
+      query += ' AND is_active = TRUE';
     }
 
     query += ' ORDER BY created_at DESC';
@@ -116,6 +122,22 @@ class PatientModel {
     return result.affectedRows > 0;
   }
 
+  static async deactivate(id) {
+    const [result] = await db.query(
+      'UPDATE patients SET is_active = FALSE, updated_at = NOW() WHERE id = ?',
+      [id]
+    );
+    return result.affectedRows > 0;
+  }
+
+  static async activate(id) {
+    const [result] = await db.query(
+      'UPDATE patients SET is_active = TRUE, updated_at = NOW() WHERE id = ?',
+      [id]
+    );
+    return result.affectedRows > 0;
+  }
+
   static async count(filters = {}) {
     let query = 'SELECT COUNT(*) as total FROM patients WHERE 1=1';
     const params = [];
@@ -129,6 +151,10 @@ class PatientModel {
     if (filters.organizationId) {
       query += ' AND organization_id = ?';
       params.push(filters.organizationId);
+    }
+
+    if (!filters.includeInactive) {
+      query += ' AND is_active = TRUE';
     }
 
     const [rows] = await db.query(query, params);

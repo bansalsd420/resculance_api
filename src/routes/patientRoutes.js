@@ -77,6 +77,18 @@ router.delete(
   PatientController.delete
 );
 
+router.patch(
+  '/:id/activate',
+  authorize(
+    ROLES.SUPERADMIN,
+    ROLES.HOSPITAL_ADMIN,
+    ROLES.HOSPITAL_STAFF,
+    ROLES.FLEET_ADMIN,
+    ROLES.FLEET_STAFF
+  ),
+  PatientController.activate
+);
+
 // Patient session routes
 router.post(
   '/:patientId/onboard',

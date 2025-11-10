@@ -416,6 +416,34 @@ export const Ambulances = () => {
     }
   };
 
+  const handleDeactivate = async (id) => {
+    if (window.confirm('Are you sure you want to deactivate this ambulance? All assigned staff will be unassigned and active patients will be offboarded.')) {
+      try {
+        await ambulanceService.deactivate(id);
+        toast.success('Ambulance deactivated successfully');
+        if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
+      } catch (error) {
+        console.error('Failed to deactivate ambulance:', error);
+        const msg = error?.response?.data?.message || 'Failed to deactivate ambulance';
+        toast.error(msg);
+      }
+    }
+  };
+
+  const handleActivate = async (id) => {
+    if (window.confirm('Are you sure you want to activate this ambulance?')) {
+      try {
+        await ambulanceService.activate(id);
+        toast.success('Ambulance activated successfully');
+        if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
+      } catch (error) {
+        console.error('Failed to activate ambulance:', error);
+        const msg = error?.response?.data?.message || 'Failed to activate ambulance';
+        toast.error(msg);
+      }
+    }
+  };
+
   const handleAddDevice = () => {
     append({
       deviceName: '',
@@ -681,36 +709,61 @@ export const Ambulances = () => {
       render: (row) => {
         const status = (row.status || row.status === 0) ? String(row.status).toLowerCase() : '';
         const isPending = status === 'pending_approval';
+        const isInactive = status === 'inactive';
+        const isMaintenance = status === 'maintenance';
+        const isSuperadmin = user?.role === 'superadmin';
+        const isAdmin = user?.role?.toLowerCase().includes('admin');
+        const isDoctor = user?.role?.toLowerCase().includes('doctor');
+        const isParamedic = user?.role?.toLowerCase().includes('paramedic');
+        const isMedicalStaff = isDoctor || isParamedic;
+        
         return (
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
-              Edit
-            </Button>
+            {/* Edit - Only superadmin and admins can edit */}
+            {(isSuperadmin || isAdmin) && (
+              <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
+                Edit
+              </Button>
+            )}
 
-            {/* If ambulance is pending approval, disable assignment and show approve action instead */}
-            {isPending ? (
-              <>
-                {user?.role === 'superadmin' && (
-                  <Button size="sm" variant="success" onClick={() => handleApprove(row.id)}>
-                    Approve
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" disabled>
-                  <UserPlus className="w-4 h-4 mr-1" />
-                  Assign Staff
-                </Button>
-              </>
-            ) : (
+            {/* Approve - Only superadmin, only for pending ambulances */}
+            {isPending && isSuperadmin && (
+              <Button size="sm" variant="success" onClick={() => handleApprove(row.id)}>
+                Approve
+              </Button>
+            )}
+
+            {/* Assign Staff - Everyone except when pending or maintenance */}
+            {!isPending && !isMaintenance ? (
               <Button size="sm" variant="success" onClick={() => handleOpenAssignmentModal(row)}>
+                <UserPlus className="w-4 h-4 mr-1" />
+                Assign Staff
+              </Button>
+            ) : isMaintenance ? (
+              <Button size="sm" variant="outline" disabled title="Cannot assign staff to ambulances in maintenance">
+                <UserPlus className="w-4 h-4 mr-1" />
+                Assign Staff
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" disabled>
                 <UserPlus className="w-4 h-4 mr-1" />
                 Assign Staff
               </Button>
             )}
 
-            {hasPermission(user?.role, PERMISSIONS.DELETE_AMBULANCE) && (
-              <Button size="sm" variant="danger" onClick={() => handleDelete(row.id)}>
-                Delete
-              </Button>
+            {/* Deactivate/Activate - Superadmin only */}
+            {isSuperadmin && !isPending && (
+              <>
+                {isInactive ? (
+                  <Button size="sm" variant="success" onClick={() => handleActivate(row.id)}>
+                    Activate
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="danger" onClick={() => handleDeactivate(row.id)}>
+                    Deactivate
+                  </Button>
+                )}
+              </>
             )}
           </div>
         );

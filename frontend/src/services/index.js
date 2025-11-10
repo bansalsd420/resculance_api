@@ -120,6 +120,11 @@ export const userService = {
     return response;
   },
 
+  activate: async (id) => {
+    const response = await api.patch(`/users/${id}/activate`);
+    return response;
+  },
+
   delete: async (id) => {
     const response = await api.delete(`/users/${id}`);
     return response;
@@ -192,6 +197,16 @@ export const ambulanceService = {
 
   delete: async (id) => {
     const response = await api.delete(`/ambulances/${id}`);
+    return response;
+  },
+
+  deactivate: async (id) => {
+    const response = await api.patch(`/ambulances/${id}/deactivate`);
+    return response;
+  },
+
+  activate: async (id) => {
+    const response = await api.patch(`/ambulances/${id}/activate`);
     return response;
   },
 
@@ -331,6 +346,11 @@ export const patientService = {
 
   delete: async (id) => {
     const response = await api.delete(`/patients/${id}`);
+    return response;
+  },
+
+  activate: async (id) => {
+    const response = await api.patch(`/patients/${id}/activate`);
     return response;
   },
 };

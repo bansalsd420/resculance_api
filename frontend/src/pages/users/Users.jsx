@@ -49,10 +49,12 @@ export const Users = () => {
   const roleInfoRef = useRef(null);
 
   const tabs = [
-    { id: 'all', label: 'All' },
+    { id: 'all', label: 'All Users' },
+    { id: 'doctors', label: 'Doctors' },
+    { id: 'paramedics', label: 'Paramedics' },
+    { id: 'drivers', label: 'Drivers' },
     { id: 'pending', label: 'Pending Approval' },
-    { id: 'active', label: 'Active' },
-    { id: 'deactivated', label: 'Deactivated' },
+    ...(user?.role === 'superadmin' ? [{ id: 'superadmins', label: 'Superadmins' }] : []),
   ];
 
   const mapRoleLabel = (role) => {
@@ -253,6 +255,20 @@ export const Users = () => {
     }
   };
 
+  const handleActivate = async (id) => {
+    if (window.confirm('Are you sure you want to activate this user?')) {
+      try {
+        await userService.activate(id);
+        toast.success('User activated successfully');
+        await fetchUsers(true);
+      } catch (error) {
+        console.error('Failed to activate user:', error);
+        const msg = error?.response?.data?.message || 'Failed to activate user';
+        toast.error(msg);
+      }
+    }
+  };
+
   const handleOpenAssignmentModal = async (userData) => {
     setAssignmentUser(userData);
     
@@ -365,14 +381,22 @@ export const Users = () => {
       render: (row) => (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-semibold overflow-hidden">
-            {row.profileImageUrl ? (
-              <img src={row.profileImageUrl} alt="avatar" className="w-full h-full object-cover" />
+            {(row.profileImageUrl || row.profile_image_url) ? (
+              <img 
+                src={row.profileImageUrl || row.profile_image_url} 
+                alt={`${row.firstName} ${row.lastName}`}
+                className="w-full h-full object-cover" 
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentElement.innerText = `${row.firstName?.[0] || ''}${row.lastName?.[0] || ''}`;
+                }}
+              />
             ) : (
               <>{row.firstName?.[0]}{row.lastName?.[0]}</>
             )}
           </div>
           <div>
-            <p className="font-medium">{row.firstName} {row.lastName}</p>
+            <p className="font-medium text-text">{row.firstName} {row.lastName}</p>
             <p className="text-sm text-secondary">{row.email}</p>
           </div>
         </div>
@@ -430,6 +454,31 @@ export const Users = () => {
     {
       header: 'Actions',
       render: (row) => {
+        const isSuspended = (row.status || '').toString().toLowerCase() === 'suspended';
+        const isPending = row.status === 'pending' || row.status === 'pending_approval';
+        const targetRole = (row.role || '').toString().toLowerCase();
+        const isTargetAdmin = targetRole.includes('admin');
+        const isSuperadmin = user?.role === 'superadmin';
+        const isAdmin = targetRole.includes('admin');
+        
+        // Suspended users: show only Activate button (superadmin only for admins, org admins can activate their org's users)
+        if (isSuspended) {
+          const canActivate = isSuperadmin || (!isTargetAdmin && user?.organizationId === row.organization_id);
+          return (
+            <div className="flex items-center gap-2">
+              {canActivate && (
+                <Button 
+                  size="sm" 
+                  variant="success" 
+                  onClick={() => handleActivate(row.id)}
+                >
+                  Activate
+                </Button>
+              )}
+            </div>
+          );
+        }
+        
         // Check if user was created by an org admin (not by superadmin or self-signup)
         const createdByOrgAdmin = row.creator_role && (
           row.creator_role.toLowerCase().includes('hospital_admin') || 
@@ -438,44 +487,58 @@ export const Users = () => {
         
         return (
           <div className="flex items-center gap-2">
-            {(row.status === 'pending' || row.status === 'pending_approval') ? (
+            {isPending ? (
               <>
-                <Button 
-                  size="sm" 
-                  variant="success" 
-                  onClick={() => handleApprove(row.id)}
-                  disabled={createdByOrgAdmin && user?.role !== 'superadmin'}
-                  title={createdByOrgAdmin && user?.role !== 'superadmin' ? 'Accounts created by organization admins are auto-approved and cannot be manually approved' : ''}
-                >
-                  <UserCheck className="w-4 h-4 mr-1" />
-                  Approve
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant="danger" 
-                  onClick={() => handleReject(row.id)}
-                  disabled={createdByOrgAdmin && user?.role !== 'superadmin'}
-                  title={createdByOrgAdmin && user?.role !== 'superadmin' ? 'Accounts created by organization admins cannot be rejected here' : ''}
-                >
-                  <UserX className="w-4 h-4 mr-1" />
-                  Reject
-                </Button>
+                {/* Admins can only approve doctors and paramedics, not other admins */}
+                {(() => {
+                  const canApprove = isSuperadmin || 
+                    (!isTargetAdmin && (targetRole.includes('doctor') || targetRole.includes('paramedic')) && user?.organizationId === row.organization_id);
+                  
+                  return canApprove && (
+                    <>
+                      <Button 
+                        size="sm" 
+                        variant="success" 
+                        onClick={() => handleApprove(row.id)}
+                        disabled={createdByOrgAdmin && !isSuperadmin}
+                        title={createdByOrgAdmin && !isSuperadmin ? 'Accounts created by organization admins are auto-approved and cannot be manually approved' : ''}
+                      >
+                        <UserCheck className="w-4 h-4 mr-1" />
+                        Approve
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="danger" 
+                        onClick={() => handleReject(row.id)}
+                        disabled={createdByOrgAdmin && !isSuperadmin}
+                        title={createdByOrgAdmin && !isSuperadmin ? 'Accounts created by organization admins cannot be rejected here' : ''}
+                      >
+                        <UserX className="w-4 h-4 mr-1" />
+                        Reject
+                      </Button>
+                    </>
+                  );
+                })()}
               </>
             ) : (
             <>
+              {/* Edit button - disabled for suspended users */}
               <Button size="sm" variant="secondary" onClick={() => handleOpenModal(row)}>
                 Edit
               </Button>
-              {((row.role || '').toString().toLowerCase().includes('doctor') || (row.role || '').toString().toLowerCase().includes('paramedic') || (row.role || '').toString().toLowerCase().includes('driver') || (row.role || '').toString().toLowerCase().includes('staff')) && (
+              
+              {/* Assign Ambulance button */}
+              {((targetRole.includes('doctor') || targetRole.includes('paramedic') || targetRole.includes('driver') || targetRole.includes('staff')) && (
                 <Button size="sm" variant="success" onClick={() => handleOpenAssignmentModal(row)}>
                   <AmbulanceIcon className="w-4 h-4 mr-1" />
                   Assign Ambulance
                 </Button>
-              )}
+              ))}
+              
+              {/* Deactivate button */}
               {(() => {
                 const isSelf = String(row.id) === String(user?.id);
-                const targetRole = (row.role || '').toString().toLowerCase();
-                const cannotDeactivateAdmin = targetRole.includes('admin') && (user?.role || '').toString().toLowerCase() !== 'superadmin';
+                const cannotDeactivateAdmin = isTargetAdmin && !isSuperadmin;
                 const disabled = isSelf || cannotDeactivateAdmin;
                 return (
                   <Button
@@ -590,15 +653,22 @@ export const Users = () => {
     else r = (u.role || '').toString().toLowerCase();
     const s = (u.status || '').toString().toLowerCase();
 
-    // Superadmins should only be visible on the Superadmins tab and on Pending approvals
-    if (r.includes('superadmin')) return activeTab === 'superadmins' || activeTab === 'pending';
+    // Superadmins handling: ONLY show in superadmins tab
+    if (r.includes('superadmin')) {
+      return activeTab === 'superadmins';
+    }
 
-    // All users tab shows everyone except superadmins (handled above)
+    // All users tab shows everyone EXCEPT superadmins
     if (activeTab === 'all') return true;
 
     if (activeTab === 'pending') return s === 'pending' || s === 'pending_approval';
 
-    // Generic short codes (DOCTOR, PARAMEDIC, DRIVER)
+    // Specific role tabs
+    if (activeTab === 'doctors') return r.includes('doctor');
+    if (activeTab === 'paramedics') return r.includes('paramedic');
+    if (activeTab === 'drivers') return r.includes('driver');
+
+    // Fallback: try matching tab string
     const tabLower = activeTab.toLowerCase();
     return r.includes(tabLower);
   };
@@ -644,6 +714,20 @@ export const Users = () => {
               </button>
             ))}
           </div>
+
+          {/* Search input aligned to the right of the tabs */}
+          <div className="ml-auto w-full md:w-1/3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-secondary" />
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input w-full pl-10 pr-3 py-2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -658,17 +742,12 @@ export const Users = () => {
                 value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
                 onChange={(opt) => { const v = opt?.value || ''; setOrgTypeFilter(v); setSelectedOrgId(null); setOrgSearchInput(''); }}
                 options={[{ value: '', label: 'All Types' }, { value: 'hospital', label: 'Hospital' }, { value: 'fleet_owner', label: 'Fleet Owner' }]}
-                styles={{
-                  control: (base, state) => ({ ...base, minHeight: 30, borderRadius: 6, borderColor: state.isFocused ? '#34d399' : '#e6eef9', boxShadow: 'none', paddingLeft: 6 }),
-                  option: (base) => ({ ...base, padding: '4px 6px' })
-                }}
               />
             </div>
 
             <div>
               <label className="block text-xs font-medium text-text mb-0">Select Organization</label>
               <div title={!orgTypeFilter ? 'Please select an Organization Type first' : ''}>
-                {/* react-select provides a searchable dropdown and returns id directly */}
                 <Select
                   isDisabled={!orgTypeFilter}
                   placeholder={orgTypeFilter ? 'Type to search or pick an organization' : 'Select an organization type first'}
@@ -684,20 +763,6 @@ export const Users = () => {
                     }
                   }}
                   classNamePrefix="react-select"
-                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                  menuPosition="fixed"
-                  styles={{
-                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                    menu: (base) => ({ ...base, boxShadow: '0 10px 30px rgba(2,6,23,0.08)', borderRadius: 8 }),
-                    control: (base, state) => ({ ...base, minHeight: 30, borderRadius: 6, borderColor: state.isFocused ? '#34d399' : '#e6eef9', boxShadow: 'none', paddingLeft: 6 }),
-                    option: (base, state) => ({
-                      ...base,
-                      padding: '4px 6px',
-                      background: state.isFocused ? 'rgba(20,184,166,0.08)' : state.isSelected ? 'rgba(20,184,166,0.06)' : 'white',
-                      color: '#0f172a'
-                    }),
-                    singleValue: (base) => ({ ...base, color: '#0f172a' }),
-                  }}
                 />
               </div>
             </div>
@@ -825,8 +890,8 @@ export const Users = () => {
             />
           </div>
 
-          {/* Superadmin-specific organization selection */}
-          {user?.role === 'superadmin' && ((watchRole || '').toString().toUpperCase() !== 'SUPERADMIN') && (
+          {/* Superadmin-specific organization selection - ONLY when creating new users */}
+          {!selectedUser && user?.role === 'superadmin' && ((watchRole || '').toString().toUpperCase() !== 'SUPERADMIN') && (
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-text mb-2">Organization Type *</label>

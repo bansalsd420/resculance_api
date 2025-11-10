@@ -44,12 +44,12 @@ const patientSchema = yup.object({
 });
 
 const vitalSignsSchema = yup.object({
-  heartRate: yup.number().positive().nullable(),
-  bloodPressureSystolic: yup.number().positive().nullable(),
-  bloodPressureDiastolic: yup.number().positive().nullable(),
-  temperature: yup.number().positive().nullable(),
-  oxygenSaturation: yup.number().min(0).max(100).nullable(),
-  respiratoryRate: yup.number().positive().nullable(),
+  heartRate: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
+  bloodPressureSystolic: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
+  bloodPressureDiastolic: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
+  temperature: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
+  oxygenSaturation: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).min(0).max(100).nullable(),
+  respiratoryRate: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
 });
 
 export const Patients = () => {
@@ -198,18 +198,22 @@ export const Patients = () => {
   const onSubmit = async (data) => {
     try {
       setLoading(true);
-      // Ensure an organization is associated with the patient
-      if (user?.role === 'superadmin') {
-        // prefer organization selected in the modal, or fallback to data.organizationId
-        data.organizationId = data.organizationId || modalSelectedOrgId || null;
-        if (!data.organizationId) {
-          toast.error('Please select an Organization for this patient');
-          setLoading(false);
-          return;
+      
+      // Only handle organization assignment when creating a new patient
+      if (!editingPatient) {
+        // Ensure an organization is associated with the patient
+        if (user?.role === 'superadmin') {
+          // prefer organization selected in the modal, or fallback to data.organizationId
+          data.organizationId = data.organizationId || modalSelectedOrgId || null;
+          if (!data.organizationId) {
+            toast.error('Please select an Organization for this patient');
+            setLoading(false);
+            return;
+          }
+        } else {
+          // non-superadmins: backend will attach req.user.organizationId, but include for clarity
+          data.organizationId = user?.organizationId || data.organizationId || null;
         }
-      } else {
-        // non-superadmins: backend will attach req.user.organizationId, but include for clarity
-        data.organizationId = user?.organizationId || data.organizationId || null;
       }
 
       if (editingPatient) {
@@ -233,7 +237,12 @@ export const Patients = () => {
   const onSubmitVitals = async (data) => {
     try {
       setLoading(true);
-      await patientService.addVitalSigns(selectedPatient.id, data);
+      // Clean up empty strings to null
+      const cleanedData = Object.keys(data).reduce((acc, key) => {
+        acc[key] = data[key] === '' || data[key] === undefined ? null : data[key];
+        return acc;
+      }, {});
+      await patientService.addVitalSigns(selectedPatient.id, cleanedData);
       toast.success('Vital signs added successfully');
       await fetchVitalSigns(selectedPatient.id);
       resetVitals();
@@ -264,14 +273,28 @@ export const Patients = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this patient?')) {
+    if (window.confirm('Are you sure you want to deactivate this patient?')) {
       try {
         await patientService.delete(id);
-        toast.success('Patient deleted successfully');
+        toast.success('Patient deactivated successfully');
         await fetchPatients();
       } catch (error) {
-        console.error('Failed to delete patient:', error);
-  const msg = getErrorMessage(error, 'Failed to delete patient');
+        console.error('Failed to deactivate patient:', error);
+  const msg = getErrorMessage(error, 'Failed to deactivate patient');
+        toast.error(msg);
+      }
+    }
+  };
+
+  const handleActivate = async (id) => {
+    if (window.confirm('Are you sure you want to activate this patient?')) {
+      try {
+        await patientService.activate(id);
+        toast.success('Patient activated successfully');
+        await fetchPatients();
+      } catch (error) {
+        console.error('Failed to activate patient:', error);
+  const msg = getErrorMessage(error, 'Failed to activate patient');
         toast.error(msg);
       }
     }
@@ -375,13 +398,23 @@ export const Patients = () => {
           >
             <Edit className="w-4 h-4" />
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => handleDelete(patient.id)}
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          {patient.is_active !== false ? (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => handleDelete(patient.id)}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="success"
+              size="sm"
+              onClick={() => handleActivate(patient.id)}
+            >
+              Activate
+            </Button>
+          )}
         </div>
       ),
     },
@@ -576,8 +609,8 @@ export const Patients = () => {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Organization selectors: superadmin can pick org; others are scoped to their org */}
-          {user?.role === 'superadmin' ? (
+          {/* Organization selectors: only shown for superadmin when creating new patient */}
+          {!editingPatient && user?.role === 'superadmin' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Organization Type</label>
@@ -612,12 +645,12 @@ export const Patients = () => {
                 />
               </div>
             </div>
-          ) : (
+          ) : !editingPatient ? (
             <div>
               <label className="block text-sm font-medium mb-2">Organization</label>
               <div className="py-2 text-sm text-secondary">{modalSelectedOrgInfo?.name || organizations.find(o => String(o.id) === String(user?.organizationId))?.name || '—'}</div>
             </div>
-          )}
+          ) : null}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"

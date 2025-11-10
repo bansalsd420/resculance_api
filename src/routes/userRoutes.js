@@ -42,6 +42,12 @@ router.patch(
   UserController.suspend
 );
 
+router.patch(
+  '/:id/activate',
+  requirePermission(PERMISSIONS.UPDATE_USER),
+  UserController.activate
+);
+
 router.delete(
   '/:id',
   requirePermission(PERMISSIONS.DELETE_USER),
