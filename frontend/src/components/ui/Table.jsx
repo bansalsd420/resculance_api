@@ -45,14 +45,14 @@ export const Table = ({ columns, data, onRowClick, onRefresh, isRefreshing, load
             ) : (
               data.map((row, rowIndex) => (
                 <tr
-                  key={rowIndex}
+                  key={row.id ?? rowIndex}
                   onClick={() => onRowClick?.(row)}
                   className={`hover:bg-background transition-colors ${
                     onRowClick ? 'cursor-pointer' : ''
                   }`}
                 >
                   {columns.map((column, colIndex) => (
-                    <td key={colIndex} className="px-4 py-3 text-sm text-text">
+                    <td key={column.accessor ?? colIndex} className="px-4 py-3 text-sm text-text">
                       {column.render ? column.render(row) : row[column.accessor]}
                     </td>
                   ))}

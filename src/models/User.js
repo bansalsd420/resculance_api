@@ -29,7 +29,7 @@ class UserModel {
       `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
        creator.role as creator_role
        FROM users u
-       JOIN organizations o ON u.organization_id = o.id
+       LEFT JOIN organizations o ON u.organization_id = o.id
        LEFT JOIN users creator ON u.created_by = creator.id
        WHERE u.id = ?`,
       [id]
@@ -42,7 +42,7 @@ class UserModel {
       `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
        creator.role as creator_role
        FROM users u
-       JOIN organizations o ON u.organization_id = o.id
+       LEFT JOIN organizations o ON u.organization_id = o.id
        LEFT JOIN users creator ON u.created_by = creator.id
        WHERE u.email = ?`,
       [email]
@@ -55,7 +55,7 @@ class UserModel {
       `SELECT u.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
        creator.role as creator_role
        FROM users u
-       JOIN organizations o ON u.organization_id = o.id
+       LEFT JOIN organizations o ON u.organization_id = o.id
        LEFT JOIN users creator ON u.created_by = creator.id
        WHERE u.username = ?`,
       [username]

@@ -31,11 +31,18 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        const response = await axios.post(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/auth/refresh-token`,
-          { refreshToken }
-        );
+          const refreshToken = localStorage.getItem('refreshToken');
+          // If there's no refresh token, don't attempt refresh - force logout
+          if (!refreshToken) {
+            localStorage.clear();
+            window.location.href = '/login';
+            return Promise.reject(new Error('No refresh token available'));
+          }
+
+          const response = await axios.post(
+            `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/auth/refresh-token`,
+            { refreshToken }
+          );
 
         const { accessToken } = response.data.data;
         localStorage.setItem('accessToken', accessToken);
