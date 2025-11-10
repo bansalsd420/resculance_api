@@ -240,11 +240,159 @@ class PatientSessionModel {
   }
 
   static async offboard(id, offboardedBy, treatmentNotes) {
-    const [result] = await db.query(
-      `UPDATE patient_sessions SET status = 'offboarded', offboarded_by = ?, offboarded_at = NOW(), treatment_notes = ?
-       WHERE id = ?`,
-      [offboardedBy, treatmentNotes, id]
+    // First, get complete session details with all related data
+    const session = await this.findById(id);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    // Get user details who offboarded
+    const [offboardedByUser] = await db.query(
+      `SELECT id, first_name, last_name, email, role FROM users WHERE id = ?`,
+      [offboardedBy]
     );
+
+    // Get user details who onboarded
+    const [onboardedByUser] = await db.query(
+      `SELECT id, first_name, last_name, email, role FROM users WHERE id = ?`,
+      [session.onboarded_by]
+    );
+
+    // Get ambulance owner organization details
+    const [ambulanceOrg] = await db.query(
+      `SELECT o.* FROM organizations o
+       JOIN ambulances a ON a.organization_id = o.id
+       WHERE a.id = ?`,
+      [session.ambulance_id]
+    );
+
+    // Calculate session duration
+    const onboardedAt = new Date(session.onboarded_at);
+    const offboardedAt = new Date();
+    const durationMinutes = Math.floor((offboardedAt - onboardedAt) / (1000 * 60));
+
+    // Build comprehensive metadata JSON
+    const metadata = {
+      // Session Timeline
+      timeline: {
+        onboarded_at: session.onboarded_at,
+        offboarded_at: offboardedAt.toISOString(),
+        duration_minutes: durationMinutes,
+        estimated_arrival_time: session.estimated_arrival_time,
+        actual_arrival_time: session.actual_arrival_time
+      },
+      
+      // Patient Information (snapshot at offboard time)
+      patient: {
+        id: session.patient_id,
+        first_name: session.patient_first_name,
+        last_name: session.patient_last_name,
+        age: session.age,
+        gender: session.gender,
+        blood_group: session.blood_group,
+        medical_history: session.medical_history,
+        allergies: session.allergies,
+        current_medications: session.current_medications
+      },
+      
+      // Ambulance Information
+      ambulance: {
+        id: session.ambulance_id,
+        ambulance_code: session.ambulance_code,
+        registration_number: session.registration_number,
+        vehicle_model: session.vehicle_model,
+        vehicle_type: session.vehicle_type,
+        owner_organization: ambulanceOrg[0] || null
+      },
+      
+      // Crew Members (snapshot at offboard time)
+      crew: {
+        all_members: session.crew || [],
+        doctors: session.doctors || [],
+        paramedics: session.paramedics || [],
+        drivers: session.drivers || []
+      },
+      
+      // Organizations Involved
+      organizations: {
+        session_owner: {
+          id: session.organization_id,
+          name: session.organization_name,
+          type: session.organization_type
+        },
+        destination_hospital: session.destination_hospital_id ? {
+          id: session.destination_hospital_id,
+          name: session.destination_hospital_name
+        } : null
+      },
+      
+      // Location Data
+      locations: {
+        pickup: {
+          address: session.pickup_location,
+          latitude: session.pickup_latitude,
+          longitude: session.pickup_longitude
+        },
+        destination: {
+          address: session.destination_location,
+          latitude: session.destination_latitude,
+          longitude: session.destination_longitude
+        },
+        distance_km: session.distance_km
+      },
+      
+      // Medical Information
+      medical: {
+        chief_complaint: session.chief_complaint,
+        initial_assessment: session.initial_assessment,
+        treatment_notes: treatmentNotes,
+        outcome_status: session.outcome_status
+      },
+      
+      // User Actions
+      users: {
+        onboarded_by: {
+          id: session.onboarded_by,
+          name: onboardedByUser[0] ? `${onboardedByUser[0].first_name} ${onboardedByUser[0].last_name}` : 'Unknown',
+          email: onboardedByUser[0]?.email,
+          role: onboardedByUser[0]?.role
+        },
+        offboarded_by: {
+          id: offboardedBy,
+          name: offboardedByUser[0] ? `${offboardedByUser[0].first_name} ${offboardedByUser[0].last_name}` : 'Unknown',
+          email: offboardedByUser[0]?.email,
+          role: offboardedByUser[0]?.role
+        }
+      },
+      
+      // Session Identifiers
+      identifiers: {
+        session_id: id,
+        session_code: session.session_code,
+        status: 'offboarded'
+      },
+      
+      // Audit Trail
+      audit: {
+        created_at: session.created_at,
+        updated_at: session.updated_at,
+        offboarded_at: offboardedAt.toISOString(),
+        metadata_captured_at: offboardedAt.toISOString()
+      }
+    };
+
+    // Update session with offboard info and metadata
+    const [result] = await db.query(
+      `UPDATE patient_sessions 
+       SET status = 'offboarded', 
+           offboarded_by = ?, 
+           offboarded_at = NOW(), 
+           treatment_notes = ?,
+           session_metadata = ?
+       WHERE id = ?`,
+      [offboardedBy, treatmentNotes, JSON.stringify(metadata), id]
+    );
+    
     return result.affectedRows > 0;
   }
 

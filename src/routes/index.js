@@ -8,6 +8,7 @@ const collaborationRoutes = require('./collaborationRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const activityRoutes = require('./activityRoutes');
 const notificationRoutes = require('./notificationRoutes');
+const sessionRoutes = require('./sessions');
 
 const router = express.Router();
 
@@ -21,5 +22,6 @@ router.use('/collaborations', collaborationRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/activities', activityRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/sessions', sessionRoutes);
 
 module.exports = router;
