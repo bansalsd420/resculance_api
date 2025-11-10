@@ -370,6 +370,60 @@ export const sessionService = {
     const response = await api.get('/sessions/stats', { params });
     return response;
   },
+
+  // Session data (notes, medications, files)
+  getData: async (sessionId) => {
+    const response = await api.get(`/sessions/${sessionId}/data`);
+    return response;
+  },
+
+  getDataByType: async (sessionId, type) => {
+    const response = await api.get(`/sessions/${sessionId}/data/${type}`);
+    return response;
+  },
+
+  addNote: async (sessionId, note) => {
+    const response = await api.post(`/sessions/${sessionId}/data`, {
+      dataType: 'note',
+      content: {
+        text: note.text
+      }
+    });
+    return response;
+  },
+
+  addMedication: async (sessionId, medication) => {
+    const response = await api.post(`/sessions/${sessionId}/data`, {
+      dataType: 'medication',
+      content: {
+        name: medication.name,
+        dosage: medication.dosage,
+        route: medication.route
+      }
+    });
+    return response;
+  },
+
+  uploadFile: async (sessionId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post(`/sessions/${sessionId}/data/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response;
+  },
+
+  deleteData: async (sessionId, dataId) => {
+    const response = await api.delete(`/sessions/${sessionId}/data/${dataId}`);
+    return response;
+  },
+
+  downloadFile: async (sessionId, dataId) => {
+    const response = await api.get(`/sessions/${sessionId}/data/files/${dataId}/download`, {
+      responseType: 'blob'
+    });
+    return response;
+  }
 };
 
 export const collaborationService = {

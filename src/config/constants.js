@@ -87,6 +87,8 @@ module.exports = {
     DISCONNECT: 'disconnect',
     JOIN_AMBULANCE: 'join_ambulance',
     LEAVE_AMBULANCE: 'leave_ambulance',
+    JOIN_SESSION: 'join_session',
+    LEAVE_SESSION: 'leave_session',
     VITAL_UPDATE: 'vital_update',
     LOCATION_UPDATE: 'location_update',
     MESSAGE: 'message',
@@ -95,7 +97,9 @@ module.exports = {
     CALL_END: 'call_end',
     VIDEO_REQUEST: 'video_request',
     VIDEO_ANSWER: 'video_answer',
-    VIDEO_END: 'video_end'
+    VIDEO_END: 'video_end',
+    SESSION_DATA_ADDED: 'session_data_added',
+    SESSION_DATA_DELETED: 'session_data_deleted'
   },
 
   // Activity types for audit logging

@@ -19,15 +19,25 @@ import {
   Heart,
   Navigation,
   Ambulance as AmbulanceIcon,
-  UserPlus
+  UserPlus,
+  Upload,
+  X,
+  FileText,
+  Pill,
+  Trash2,
+  Download,
+  CheckCircle,
+  Paperclip
 } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
 import ChatPanel from '../../components/ChatPanel';
 import VideoCallPanel from '../../components/VideoCallPanel';
 import { LiveCameraFeed } from '../../components/LiveCameraFeed';
-import { patientService, ambulanceService } from '../../services';
+import { patientService, ambulanceService, sessionService } from '../../services';
 import socketService from '../../services/socketService';
 import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
@@ -57,6 +67,20 @@ export default function OnboardingDetail() {
     cabinCamera: false,
   });
 
+  // Session data state
+  const [sessionData, setSessionData] = useState({ notes: [], medications: [], files: [], counts: {} });
+  const [loadingData, setLoadingData] = useState(false);
+  const [newNote, setNewNote] = useState('');
+  const [newMedication, setNewMedication] = useState({ name: '', dosage: '', route: 'oral' });
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [loadingNote, setLoadingNote] = useState(false);
+  const [loadingMedication, setLoadingMedication] = useState(false);
+
+  // Confirmation modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showOffboardModal, setShowOffboardModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
   // Mock vitals & sos for demo (replace with real data in production)
   const [vitals, setVitals] = useState({ heartRate: 98, bloodPressure: '120/78', spo2: 94, temp: 37.1 });
   const [sosAlerts, setSosAlerts] = useState([
@@ -72,6 +96,7 @@ export default function OnboardingDetail() {
     if (token) socketService.connect(token);
     if (sessionId) {
       fetchSessionDetails();
+      fetchSessionData();
       // Join the session room to receive socket events
       console.log('🔌 Joining session room:', sessionId);
       socketService.joinSession(sessionId);
@@ -100,10 +125,35 @@ export default function OnboardingDetail() {
       }
     };
 
+    // Listen for session data updates
+    const handleSessionDataAdded = (data) => {
+      if (data.sessionId === sessionId) {
+        console.log('📝 Session data added:', data);
+        fetchSessionData(); // Refresh data
+        toast.success('New data added to session');
+      }
+    };
+
+    const handleSessionDataDeleted = (data) => {
+      if (data.sessionId === sessionId) {
+        console.log('🗑️ Session data deleted:', data);
+        fetchSessionData(); // Refresh data
+      }
+    };
+
     socketService.onVideoRequest(handleIncomingVideoCall);
+    socketService.socket?.on('session_data_added', handleSessionDataAdded);
+    socketService.socket?.on('session_data_deleted', handleSessionDataDeleted);
+
+    // Join the session room for real-time updates
+    socketService.joinSession(sessionId);
 
     return () => {
       socketService.socket?.off('video_request', handleIncomingVideoCall);
+      socketService.socket?.off('session_data_added', handleSessionDataAdded);
+      socketService.socket?.off('session_data_deleted', handleSessionDataDeleted);
+      // Leave the session room when component unmounts
+      socketService.leaveSession(sessionId);
     };
   }, [sessionId, user?.id, toast]);
 
@@ -134,9 +184,160 @@ export default function OnboardingDetail() {
     }
   }
 
-  async function handleOffboardPatient() {
+  async function fetchSessionData() {
     if (!sessionId) return;
-    if (!window.confirm('Are you sure you want to offboard this patient?')) return;
+    setLoadingData(true);
+    try {
+      const response = await sessionService.getData(sessionId);
+      const data = response?.data?.data || response?.data || {};
+      setSessionData({
+        notes: data.notes || [],
+        medications: data.medications || [],
+        files: data.files || [],
+        counts: data.counts || { notes: 0, medications: 0, files: 0 }
+      });
+    } catch (error) {
+      console.error('Failed to fetch session data:', error);
+      // Don't show error toast for initial load
+    } finally {
+      setLoadingData(false);
+    }
+  }
+
+  async function handleAddNote() {
+    console.log('handleAddNote called with:', newNote);
+    if (!newNote.trim()) {
+      toast.error('Please enter a note');
+      return;
+    }
+
+    setLoadingNote(true);
+    console.log('Calling sessionService.addNote...');
+    try {
+      const response = await sessionService.addNote(sessionId, { text: newNote });
+      console.log('sessionService.addNote response:', response);
+      setNewNote('');
+      toast.success('Note added successfully');
+      // Data will be refreshed via socket event
+    } catch (error) {
+      console.error('Failed to add note:', error);
+      toast.error(error.response?.data?.message || 'Failed to add note');
+    } finally {
+      setLoadingNote(false);
+    }
+  }
+
+  async function handleAddMedication() {
+    console.log('handleAddMedication called with:', newMedication);
+    if (!newMedication.name.trim() || !newMedication.dosage.trim()) {
+      toast.error('Please enter medication name and dosage');
+      return;
+    }
+
+    setLoadingMedication(true);
+    console.log('Calling sessionService.addMedication...');
+    try {
+      const response = await sessionService.addMedication(sessionId, newMedication);
+      console.log('sessionService.addMedication response:', response);
+      setNewMedication({ name: '', dosage: '', route: 'oral' });
+      toast.success('Medication added successfully');
+      // Data will be refreshed via socket event
+    } catch (error) {
+      console.error('Failed to add medication:', error);
+      toast.error(error.response?.data?.message || 'Failed to add medication');
+    } finally {
+      setLoadingMedication(false);
+    }
+  }
+
+  async function handleFileUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB');
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      await sessionService.uploadFile(sessionId, file);
+      toast.success('File uploaded successfully');
+      event.target.value = ''; // Reset file input
+      // Data will be refreshed via socket event
+    } catch (error) {
+      console.error('Failed to upload file:', error);
+      toast.error(error.response?.data?.message || 'Failed to upload file');
+    } finally {
+      setUploadingFile(false);
+    }
+  }
+
+  async function handleDeleteData(dataId) {
+    // Find the data entry to show in modal
+    const allData = [...sessionData.notes, ...sessionData.medications, ...sessionData.files];
+    const dataEntry = allData.find(item => item.id === dataId);
+    if (dataEntry) {
+      setDeleteTarget(dataEntry);
+      setShowDeleteModal(true);
+    }
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      await sessionService.deleteData(sessionId, deleteTarget.id);
+      toast.success('Entry deleted successfully');
+      // Data will be refreshed via socket event
+    } catch (error) {
+      console.error('Failed to delete data:', error);
+      toast.error(error.response?.data?.message || 'Failed to delete entry');
+    } finally {
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+  };
+
+  async function handleDownloadFile(dataId) {
+    try {
+      const response = await sessionService.downloadFile(sessionId, dataId);
+      // Create a blob from the response data
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      // Get filename from content-disposition header or use a default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'download';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) filename = filenameMatch[1];
+      }
+      // Create download link and trigger download
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('File downloaded successfully');
+    } catch (error) {
+      console.error('Failed to download file:', error);
+      toast.error(error.response?.data?.message || 'Failed to download file');
+    }
+  }
+
+  async function handleOffboardPatient() {
+    setShowOffboardModal(true);
+  }
+
+  const handleConfirmOffboard = async () => {
     try {
       await patientService.offboard(sessionId, { treatmentNotes: 'Patient offboarded from Command Console' });
       toast.success('Patient offboarded successfully');
@@ -144,8 +345,14 @@ export default function OnboardingDetail() {
     } catch (error) {
       console.error('Failed to offboard patient:', error);
       toast.error('Failed to offboard patient');
+    } finally {
+      setShowOffboardModal(false);
     }
-  }
+  };
+
+  const handleCancelOffboard = () => {
+    setShowOffboardModal(false);
+  };
 
   function toggleControl(controlName) {
     setControls(prev => ({ ...prev, [controlName]: !prev[controlName] }));
@@ -403,41 +610,409 @@ export default function OnboardingDetail() {
 
           {/* Medical Reports */}
           <Card className="p-6">
-            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><Activity className="w-5 h-5" /> Medical Reports</h2>
+            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5" /> Medical Reports
+            </h2>
             <p className="text-xs text-text-secondary mb-4">Incident & treatment notes</p>
 
             <div className="flex gap-4 border-b border-border mb-4">
               {['Notes', 'Meds', 'Files'].map((tab) => (
-                <button key={tab} onClick={() => setActiveTab(tab.toLowerCase())} className={`pb-2 text-sm font-medium border-b-2 transition-colors ${ activeTab === tab.toLowerCase() ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text' }`}>
-                  {tab}
+                <button 
+                  key={tab} 
+                  onClick={() => setActiveTab(tab.toLowerCase())} 
+                  className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors relative ${ 
+                    activeTab === tab.toLowerCase() 
+                      ? 'border-primary text-primary' 
+                      : 'border-transparent text-text-secondary hover:text-text' 
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    {tab === 'Notes' && <FileText className="w-4 h-4" />}
+                    {tab === 'Meds' && <Pill className="w-4 h-4" />}
+                    {tab === 'Files' && <Paperclip className="w-4 h-4" />}
+                    {tab}
+                    <span className={`inline-flex items-center justify-center w-5 h-5 text-xs font-semibold rounded-full ${
+                      activeTab === tab.toLowerCase() ? 'bg-primary text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {sessionData.counts[tab.toLowerCase()] || 0}
+                    </span>
+                  </span>
                 </button>
               ))}
             </div>
 
             <div className="space-y-3">
-              {activeTab === 'notes' && <div className="text-sm text-text-secondary"><p className="mb-2">No notes available</p></div>}
+              {/* Notes Tab */}
+              {activeTab === 'notes' && (
+                <div className="space-y-3">
+                  {/* Add Note Form */}
+                  {isActive && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-800"
+                    >
+                      <div className="flex items-start gap-2 mb-2">
+                        <FileText className="w-5 h-5 text-blue-600 mt-1" />
+                        <div className="flex-1">
+                          <label className="text-sm font-semibold text-blue-900 dark:text-blue-100 block mb-2">
+                            Add Clinical Note
+                          </label>
+                          <textarea
+                            value={newNote}
+                            onChange={(e) => setNewNote(e.target.value)}
+                            placeholder="Document patient condition, vital observations, treatment administered, or any significant changes..."
+                            className="w-full p-3 border-2 border-blue-300 dark:border-blue-700 rounded-lg bg-white dark:bg-gray-800 text-text text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            rows={4}
+                          />
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-xs text-blue-600 dark:text-blue-300">
+                              {newNote.length} / 1000 characters
+                            </span>
+                            <button 
+                              onClick={() => handleAddNote()}
+                              disabled={loadingNote}
+                              className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+                            >
+                              {loadingNote ? (
+                                <div className="flex items-center gap-1">
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  Saving...
+                                </div>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-4 h-4" />
+                                  Save Note
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
 
-              {activeTab === 'meds' && (
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center p-2 bg-background rounded">
-                    <div><p className="font-medium text-text">Aspirin</p><p className="text-xs text-text-secondary">150 mg</p></div>
-                    <div className="text-text-secondary">Salbutamol</div>
-                    <div className="text-text-secondary">2.5 mg neb</div>
-                  </div>
-
-                  <div className="flex justify-between items-center p-2 bg-background rounded">
-                    <div><p className="font-medium text-text">Nitro</p><p className="text-xs text-text-secondary">0.4 mg</p></div>
-                    <div className="text-text-secondary">Ondansetron</div>
-                    <div className="text-text-secondary">4 mg</div>
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="flex justify-between items-center text-xs"><span className="text-text-secondary">Medication</span><span className="text-text-secondary">Dose</span><Button size="sm" variant="link" className="text-primary">Add</Button></div>
-                  </div>
+                  {/* Notes List */}
+                  {loadingData ? (
+                    <div className="text-center py-8">
+                      <Activity className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-text-secondary">Loading notes...</p>
+                    </div>
+                  ) : sessionData.notes.length > 0 ? (
+                    <div className="space-y-2">
+                      {sessionData.notes.map((note, index) => (
+                        <motion.div 
+                          key={note.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="p-4 bg-white dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 shadow-sm hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-text leading-relaxed mb-2">{note.content.text}</p>
+                              <div className="flex items-center justify-between text-xs text-text-secondary">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-blue-600">{note.addedBy.name}</span>
+                                  <span>•</span>
+                                  <span>{note.addedBy.role}</span>
+                                  <span>•</span>
+                                  <span>{new Date(note.addedAt).toLocaleString()}</span>
+                                </div>
+                                {isActive && note.addedBy.id === user?.id && (
+                                  <button
+                                    onClick={() => handleDeleteData(note.id)}
+                                    className="flex items-center gap-1 text-error hover:text-red-700 transition-colors"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-300">
+                      <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-sm text-text-secondary">No clinical notes yet</p>
+                      <p className="text-xs text-text-secondary mt-1">Start documenting patient observations above</p>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {activeTab === 'files' && <div className="text-sm text-text-secondary"><p>No files uploaded</p></div>}
+              {/* Medications Tab */}
+              {activeTab === 'meds' && (
+                <div className="space-y-3">
+                  {/* Add Medication Form */}
+                  {isActive && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border-2 border-green-200 dark:border-green-800"
+                    >
+                      <div className="flex items-start gap-2 mb-3">
+                        <Pill className="w-5 h-5 text-green-600 mt-1" />
+                        <label className="text-sm font-semibold text-green-900 dark:text-green-100">
+                          Administer Medication
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-green-700 dark:text-green-300 mb-1 block font-medium">
+                            Medication Name
+                          </label>
+                          <input
+                            type="text"
+                            value={newMedication.name}
+                            onChange={(e) => setNewMedication({ ...newMedication, name: e.target.value })}
+                            placeholder="e.g., Aspirin, Morphine"
+                            className="w-full p-2.5 border-2 border-green-300 dark:border-green-700 rounded-lg bg-white dark:bg-gray-800 text-text text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-green-700 dark:text-green-300 mb-1 block font-medium">
+                            Dosage
+                          </label>
+                          <input
+                            type="text"
+                            value={newMedication.dosage}
+                            onChange={(e) => setNewMedication({ ...newMedication, dosage: e.target.value })}
+                            placeholder="e.g., 150 mg, 2 tablets"
+                            className="w-full p-2.5 border-2 border-green-300 dark:border-green-700 rounded-lg bg-white dark:bg-gray-800 text-text text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-green-700 dark:text-green-300 mb-1 block font-medium">
+                            Route
+                          </label>
+                          <select
+                            value={newMedication.route}
+                            onChange={(e) => setNewMedication({ ...newMedication, route: e.target.value })}
+                            className="w-full p-2.5 border-2 border-green-300 dark:border-green-700 rounded-lg bg-white dark:bg-gray-800 text-text text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                          >
+                            <option value="oral">Oral</option>
+                            <option value="iv">Intravenous (IV)</option>
+                            <option value="im">Intramuscular (IM)</option>
+                            <option value="subcutaneous">Subcutaneous</option>
+                            <option value="inhalation">Inhalation</option>
+                            <option value="topical">Topical</option>
+                            <option value="sublingual">Sublingual</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex justify-end mt-3">
+                        <button 
+                          onClick={() => handleAddMedication()}
+                          disabled={!newMedication.name.trim() || !newMedication.dosage.trim() || loadingMedication}
+                          className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+                        >
+                          {loadingMedication ? (
+                            <div className="flex items-center gap-1">
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Recording...
+                            </div>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              Record Medication
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Medications List */}
+                  {loadingData ? (
+                    <div className="text-center py-8">
+                      <Activity className="w-8 h-8 text-green-500 animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-text-secondary">Loading medications...</p>
+                    </div>
+                  ) : sessionData.medications.length > 0 ? (
+                    <div className="space-y-2">
+                      {sessionData.medications.map((med, index) => (
+                        <motion.div 
+                          key={med.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="p-4 bg-white dark:bg-gray-800 rounded-lg border-l-4 border-green-500 shadow-sm hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center flex-shrink-0">
+                              <Pill className="w-4 h-4 text-green-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <p className="font-semibold text-text text-base">{med.content.name}</p>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200 text-xs rounded-full font-medium">
+                                      <span className="w-1.5 h-1.5 bg-green-600 rounded-full"></span>
+                                      {med.content.dosage}
+                                    </span>
+                                    <span className="text-xs text-text-secondary uppercase tracking-wide">
+                                      {med.content.route}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isActive && med.addedBy.id === user?.id && (
+                                  <button
+                                    onClick={() => handleDeleteData(med.id)}
+                                    className="flex items-center gap-1 text-error hover:text-red-700 transition-colors text-xs"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-text-secondary mt-2">
+                                <span className="font-semibold text-green-600">{med.addedBy.name}</span>
+                                <span>•</span>
+                                <span>{med.addedBy.role}</span>
+                                <span>•</span>
+                                <span>{new Date(med.content.time_administered || med.addedAt).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-300">
+                      <Pill className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-sm text-text-secondary">No medications administered</p>
+                      <p className="text-xs text-text-secondary mt-1">Record medications given to the patient</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Files Tab */}
+              {activeTab === 'files' && (
+                <div className="space-y-3">
+                  {/* Upload File Form - Drag & Drop */}
+                  {isActive && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="relative"
+                    >
+                      <label 
+                        htmlFor="file-upload"
+                        className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                          uploadingFile 
+                            ? 'border-purple-400 bg-purple-50 dark:bg-purple-900/20' 
+                            : 'border-purple-300 bg-purple-50/50 dark:bg-purple-900/10 hover:bg-purple-100 dark:hover:bg-purple-900/30'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          {uploadingFile ? (
+                            <>
+                              <Activity className="w-10 h-10 text-purple-600 animate-spin mb-2" />
+                              <p className="text-sm text-purple-600 font-semibold">Uploading file...</p>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-10 h-10 text-purple-600 mb-2" />
+                              <p className="mb-1 text-sm text-purple-700 dark:text-purple-300 font-semibold">
+                                Click to upload or drag and drop
+                              </p>
+                              <p className="text-xs text-purple-600 dark:text-purple-400">
+                                PDF, Images, Word, Excel (Max 10MB)
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        <input
+                          id="file-upload"
+                          type="file"
+                          onChange={handleFileUpload}
+                          accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+                          className="hidden"
+                          disabled={uploadingFile}
+                        />
+                      </label>
+                      
+                      <div className="mt-2 flex items-center gap-2 text-xs text-purple-600 dark:text-purple-400">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Supported formats: PDF, JPEG, PNG, GIF, DOC, DOCX, XLS, XLSX</span>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Files List */}
+                  {loadingData ? (
+                    <div className="text-center py-8">
+                      <Activity className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-2" />
+                      <p className="text-sm text-text-secondary">Loading files...</p>
+                    </div>
+                  ) : sessionData.files.length > 0 ? (
+                    <div className="space-y-2">
+                      {sessionData.files.map((file, index) => (
+                        <motion.div 
+                          key={file.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.05 }}
+                          className="p-4 bg-white dark:bg-gray-800 rounded-lg border-l-4 border-purple-500 shadow-sm hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900 flex items-center justify-center flex-shrink-0">
+                              <Paperclip className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-text truncate">{file.content.filename}</p>
+                              <div className="flex items-center gap-3 mt-1">
+                                <span className="text-xs text-text-secondary">
+                                  {(file.content.size / 1024).toFixed(1)} KB
+                                </span>
+                                <span className="text-xs text-text-secondary">•</span>
+                                <span className="text-xs text-purple-600 font-medium">{file.addedBy.name}</span>
+                                <span className="text-xs text-text-secondary">•</span>
+                                <span className="text-xs text-text-secondary">
+                                  {new Date(file.addedAt).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleDownloadFile(file.id)}
+                                className="p-2 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/50 dark:hover:bg-purple-800 text-purple-600 rounded-lg transition-colors"
+                                title="Download file"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              {isActive && file.addedBy.id === user?.id && (
+                                <button
+                                  onClick={() => handleDeleteData(file.id)}
+                                  className="p-2 bg-red-100 hover:bg-red-200 dark:bg-red-900/50 dark:hover:bg-red-800 text-error rounded-lg transition-colors"
+                                  title="Delete file"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg border-2 border-dashed border-gray-300">
+                      <Paperclip className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-sm text-text-secondary">No files uploaded</p>
+                      <p className="text-xs text-text-secondary mt-1">Upload patient documents, X-rays, or reports</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </Card>
 
@@ -583,6 +1158,118 @@ export default function OnboardingDetail() {
 
       {/* Camera Modal */}
       <CameraFeedModal isOpen={showCameraModal} onClose={() => setShowCameraModal(false)} session={session} ambulance={ambulance} selectedCamera={selectedCamera} />
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={handleCancelDelete}
+        title="Confirm Deletion"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCancelDelete}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmDelete}>
+              Yes, Delete Entry
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center flex-shrink-0">
+              <Trash2 className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-red-900 dark:text-red-100">Delete Entry</h3>
+              <p className="text-sm text-red-700 dark:text-red-300">
+                This action cannot be undone. The entry will be permanently removed.
+              </p>
+            </div>
+          </div>
+
+          {deleteTarget && (
+            <div className="space-y-3">
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex items-center gap-3 mb-2">
+                  {deleteTarget.dataType === 'note' && <FileText className="w-5 h-5 text-blue-600" />}
+                  {deleteTarget.dataType === 'medication' && <Pill className="w-5 h-5 text-green-600" />}
+                  {deleteTarget.dataType === 'file' && <Paperclip className="w-5 h-5 text-purple-600" />}
+                  <span className="font-medium text-text capitalize">{deleteTarget.dataType}</span>
+                </div>
+                <div className="text-sm text-text-secondary">
+                  {deleteTarget.dataType === 'note' && (
+                    <p className="line-clamp-2">{deleteTarget.content.text}</p>
+                  )}
+                  {deleteTarget.dataType === 'medication' && (
+                    <p>{deleteTarget.content.name} - {deleteTarget.content.dosage} ({deleteTarget.content.route})</p>
+                  )}
+                  {deleteTarget.dataType === 'file' && (
+                    <p>{deleteTarget.content.filename} ({(deleteTarget.content.size / 1024).toFixed(1)} KB)</p>
+                  )}
+                </div>
+                <div className="text-xs text-text-secondary mt-2">
+                  Added by {deleteTarget.addedBy.name} on {new Date(deleteTarget.addedAt).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="text-sm text-secondary">
+                <p>Are you sure you want to delete this entry? This action cannot be undone.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Offboard Confirmation Modal */}
+      <Modal
+        isOpen={showOffboardModal}
+        onClose={handleCancelOffboard}
+        title="Confirm Patient Offboarding"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCancelOffboard}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmOffboard}>
+              Yes, Offboard Patient
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center flex-shrink-0">
+              <Power className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-red-900 dark:text-red-100">Offboard Patient</h3>
+              <p className="text-sm text-red-700 dark:text-red-300">
+                This action will complete the patient session and mark it as offboarded.
+              </p>
+            </div>
+          </div>
+
+          {session && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div>
+                  <p className="text-xs text-secondary mb-1">Session Code</p>
+                  <p className="font-medium">{session.session_code || session.sessionCode}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary mb-1">Ambulance</p>
+                  <p className="font-medium">{session.ambulance_code || session.ambulanceCode}</p>
+                </div>
+              </div>
+
+              <div className="text-sm text-secondary">
+                <p>Are you sure you want to offboard this patient? This action will complete the session and cannot be undone.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

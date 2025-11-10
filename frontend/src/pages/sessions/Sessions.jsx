@@ -23,6 +23,7 @@ import Select from '../../components/ui/Select';
 import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
+import socketService from '../../services/socketService';
 
 export default function Sessions() {
   const navigate = useNavigate();
@@ -89,6 +90,24 @@ export default function Sessions() {
     };
     if (user?.role === 'superadmin') loadOrgs();
   }, [user?.role]);
+
+  // Socket listener for real-time session updates
+  useEffect(() => {
+    // Listen for patient_onboarded event to refresh sessions list
+    const handlePatientOnboarded = (data) => {
+      console.log('Patient onboarded event received:', data);
+      // Refresh sessions list to show the new session
+      fetchSessions();
+      fetchStats();
+    };
+
+    socketService.on('patient_onboarded', handlePatientOnboarded);
+
+    // Cleanup
+    return () => {
+      socketService.off('patient_onboarded', handlePatientOnboarded);
+    };
+  }, [user, selectedOrgId, page, statusFilter, searchTerm, startDate, endDate]);
 
   useEffect(() => {
     if (selectedOrgId) {

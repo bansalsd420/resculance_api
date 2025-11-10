@@ -41,6 +41,10 @@ export const Onboarding = () => {
   const { user } = useAuthStore();
   const runWithLoader = useWithGlobalLoader();
 
+  // Offboard confirmation modal state
+  const [showOffboardModal, setShowOffboardModal] = useState(false);
+  const [offboardTarget, setOffboardTarget] = useState(null);
+
   // Determine if current context is hospital or fleet
   const isHospitalContext = user?.role === 'superadmin' 
     ? selectedOrgInfo?.type === 'hospital'
@@ -57,9 +61,17 @@ export const Onboarding = () => {
 
   // Offboard handler for table (must be top-level, not inside useEffect)
   const handleOffboardFromTable = async (row) => {
-    const sessionId = row.activeSession?.id;
+    setOffboardTarget(row);
+    setShowOffboardModal(true);
+  };
+
+  const handleConfirmOffboard = async () => {
+    if (!offboardTarget) return;
+    
+    const sessionId = offboardTarget.activeSession?.id;
     if (!sessionId) return;
-    if (!window.confirm('Are you sure you want to offboard this patient?')) return;
+
+    setSubmitting(true);
     try {
       await patientService.offboard(sessionId, { treatmentNotes: 'Patient offboarded from table view' });
       toast.success('Patient offboarded successfully');
@@ -69,7 +81,16 @@ export const Onboarding = () => {
     } catch (error) {
       console.error('Failed to offboard patient:', error);
       toast.error('Failed to offboard patient');
+    } finally {
+      setSubmitting(false);
+      setShowOffboardModal(false);
+      setOffboardTarget(null);
     }
+  };
+
+  const handleCancelOffboard = () => {
+    setShowOffboardModal(false);
+    setOffboardTarget(null);
   };
 
   useEffect(() => {
@@ -487,6 +508,60 @@ export const Onboarding = () => {
           )}
         </>
       )}
+
+      {/* Offboard Confirmation Modal */}
+      <Modal
+        isOpen={showOffboardModal}
+        onClose={handleCancelOffboard}
+        title="Confirm Patient Offboarding"
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCancelOffboard}>
+              Cancel
+            </Button>
+            <Button 
+              variant="danger" 
+              loading={submitting} 
+              onClick={handleConfirmOffboard}
+            >
+              Yes, Offboard Patient
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center flex-shrink-0">
+              <Power className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-red-900 dark:text-red-100">Offboard Patient</h3>
+              <p className="text-sm text-red-700 dark:text-red-300">
+                This action will complete the patient session and mark it as offboarded.
+              </p>
+            </div>
+          </div>
+
+          {offboardTarget && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div>
+                  <p className="text-xs text-secondary mb-1">Ambulance</p>
+                  <p className="font-medium">{offboardTarget.registration_number || offboardTarget.vehicleNumber || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-secondary mb-1">Session Code</p>
+                  <p className="font-medium">{offboardTarget.activeSession?.session_code || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="text-sm text-secondary">
+                <p>Are you sure you want to offboard this patient? This action cannot be undone.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Patient Selection Modal */}
       <Modal

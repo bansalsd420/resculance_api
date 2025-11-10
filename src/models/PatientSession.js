@@ -266,6 +266,40 @@ class PatientSessionModel {
       [session.ambulance_id]
     );
 
+    // Get all session data (notes, medications, files) added during session
+    const [sessionDataRows] = await db.query(
+      `SELECT 
+        psd.*,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.role
+       FROM patient_session_data psd
+       LEFT JOIN users u ON psd.added_by = u.id
+       WHERE psd.session_id = ?
+       ORDER BY psd.added_at ASC`,
+      [id]
+    );
+
+    // Format session data
+    const sessionData = sessionDataRows.map(row => ({
+      id: row.id,
+      dataType: row.data_type,
+      content: typeof row.content === 'string' ? JSON.parse(row.content) : row.content,
+      addedBy: {
+        id: row.added_by,
+        name: `${row.first_name} ${row.last_name}`,
+        email: row.email,
+        role: row.role
+      },
+      addedAt: row.added_at
+    }));
+
+    // Group session data by type
+    const notes = sessionData.filter(d => d.dataType === 'note');
+    const medications = sessionData.filter(d => d.dataType === 'medication');
+    const files = sessionData.filter(d => d.dataType === 'file');
+
     // Calculate session duration
     const onboardedAt = new Date(session.onboarded_at);
     const offboardedAt = new Date();
@@ -347,6 +381,19 @@ class PatientSessionModel {
         initial_assessment: session.initial_assessment,
         treatment_notes: treatmentNotes,
         outcome_status: session.outcome_status
+      },
+
+      // Session Data (Notes, Medications, Files added during session)
+      session_data: {
+        notes: notes,
+        medications: medications,
+        files: files,
+        total_entries: sessionData.length,
+        counts: {
+          notes: notes.length,
+          medications: medications.length,
+          files: files.length
+        }
       },
       
       // User Actions

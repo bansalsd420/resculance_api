@@ -16,7 +16,9 @@ import {
   CheckCircle,
   XCircle,
   Navigation,
-  Shield
+  Shield,
+  Download,
+  Pill
 } from 'lucide-react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -442,6 +444,132 @@ export default function SessionDetail() {
           </div>
         )}
       </Card>
+
+      {/* Session Data - Notes, Medications, Files */}
+      {metadata?.session_data && (metadata.session_data.notes?.length > 0 || metadata.session_data.medications?.length > 0 || metadata.session_data.files?.length > 0) && (
+        <Card className="p-6">
+          <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <FileText className="w-6 h-6 text-primary" />
+            Session Data
+            <span className="text-sm font-normal text-secondary ml-2">
+              ({metadata.session_data.total_entries || 0} total entries)
+            </span>
+          </h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Notes Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-semibold text-text flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Notes
+                </h3>
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                  {metadata.session_data.counts?.notes || 0}
+                </span>
+              </div>
+              
+              {metadata.session_data.notes?.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {metadata.session_data.notes.map((note, idx) => (
+                    <div key={idx} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                      <p className="text-sm text-text mb-2">{note.content.text}</p>
+                      <div className="text-xs text-secondary">
+                        <p className="font-medium">{note.addedBy.name}</p>
+                        <p>{note.addedBy.role}</p>
+                        <p className="mt-1">{formatDate(note.addedAt)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-secondary py-4">No notes recorded</p>
+              )}
+            </div>
+
+            {/* Medications Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-semibold text-text flex items-center gap-2">
+                  <Pill className="w-4 h-4" />
+                  Medications
+                </h3>
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                  {metadata.session_data.counts?.medications || 0}
+                </span>
+              </div>
+              
+              {metadata.session_data.medications?.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {metadata.session_data.medications.map((med, idx) => (
+                    <div key={idx} className="p-3 bg-green-50 rounded-lg border border-green-100">
+                      <p className="font-medium text-text">{med.content.name}</p>
+                      <p className="text-sm text-secondary mb-2">
+                        {med.content.dosage} • {med.content.route}
+                      </p>
+                      <div className="text-xs text-secondary">
+                        <p className="font-medium">{med.addedBy.name}</p>
+                        <p>{med.addedBy.role}</p>
+                        <p className="mt-1">{formatDate(med.content.time_administered || med.addedAt)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-secondary py-4">No medications recorded</p>
+              )}
+            </div>
+
+            {/* Files Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-semibold text-text flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Files
+                </h3>
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                  {metadata.session_data.counts?.files || 0}
+                </span>
+              </div>
+              
+              {metadata.session_data.files?.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {metadata.session_data.files.map((file, idx) => (
+                    <div key={idx} className="p-3 bg-purple-50 rounded-lg border border-purple-100">
+                      <div className="flex items-start gap-2 mb-2">
+                        <svg className="w-5 h-5 flex-shrink-0 text-purple-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-text truncate">{file.content.filename}</p>
+                          <p className="text-xs text-secondary">
+                            {(file.content.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href={`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${file.content.relativePath}`}
+                        download
+                        className="text-xs text-primary hover:underline flex items-center gap-1 mb-2"
+                      >
+                        <Download className="w-3 h-3" />
+                        Download
+                      </a>
+                      <div className="text-xs text-secondary">
+                        <p className="font-medium">{file.addedBy.name}</p>
+                        <p>{file.addedBy.role}</p>
+                        <p className="mt-1">{formatDate(file.addedAt)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-secondary py-4">No files uploaded</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Raw Metadata (for superadmin debugging) */}
       {metadata && (
