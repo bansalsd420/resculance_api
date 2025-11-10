@@ -18,7 +18,8 @@ import {
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Table } from '../../components/ui/Table';
-import { sessionService } from '../../services';
+import { sessionService, organizationService } from '../../services';
+import Select from '../../components/ui/Select';
 import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
@@ -32,6 +33,11 @@ export default function Sessions() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState(null);
+  const [organizations, setOrganizations] = useState([]);
+  const [orgTypeFilter, setOrgTypeFilter] = useState('');
+  const [selectedOrgId, setSelectedOrgId] = useState(null);
+  const [selectedOrgInfo, setSelectedOrgInfo] = useState(null);
+  const [orgSearchInput, setOrgSearchInput] = useState('');
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,9 +48,21 @@ export default function Sessions() {
   const [pagination, setPagination] = useState({ total: 0, totalPages: 0, limit: 20 });
 
   useEffect(() => {
-    fetchSessions();
-    fetchStats();
-  }, [page, statusFilter, startDate, endDate]);
+    // Only fetch when not superadmin or when superadmin has selected an organization
+    if (user?.role === 'superadmin') {
+      if (selectedOrgId) {
+        fetchSessions();
+        fetchStats();
+      } else {
+        // Clear data when no org selected to avoid accidental leaks
+        setSessions([]);
+        setStats(null);
+      }
+    } else {
+      fetchSessions();
+      fetchStats();
+    }
+  }, [page, statusFilter, startDate, endDate, selectedOrgId]);
 
   useEffect(() => {
     // Debounce search
@@ -58,6 +76,29 @@ export default function Sessions() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  useEffect(() => {
+    // load organizations for superadmin org selector
+    const loadOrgs = async () => {
+      try {
+        const resp = await organizationService.getAll();
+        const orgs = resp.data?.data?.organizations || resp.data?.organizations || resp.data || [];
+        setOrganizations(orgs);
+      } catch (err) {
+        console.error('Failed to load organizations', err);
+      }
+    };
+    if (user?.role === 'superadmin') loadOrgs();
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      const org = organizations.find(o => String(o.id) === String(selectedOrgId));
+      setSelectedOrgInfo(org || null);
+    } else {
+      setSelectedOrgInfo(null);
+    }
+  }, [selectedOrgId, organizations]);
+
   const fetchSessions = async () => {
     setLoading(true);
     try {
@@ -66,6 +107,18 @@ export default function Sessions() {
       if (statusFilter) params.status = statusFilter;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
+
+      // Prevent superadmin from fetching without selecting an organization
+      if (user?.role === 'superadmin' && !selectedOrgId) {
+        setSessions([]);
+        setPagination({ total: 0, totalPages: 0, limit: 20 });
+        setLoading(false);
+        return;
+      }
+
+      if (user?.role === 'superadmin' && selectedOrgId) {
+        params.organizationId = selectedOrgId;
+      }
 
       const response = await sessionService.getAll(params);
       const data = response.data?.data || {};
@@ -81,7 +134,15 @@ export default function Sessions() {
 
   const fetchStats = async () => {
     try {
-      const response = await sessionService.getStats();
+      // Prevent superadmin from fetching global stats without selecting an organization
+      if (user?.role === 'superadmin' && !selectedOrgId) {
+        setStats(null);
+        return;
+      }
+
+      const params = {};
+      if (user?.role === 'superadmin' && selectedOrgId) params.organizationId = selectedOrgId;
+      const response = await sessionService.getStats(params);
       setStats(response.data?.data?.stats || null);
     } catch (error) {
       console.error('Failed to fetch session stats:', error);
@@ -216,6 +277,60 @@ export default function Sessions() {
           <p className="text-secondary">View and audit all patient transport sessions</p>
         </div>
       </div>
+      {/* Superadmin org selector panel */}
+      {user?.role === 'superadmin' && (
+        <Card className="mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="block text-xs font-medium text-text mb-0">Organization Type</label>
+              <Select
+                isClearable
+                value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
+                onChange={(opt) => { const v = opt?.value || ''; setOrgTypeFilter(v); setSelectedOrgId(null); setOrgSearchInput(''); }}
+                options={[{ value: '', label: 'All Types' }, { value: 'hospital', label: 'Hospital' }, { value: 'fleet_owner', label: 'Fleet Owner' }]}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text mb-0">Select Organization</label>
+              <div title={!orgTypeFilter ? 'Please select an Organization Type first' : ''}>
+                <Select
+                  isDisabled={!orgTypeFilter}
+                  placeholder={orgTypeFilter ? 'Type to search or pick an organization' : 'Select an organization type first'}
+                  options={organizations.filter(o => (!orgTypeFilter || o.type === orgTypeFilter)).map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
+                  value={selectedOrgId ? { value: selectedOrgId, label: `${selectedOrgInfo?.name || ''} (${selectedOrgInfo?.code || ''})` } : null}
+                  onChange={(opt) => {
+                    if (opt) {
+                      setSelectedOrgId(opt.value);
+                      setOrgSearchInput(opt.label);
+                    } else {
+                      setSelectedOrgId(null);
+                      setOrgSearchInput('');
+                    }
+                  }}
+                  classNamePrefix="react-select"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end">
+              <div className="text-right">
+                {selectedOrgInfo ? (
+                  <>
+                    <p className="font-semibold">{selectedOrgInfo.name} <span className="text-sm text-secondary">({selectedOrgInfo.code})</span></p>
+                    <p className="text-sm text-secondary">Type: {selectedOrgInfo.type}</p>
+                    <div>
+                      <button onClick={() => { setSelectedOrgId(null); setOrgTypeFilter(''); setOrgSearchInput(''); }} className="text-sm text-primary underline">Clear selection</button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-secondary">Select an organization to load sessions for that organization.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       {stats && (

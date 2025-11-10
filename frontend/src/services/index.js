@@ -366,8 +366,8 @@ export const sessionService = {
     return response;
   },
 
-  getStats: async () => {
-    const response = await api.get('/sessions/stats');
+  getStats: async (params = {}) => {
+    const response = await api.get('/sessions/stats', { params });
     return response;
   },
 };

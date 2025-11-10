@@ -23,10 +23,11 @@ class SessionController {
 
       // Apply role-based filtering
       if (req.user.role === 'superadmin') {
-        // Superadmin can see all sessions, optionally filtered by organizationId
-        if (organizationId) {
-          filters.organizationId = organizationId;
+        // Require organizationId parameter for superadmin to avoid accidental cross-org data leaks
+        if (!organizationId) {
+          return next(new AppError('organizationId is required when superadmin is viewing sessions', 400));
         }
+        filters.organizationId = organizationId;
       } else {
         // Other users can only see sessions from their organization
         filters.organizationId = req.user.organizationId;
@@ -223,7 +224,14 @@ class SessionController {
       const db = require('../config/database');
       
       const filters = {};
-      if (req.user.role !== 'superadmin') {
+      // For superadmin require an explicit organizationId parameter to scope stats
+      if (req.user.role === 'superadmin') {
+        const { organizationId } = req.query;
+        if (!organizationId) {
+          return next(new AppError('organizationId is required when superadmin is viewing session stats', 400));
+        }
+        filters.organizationId = organizationId;
+      } else {
         filters.organizationId = req.user.organizationId;
       }
 
