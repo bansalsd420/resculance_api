@@ -5,13 +5,13 @@ async function alterPatients() {
   try {
     console.log('Altering patients table...');
     
-    // Add date_of_birth if not exists
+    // Ensure age column exists (replacing previous date_of_birth usage)
     try {
-      await db.query(`ALTER TABLE patients ADD COLUMN date_of_birth DATE AFTER last_name`);
-      console.log('✅ Added date_of_birth column');
+      await db.query(`ALTER TABLE patients ADD COLUMN age INT AFTER last_name`);
+      console.log('✅ Added age column');
     } catch (error) {
       if (error.code === 'ER_DUP_FIELDNAME') {
-        console.log('⚠️  date_of_birth already exists');
+        console.log('⚠️  age already exists');
       } else {
         throw error;
       }

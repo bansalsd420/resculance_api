@@ -16,26 +16,26 @@ async function seedPatients() {
     console.log('\n🏥 Creating Patients...');
 
     const patients = [
-      ['John', 'Doe', '1980-05-15', 'male', '1234567890', 'john.doe@email.com', 'O+', '123 Patient St, New York, NY 10001', 'Jane Doe', '1234567899', 'Wife'],
-      ['Jane', 'Smith', '1975-08-22', 'female', '1234567891', 'jane.smith@email.com', 'A+', '456 Care Ave, Los Angeles, CA 90001', 'John Smith', '1234567898', 'Husband'],
-      ['Robert', 'Johnson', '1990-03-10', 'male', '1234567892', 'robert.j@email.com', 'B+', '789 Health Rd, Chicago, IL 60601', 'Mary Johnson', '1234567897', 'Mother'],
-      ['Mary', 'Williams', '1985-11-30', 'female', '1234567893', 'mary.w@email.com', 'AB+', '321 Med Blvd, Houston, TX 77001', 'Robert Williams', '1234567896', 'Brother'],
-      ['James', 'Brown', '1970-07-18', 'male', '1234567894', 'james.b@email.com', 'O-', '654 Hospital Dr, Phoenix, AZ 85001', 'Linda Brown', '1234567895', 'Wife'],
-      ['Patricia', 'Jones', '1995-02-25', 'female', '1234567895', 'patricia.j@email.com', 'A-', '987 Emergency Ln, Philadelphia, PA 19101', 'William Jones', '1234567894', 'Father'],
-      ['Michael', 'Garcia', '1988-09-12', 'male', '1234567896', 'michael.g@email.com', 'B-', '147 Urgent Way, San Antonio, TX 78201', 'Susan Garcia', '1234567893', 'Sister'],
-      ['Linda', 'Martinez', '1992-04-08', 'female', '1234567897', 'linda.m@email.com', 'AB-', '258 Crisis St, San Diego, CA 92101', 'Carlos Martinez', '1234567892', 'Husband'],
-      ['David', 'Rodriguez', '1983-12-20', 'male', '1234567898', 'david.r@email.com', 'O+', '369 Trauma Ave, Dallas, TX 75201', 'Maria Rodriguez', '1234567891', 'Wife'],
-      ['Barbara', 'Hernandez', '1978-06-14', 'female', '1234567899', 'barbara.h@email.com', 'A+', '741 Rescue Rd, San Jose, CA 95101', 'Jose Hernandez', '1234567890', 'Husband'],
+      ['John', 'Doe', 44, 'male', '1234567890', 'john.doe@email.com', 'O+', '123 Patient St, New York, NY 10001', 'Jane Doe', '1234567899', 'Wife'],
+      ['Jane', 'Smith', 49, 'female', '1234567891', 'jane.smith@email.com', 'A+', '456 Care Ave, Los Angeles, CA 90001', 'John Smith', '1234567898', 'Husband'],
+      ['Robert', 'Johnson', 34, 'male', '1234567892', 'robert.j@email.com', 'B+', '789 Health Rd, Chicago, IL 60601', 'Mary Johnson', '1234567897', 'Mother'],
+      ['Mary', 'Williams', 40, 'female', '1234567893', 'mary.w@email.com', 'AB+', '321 Med Blvd, Houston, TX 77001', 'Robert Williams', '1234567896', 'Brother'],
+      ['James', 'Brown', 54, 'male', '1234567894', 'james.b@email.com', 'O-', '654 Hospital Dr, Phoenix, AZ 85001', 'Linda Brown', '1234567895', 'Wife'],
+      ['Patricia', 'Jones', 30, 'female', '1234567895', 'patricia.j@email.com', 'A-', '987 Emergency Ln, Philadelphia, PA 19101', 'William Jones', '1234567894', 'Father'],
+      ['Michael', 'Garcia', 37, 'male', '1234567896', 'michael.g@email.com', 'B-', '147 Urgent Way, San Antonio, TX 78201', 'Susan Garcia', '1234567893', 'Sister'],
+      ['Linda', 'Martinez', 33, 'female', '1234567897', 'linda.m@email.com', 'AB-', '258 Crisis St, San Diego, CA 92101', 'Carlos Martinez', '1234567892', 'Husband'],
+      ['David', 'Rodriguez', 41, 'male', '1234567898', 'david.r@email.com', 'O+', '369 Trauma Ave, Dallas, TX 75201', 'Maria Rodriguez', '1234567891', 'Wife'],
+      ['Barbara', 'Hernandez', 47, 'female', '1234567899', 'barbara.h@email.com', 'A+', '741 Rescue Rd, San Jose, CA 95101', 'Jose Hernandez', '1234567890', 'Husband'],
     ];
 
     const patientIds = [];
     for (const [firstName, lastName, dob, gender, phone, email, bloodGroup, address, emergencyName, emergencyPhone, emergencyRelation] of patients) {
       const patientCode = `PAT-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      const age = new Date().getFullYear() - new Date(dob).getFullYear();
+      const age = age = arguments[0];
       const [result] = await db.query(
-        `INSERT INTO patients (patient_code, first_name, last_name, date_of_birth, age, gender, contact_phone, email, blood_group, address, emergency_contact_name, emergency_contact_phone, emergency_contact_relation) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [patientCode, firstName, lastName, dob, age, gender, phone, email, bloodGroup, address, emergencyName, emergencyPhone, emergencyRelation]
+        `INSERT INTO patients (patient_code, first_name, last_name, age, gender, contact_phone, email, blood_group, address, emergency_contact_name, emergency_contact_phone, emergency_contact_relation) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [patientCode, firstName, lastName, /* age */  age, gender, phone, email, bloodGroup, address, emergencyName, emergencyPhone, emergencyRelation]
       );
       patientIds.push(result.insertId);
       console.log(`✅ Patient: ${firstName} ${lastName} - ${patientCode}`);

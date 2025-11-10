@@ -15,7 +15,7 @@ const mapPatientFields = (patient) => {
     ...patient,
     firstName: patient.first_name,
     lastName: patient.last_name,
-    dateOfBirth: patient.date_of_birth,
+  age: patient.age,
     bloodGroup: patient.blood_group,
     phone: patient.phone || patient.contact_phone,
     emergencyContactName: patient.emergency_contact_name,
@@ -66,7 +66,6 @@ class PatientController {
         patientCode,
         firstName,
         lastName: lastName || null,
-        dateOfBirth: req.body.dateOfBirth || null,
         age: age || null,
         gender: gender || null,
         bloodGroup: bloodGroup || null,
@@ -154,7 +153,7 @@ class PatientController {
     try {
       const { id } = req.params;
       const { 
-        firstName, lastName, dateOfBirth, age, gender, bloodGroup, phone, email,
+        firstName, lastName, age, gender, bloodGroup, phone, email,
         emergencyContactName, emergencyContactPhone, emergencyContactRelation,
         address, medicalHistory, allergies, currentMedications
       } = req.body;
@@ -164,11 +163,23 @@ class PatientController {
         return next(new AppError('Patient not found', 404));
       }
 
+      // Authorization: allow superadmin or org-scoped staff (doctors, paramedics, admins)
+      if (req.user.role !== 'superadmin') {
+        // ensure same organization
+        if (patient.organization_id !== req.user.organizationId) {
+          return next(new AppError('Forbidden: cannot edit patient from another organization', 403));
+        }
+        // allow roles containing doctor, paramedic or admin
+        const roleLower = (req.user.role || '').toString().toLowerCase();
+        if (!/(doctor|paramedic|admin)/.test(roleLower)) {
+          return next(new AppError('Forbidden: insufficient permissions to edit patient', 403));
+        }
+      }
+
       // Prepare update data - allow null values for most fields
       const updateData = {
         firstName: firstName || patient.first_name,
         lastName: lastName || null,
-        dateOfBirth: dateOfBirth || null,
         age: age || null,
         gender: gender || null,
         bloodGroup: bloodGroup || null,

@@ -56,7 +56,8 @@ const authenticate = async (req, res, next) => {
       id: user.id,
       username: user.username,
       email: user.email,
-      role: user.role,
+      // normalize role to lowercase form to keep permission checks consistent
+      role: user.role ? user.role.toString().toLowerCase() : user.role,
       firstName: user.first_name,
       lastName: user.last_name,
       organizationId: user.organization_id,

@@ -21,7 +21,7 @@ const fetch = globalThis.fetch || require('node-fetch');
     const createRes = await fetch(`${base}/patients`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ firstName: 'AutoTest', lastName: 'Patient', dateOfBirth: '1990-01-01', gender: 'male' })
+      body: JSON.stringify({ firstName: 'AutoTest', lastName: 'Patient', age: 35, gender: 'male' })
     });
     const createJson = await createRes.json();
     console.log('Create response:', createJson);

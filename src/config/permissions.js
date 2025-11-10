@@ -176,7 +176,8 @@ const ROLE_PERMISSIONS = {
  */
 const hasPermission = (role, permission) => {
   if (!role) return false;
-  const permissions = ROLE_PERMISSIONS[role] || [];
+  const roleKey = String(role).toLowerCase();
+  const permissions = ROLE_PERMISSIONS[roleKey] || [];
   return permissions.includes(permission);
 };
 
@@ -188,14 +189,19 @@ const hasPermission = (role, permission) => {
  * @returns {boolean}
  */
 const canApproveRole = (approverRole, targetRole) => {
-  if (approverRole === ROLES.SUPERADMIN) return true;
-  
+  if (!approverRole) return false;
+  const a = String(approverRole).toLowerCase();
+  const t = targetRole ? String(targetRole).toLowerCase() : '';
+
+  if (a === ROLES.SUPERADMIN) return true;
+
   const adminRoles = [ROLES.HOSPITAL_ADMIN, ROLES.FLEET_ADMIN];
-  if (adminRoles.includes(approverRole) && adminRoles.includes(targetRole)) {
-    return false; // Admins cannot approve other admins
+  // Prevent admins approving other admins (case-insensitive)
+  if (adminRoles.includes(a) && adminRoles.includes(t)) {
+    return false;
   }
-  
-  return hasPermission(approverRole, PERMISSIONS.APPROVE_USER);
+
+  return hasPermission(a, PERMISSIONS.APPROVE_USER);
 };
 
 /**

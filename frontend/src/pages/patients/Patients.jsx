@@ -32,7 +32,8 @@ import getErrorMessage from '../../utils/getErrorMessage';
 const patientSchema = yup.object({
   firstName: yup.string().required('First name is required'),
   lastName: yup.string().nullable(),
-  dateOfBirth: yup.date().nullable(),
+  // Age is an optional numeric field (years). allow empty => null
+  age: yup.number().transform((value, originalValue) => (originalValue === '' ? null : value)).nullable().min(0).max(150),
   gender: yup.string().nullable(),
   bloodGroup: yup.string().nullable(),
   phone: yup.string().nullable(),
@@ -216,6 +217,9 @@ export const Patients = () => {
         }
       }
 
+  // Ensure empty age is sent as null
+  if (data.age === '') data.age = null;
+
       if (editingPatient) {
         await patientService.update(editingPatient.id, data);
         toast.success('Patient updated successfully');
@@ -343,10 +347,7 @@ export const Patients = () => {
       header: 'Age/Gender',
       accessor: 'age',
       render: (patient) => {
-        const dob = patient.dateOfBirth || patient.date_of_birth;
-        const age = dob
-          ? new Date().getFullYear() - new Date(dob).getFullYear()
-          : patient.age || 'N/A';
+        const age = patient.age || 'N/A';
         return `${age} / ${patient.gender || 'N/A'}`;
       },
     },
@@ -391,6 +392,7 @@ export const Patients = () => {
             <Activity className="w-4 h-4 mr-1" />
             Details
           </Button>
+          {(user?.role === 'superadmin' || /doctor|paramedic|admin/.test(String(user?.role || '').toLowerCase())) && (
           <Button
             variant="outline"
             size="sm"
@@ -398,6 +400,7 @@ export const Patients = () => {
           >
             <Edit className="w-4 h-4" />
           </Button>
+          )}
           {patient.is_active !== false ? (
             <Button
               variant="danger"
@@ -666,10 +669,10 @@ export const Patients = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Date of Birth"
-              type="date"
-              {...register('dateOfBirth')}
-              error={errors.dateOfBirth?.message}
+              label="Age (years)"
+              type="number"
+              {...register('age')}
+              error={errors.age?.message}
             />
             <div>
               <label className="block text-sm font-medium mb-2">Gender</label>
@@ -871,7 +874,7 @@ export const Patients = () => {
               <div>
                 <p className="text-sm text-secondary">Age/Gender</p>
                 <p className="font-semibold">
-                  {new Date().getFullYear() - new Date(selectedPatient.dateOfBirth).getFullYear()} / {selectedPatient.gender}
+                  {selectedPatient.age || 'N/A'} / {selectedPatient.gender}
                 </p>
               </div>
               <div>

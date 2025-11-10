@@ -38,15 +38,15 @@ async function fixPatientsTable() {
       console.log('✅ emergency_contact_relation column already exists');
     }
 
-    // Check if date_of_birth column exists
-    const [dobCheck] = await db.query(`SHOW COLUMNS FROM patients LIKE 'date_of_birth'`);
+    // Check if age column exists
+    const [ageCheck] = await db.query(`SHOW COLUMNS FROM patients LIKE 'age'`);
     
-    if (dobCheck.length === 0) {
-      console.log('Adding date_of_birth column...');
-      await db.query(`ALTER TABLE patients ADD COLUMN date_of_birth DATE AFTER last_name`);
-      console.log('✅ Added date_of_birth column');
+    if (ageCheck.length === 0) {
+      console.log('Adding age column...');
+      await db.query(`ALTER TABLE patients ADD COLUMN age INT AFTER last_name`);
+      console.log('✅ Added age column');
     } else {
-      console.log('✅ date_of_birth column already exists');
+      console.log('✅ age column already exists');
     }
 
     console.log('\n✅ Patients table columns fixed!');

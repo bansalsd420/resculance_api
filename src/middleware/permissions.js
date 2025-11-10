@@ -103,6 +103,7 @@ const canApproveUserRole = async (req, res, next) => {
 
     // Try to get the target user's role from request body first
     let targetRole = req.body.role || req.targetUser?.role;
+    const approverRole = req.user.role;
 
     // If not provided, attempt to load the user from DB using the :id route param
     if (!targetRole) {
@@ -119,7 +120,16 @@ const canApproveUserRole = async (req, res, next) => {
       targetRole = targetUser.role;
     }
 
-    if (!canApproveRole(req.user.role, targetRole)) {
+    // Normalize for logging and decision
+    const a = approverRole ? String(approverRole).toLowerCase() : '';
+    const t = targetRole ? String(targetRole).toLowerCase() : '';
+
+    // Debug trace to help diagnose permission issues during testing
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[canApproveUserRole] approver=', a, 'target=', t);
+    }
+
+    if (!canApproveRole(a, t)) {
       return next(new AppError('You cannot approve users with this role', 403));
     }
 

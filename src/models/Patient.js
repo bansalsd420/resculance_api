@@ -5,15 +5,14 @@ class PatientModel {
     // allow organizationId to be provided; if omitted insert NULL
     const [result] = await db.query(
       `INSERT INTO patients (
-         organization_id, patient_code, first_name, last_name, date_of_birth, age, gender, blood_group, phone,
+         organization_id, patient_code, first_name, last_name, age, gender, blood_group, phone,
          emergency_contact_name, emergency_contact_phone, emergency_contact_relation, address, medical_history, allergies, current_medications, created_by
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.organizationId || null,
         data.patientCode,
         data.firstName,
         data.lastName,
-        data.dateOfBirth || null,
         data.age || null,
         data.gender || null,
         data.bloodGroup || null,

@@ -227,19 +227,19 @@ async function assignUsersToAmbulances(ambulanceIds, userIds) {
 
 async function createPatients(orgIds, userIds) {
   const patients = [
-    { orgCode: 'AIIMS-DEL', code: 'PAT-AIIMS-001', firstName: 'Ramesh', lastName: 'Kumar', dob: '1985-05-15', age: 38, gender: 'male', bloodGroup: 'O+', phone: '+919123456789', createdBy: 'aiims_admin' },
-    { orgCode: 'AIIMS-DEL', code: 'PAT-AIIMS-002', firstName: 'Sita', lastName: 'Devi', dob: '1992-08-22', age: 31, gender: 'female', bloodGroup: 'A+', phone: '+919123456790', createdBy: 'aiims_admin' },
-    { orgCode: 'APOLLO-DEL', code: 'PAT-APOLLO-001', firstName: 'Arjun', lastName: 'Singh', dob: '1978-03-10', age: 45, gender: 'male', bloodGroup: 'B+', phone: '+919123456791', createdBy: 'apollo_admin' },
-    { orgCode: 'MAX-GUR', code: 'PAT-MAX-001', firstName: 'Meena', lastName: 'Sharma', dob: '1995-11-30', age: 28, gender: 'female', bloodGroup: 'AB+', phone: '+919123456792', createdBy: 'max_admin' },
-    { orgCode: 'FORTIS-NOI', code: 'PAT-FORTIS-001', firstName: 'Vijay', lastName: 'Malhotra', dob: '1988-07-18', age: 35, gender: 'male', bloodGroup: 'O-', phone: '+919123456793', createdBy: 'fortis_admin' },
+  { orgCode: 'AIIMS-DEL', code: 'PAT-AIIMS-001', firstName: 'Ramesh', lastName: 'Kumar', age: 38, gender: 'male', bloodGroup: 'O+', phone: '+919123456789', createdBy: 'aiims_admin' },
+  { orgCode: 'AIIMS-DEL', code: 'PAT-AIIMS-002', firstName: 'Sita', lastName: 'Devi', age: 31, gender: 'female', bloodGroup: 'A+', phone: '+919123456790', createdBy: 'aiims_admin' },
+  { orgCode: 'APOLLO-DEL', code: 'PAT-APOLLO-001', firstName: 'Arjun', lastName: 'Singh', age: 45, gender: 'male', bloodGroup: 'B+', phone: '+919123456791', createdBy: 'apollo_admin' },
+  { orgCode: 'MAX-GUR', code: 'PAT-MAX-001', firstName: 'Meena', lastName: 'Sharma', age: 28, gender: 'female', bloodGroup: 'AB+', phone: '+919123456792', createdBy: 'max_admin' },
+  { orgCode: 'FORTIS-NOI', code: 'PAT-FORTIS-001', firstName: 'Vijay', lastName: 'Malhotra', age: 35, gender: 'male', bloodGroup: 'O-', phone: '+919123456793', createdBy: 'fortis_admin' },
   ];
 
   const patientIds = [];
   for (const patient of patients) {
     const [result] = await db.query(
-      `INSERT INTO patients (organization_id, patient_code, first_name, last_name, date_of_birth, age, gender, blood_group, phone, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [orgIds[patient.orgCode], patient.code, patient.firstName, patient.lastName, patient.dob, patient.age, patient.gender, patient.bloodGroup, patient.phone, userIds[patient.createdBy]]
+      `INSERT INTO patients (organization_id, patient_code, first_name, last_name, age, gender, blood_group, phone, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [orgIds[patient.orgCode], patient.code, patient.firstName, patient.lastName, patient.age, patient.gender, patient.bloodGroup, patient.phone, userIds[patient.createdBy]]
     );
     patientIds.push(result.insertId);
   }

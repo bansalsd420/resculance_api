@@ -222,7 +222,6 @@ CREATE TABLE IF NOT EXISTS patients (
   patient_code VARCHAR(50) UNIQUE NOT NULL,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
-  date_of_birth DATE,
   age INT,
   gender ENUM('male', 'female', 'other') NOT NULL,
   blood_group ENUM('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'),

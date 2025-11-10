@@ -187,25 +187,25 @@ async function seedComprehensive() {
     console.log('\n🏥 Creating Patients...');
 
     const patients = [
-      ['John', 'Doe', '1980-05-15', 'Male', '1234567890', 'O+', '123 Patient St, New York, NY 10001'],
-      ['Jane', 'Smith', '1975-08-22', 'Female', '1234567891', 'A+', '456 Care Ave, Los Angeles, CA 90001'],
-      ['Robert', 'Johnson', '1990-03-10', 'Male', '1234567892', 'B+', '789 Health Rd, Chicago, IL 60601'],
-      ['Mary', 'Williams', '1985-11-30', 'Female', '1234567893', 'AB+', '321 Med Blvd, Houston, TX 77001'],
-      ['James', 'Brown', '1970-07-18', 'Male', '1234567894', 'O-', '654 Hospital Dr, Phoenix, AZ 85001'],
-      ['Patricia', 'Jones', '1995-02-25', 'Female', '1234567895', 'A-', '987 Emergency Ln, Philadelphia, PA 19101'],
-      ['Michael', 'Garcia', '1988-09-12', 'Male', '1234567896', 'B-', '147 Urgent Way, San Antonio, TX 78201'],
-      ['Linda', 'Martinez', '1992-04-08', 'Female', '1234567897', 'AB-', '258 Crisis St, San Diego, CA 92101'],
-      ['David', 'Rodriguez', '1983-12-20', 'Male', '1234567898', 'O+', '369 Trauma Ave, Dallas, TX 75201'],
-      ['Barbara', 'Hernandez', '1978-06-14', 'Female', '1234567899', 'A+', '741 Rescue Rd, San Jose, CA 95101'],
+      ['John', 'Doe', 45, 'Male', '1234567890', 'O+', '123 Patient St, New York, NY 10001'],
+      ['Jane', 'Smith', 50, 'Female', '1234567891', 'A+', '456 Care Ave, Los Angeles, CA 90001'],
+      ['Robert', 'Johnson', 34, 'Male', '1234567892', 'B+', '789 Health Rd, Chicago, IL 60601'],
+      ['Mary', 'Williams', 40, 'Female', '1234567893', 'AB+', '321 Med Blvd, Houston, TX 77001'],
+      ['James', 'Brown', 55, 'Male', '1234567894', 'O-', '654 Hospital Dr, Phoenix, AZ 85001'],
+      ['Patricia', 'Jones', 30, 'Female', '1234567895', 'A-', '987 Emergency Ln, Philadelphia, PA 19101'],
+      ['Michael', 'Garcia', 37, 'Male', '1234567896', 'B-', '147 Urgent Way, San Antonio, TX 78201'],
+      ['Linda', 'Martinez', 33, 'Female', '1234567897', 'AB-', '258 Crisis St, San Diego, CA 92101'],
+      ['David', 'Rodriguez', 41, 'Male', '1234567898', 'O+', '369 Trauma Ave, Dallas, TX 75201'],
+      ['Barbara', 'Hernandez', 47, 'Female', '1234567899', 'A+', '741 Rescue Rd, San Jose, CA 95101'],
     ];
 
     const patientIds = [];
-    for (const [firstName, lastName, dob, gender, phone, bloodGroup, address] of patients) {
+    for (const [firstName, lastName, age, gender, phone, bloodGroup, address] of patients) {
       const patientCode = `PAT-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
       const [result] = await db.query(
-        `INSERT INTO patients (patient_code, first_name, last_name, date_of_birth, gender, contact_phone, blood_group, address) 
+        `INSERT INTO patients (patient_code, first_name, last_name, age, gender, contact_phone, blood_group, address) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [patientCode, firstName, lastName, dob, gender, phone, bloodGroup, address]
+        [patientCode, firstName, lastName, age, gender, phone, bloodGroup, address]
       );
       patientIds.push(result.insertId);
       console.log(`✅ Patient: ${firstName} ${lastName} - ${patientCode}`);

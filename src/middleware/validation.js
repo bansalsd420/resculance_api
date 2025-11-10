@@ -62,7 +62,6 @@ const createAmbulanceValidation = [
 const createPatientValidation = [
   body('firstName').trim().notEmpty().withMessage('First name is required'),
   body('lastName').optional().trim(),
-    body('dateOfBirth').optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage('Invalid date'),
     body('age').optional({ nullable: true, checkFalsy: true }).isInt({ min: 0, max: 150 }).withMessage('Age must be between 0 and 150'),
     body('gender').optional({ nullable: true, checkFalsy: true }).isIn(['male', 'female', 'other']).withMessage('Invalid gender'),
   body('bloodGroup').optional().trim(),
