@@ -291,12 +291,16 @@ class PatientController {
       if (!ambulanceId) {
         return next(new AppError('Ambulance ID is required', 400));
       }
-      if (!pickupLocation || pickupLatitude === undefined || pickupLongitude === undefined) {
-        return next(new AppError('Pickup location details are required', 400));
-      }
-      if (!destinationLocation || destinationLatitude === undefined || destinationLongitude === undefined) {
-        return next(new AppError('Destination location details are required', 400));
-      }
+      
+      // Set default pickup location if not provided
+      const finalPickupLocation = pickupLocation || 'Current Location';
+      const finalPickupLat = pickupLatitude !== undefined ? pickupLatitude : 0;
+      const finalPickupLng = pickupLongitude !== undefined ? pickupLongitude : 0;
+      
+      // Set default destination if not provided (will be determined by hospital)
+      const finalDestLocation = destinationLocation || 'Hospital';
+      const finalDestLat = destinationLatitude !== undefined ? destinationLatitude : 0;
+      const finalDestLng = destinationLongitude !== undefined ? destinationLongitude : 0;
 
       // **SECURITY CHECK**: Validate ambulance exists and is operational
       const ambulance = await AmbulanceModel.findById(ambulanceId);
@@ -374,12 +378,12 @@ class PatientController {
         ambulanceId,
         organizationId: req.user.organizationId, // The hospital initiating the trip
         destinationHospitalId: destinationHospitalId || req.user.organizationId,
-        pickupLocation: pickupLocation || null,
-        pickupLatitude: pickupLatitude || null,
-        pickupLongitude: pickupLongitude || null,
-        destinationLocation: destinationLocation || null,
-        destinationLatitude: destinationLatitude || null,
-        destinationLongitude: destinationLongitude || null,
+        pickupLocation: finalPickupLocation,
+        pickupLatitude: finalPickupLat,
+        pickupLongitude: finalPickupLng,
+        destinationLocation: finalDestLocation,
+        destinationLatitude: finalDestLat,
+        destinationLongitude: finalDestLng,
         chiefComplaint: chiefComplaint || null,
         initialAssessment: initialAssessment || null,
         onboardedBy: req.user.id,

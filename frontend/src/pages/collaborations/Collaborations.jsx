@@ -722,7 +722,8 @@ export const Collaborations = () => {
                 control={control}
                 defaultValue={''}
                   render={({ field }) => {
-                    const options = user?.organizationType === 'hospital' 
+                    // Base options depending on org type
+                    const baseOptions = user?.organizationType === 'hospital'
                       ? fleetOwners.map(o => ({ 
                           value: o.id, 
                           label: `${o.name} (${o.code})`, 
@@ -733,6 +734,34 @@ export const Collaborations = () => {
                           label: `${o.name} (${o.code})`, 
                           details: `${o.city || 'N/A'}, ${o.state || ''} • ${o.phone || 'No phone'}` 
                         }));
+
+                    // Build a set of org ids that already have a pending or approved collaboration
+                    // between the current user's org and the potential target org.
+                    const excludedOrgIds = new Set();
+                    collaborations.forEach(c => {
+                      const status = c.status || c.request_status || c.requestStatus || c.state || '';
+                      // only exclude pending or approved (allow if rejected)
+                      if (!status) return;
+                      const normalizedStatus = String(status).toLowerCase();
+                      if (normalizedStatus !== 'pending' && normalizedStatus !== 'approved') return;
+
+                      const fleetId = c.fleet_id || c.fleetId || c.fleet || null;
+                      const hospitalId = c.hospital_id || c.hospitalId || c.hospital || null;
+
+                      if (user?.organizationType === 'hospital') {
+                        // hospital should not see fleets already collaborated/pending with their hospital
+                        if (Number(hospitalId) === Number(user.organizationId) && fleetId) {
+                          excludedOrgIds.add(Number(fleetId));
+                        }
+                      } else if (user?.organizationType === 'fleet_owner') {
+                        // fleet should not see hospitals already collaborated/pending with their fleet
+                        if (Number(fleetId) === Number(user.organizationId) && hospitalId) {
+                          excludedOrgIds.add(Number(hospitalId));
+                        }
+                      }
+                    });
+
+                    const options = baseOptions.filter(opt => !excludedOrgIds.has(Number(opt.value)));
                     const value = options.find(o => o.value === field.value) || null;
                     return (
                       <Select

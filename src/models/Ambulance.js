@@ -46,7 +46,7 @@ class AmbulanceModel {
     let query = `SELECT a.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
                         ch.name as current_hospital_name
                  FROM ambulances a
-                 JOIN organizations o ON a.organization_id = o.id
+                 LEFT JOIN organizations o ON a.organization_id = o.id
                  LEFT JOIN organizations ch ON a.current_hospital_id = ch.id
                  WHERE 1=1`;
     const params = [];
