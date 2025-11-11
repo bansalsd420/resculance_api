@@ -34,6 +34,9 @@ export const Onboarding = () => {
   const [showPatientModal, setShowPatientModal] = useState(false);
   const [selectedAmbulance, setSelectedAmbulance] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [inlineNewPatientMode, setInlineNewPatientMode] = useState(false);
+  const [inlineNewPatientName, setInlineNewPatientName] = useState('');
+  const [inlineSaving, setInlineSaving] = useState(false);
   const [destinationHospitalId, setDestinationHospitalId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -183,32 +186,11 @@ export const Onboarding = () => {
 
       const response = await ambulanceService.getAll(params);
       const ambulancesData = response.data?.data?.ambulances || response.data?.ambulances || response.data || [];
-      
-      // Fetch active sessions for each ambulance to determine onboarding status
-      const ambulancesWithSessions = await Promise.all(
-        ambulancesData.map(async (amb) => {
-          try {
-            // Check for onboarded, in_transit, or active sessions
-            const sessionsResp = await patientService.getAllSessions({ 
-              ambulanceId: amb.id
-            });
-            const allSessions = sessionsResp.data?.data?.sessions || sessionsResp.data?.sessions || [];
-            const activeSessions = allSessions.filter(s => 
-              ['active', 'onboarded', 'in_transit'].includes(s.status?.toLowerCase())
-            );
-            return {
-              ...amb,
-              activeSession: activeSessions.length > 0 ? activeSessions[0] : null,
-              hasActiveOnboarding: activeSessions.length > 0
-            };
-          } catch (err) {
-            console.error(`Failed to fetch sessions for ambulance ${amb.id}`, err);
-            return { ...amb, activeSession: null, hasActiveOnboarding: false };
-          }
-        })
-      );
 
-      setAmbulances(ambulancesWithSessions);
+      // **BLAZING FAST**: Use ambulance status directly - no need to fetch sessions!
+      // Ambulances with status='active' already have patients onboarded
+      // Ambulances with status='available' are free for new patients
+      setAmbulances(ambulancesData);
     } catch (error) {
       console.error('Failed to fetch ambulances:', error);
       toast.error('Failed to load ambulances');
@@ -228,36 +210,33 @@ export const Onboarding = () => {
         params.organizationId = user?.organizationId;
       }
 
-      const response = await patientService.getAll(params);
+      // **BLAZING FAST DENORMALIZED QUERY**: Get only available patients (no joins, no filtering)
+      const response = await patientService.getAvailable(params);
       const patientsData = response.data?.data?.patients || response.data?.patients || response.data || [];
       
-      // Filter out patients that are currently onboarded (have active sessions)
-      const patientsWithStatus = await Promise.all(
-        patientsData.map(async (patient) => {
-          try {
-            const sessionsResp = await patientService.getSessions(patient.id);
-            const sessions = sessionsResp.data?.data?.sessions || sessionsResp.data?.sessions || [];
-            const hasActiveSessions = sessions.some(s => 
-              ['active', 'onboarded', 'in_transit'].includes(s.status?.toLowerCase())
-            );
-            return {
-              ...patient,
-              isOnboarded: hasActiveSessions
-            };
-          } catch (err) {
-            return { ...patient, isOnboarded: false };
-          }
-        })
-      );
+      // All patients from this endpoint are guaranteed to be available for onboarding
+      const patientsWithStatus = patientsData.map((patient) => ({
+        ...patient,
+        isOnboarded: false // By definition, these are all available
+      }));
 
       setPatients(patientsWithStatus);
     } catch (error) {
-      console.error('Failed to fetch patients:', error);
+      console.error('Failed to fetch available patients:', error);
       toast.error('Failed to load patients');
     }
   };
 
   const handleOpenPatientModal = (ambulance) => {
+    // **SECURITY CHECK**: Prevent opening modal for ambulances that are inactive, already active or have an active onboarding
+    if (ambulance?.status === 'inactive') {
+      toast.error('This ambulance is inactive and cannot be used for onboarding');
+      return;
+    }
+    if (ambulance?.status === 'active') {
+      toast.info('This ambulance is currently active or already has an active onboarding');
+      return;
+    }
     setSelectedAmbulance(ambulance);
     setSelectedPatient(null);
     
@@ -289,16 +268,21 @@ export const Onboarding = () => {
     try {
       const orgIdForOnboard = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
       
-      await patientService.onboard(selectedPatient, {
+      const resp = await patientService.onboard(selectedPatient, {
         ambulanceId: selectedAmbulance.id,
         destinationHospitalId: destinationHospitalId,
         organizationId: orgIdForOnboard,
       });
-      
+
+      // Try to extract the created session from response
+      const createdSession = resp.data?.data?.session || resp.data?.session || resp.data || null;
+
       toast.success('Patient onboarded successfully');
       handleClosePatientModal();
-      await fetchAmbulances();
-      await fetchPatients();
+
+      // Update local ambulances and patients state to avoid refetching the entire lists
+      setAmbulances(prev => prev.map(a => (a.id === selectedAmbulance.id ? { ...a, status: 'active' } : a)));
+      setPatients(prev => prev.map(p => (p.id === selectedPatient ? { ...p, isOnboarded: true } : p)));
     } catch (error) {
       console.error('Failed to onboard patient:', error);
       const msg = error?.response?.data?.error || error?.response?.data?.message || 'Failed to onboard patient';
@@ -308,10 +292,33 @@ export const Onboarding = () => {
     }
   };
 
-  const handleViewOnboarding = (ambulance) => {
-    if (ambulance.activeSession) {
-      navigate(`/onboarding/${ambulance.activeSession.id}`);
+  const handleViewOnboarding = async (ambulance) => {
+    console.log('🔍 Viewing onboarding for ambulance:', ambulance);
+    
+    // If ambulance status is 'active', fetch the active session
+    if (ambulance.status === 'active') {
+      try {
+        const response = await patientService.getAllSessions({
+          ambulanceId: ambulance.id,
+          status: 'active',
+          limit: 1
+        });
+        
+        const sessions = response.data?.data?.sessions || response.data?.sessions || response.data || [];
+        
+        if (sessions.length > 0 && sessions[0].id) {
+          console.log('✅ Found active session:', sessions[0].id);
+          navigate(`/onboarding/${sessions[0].id}`);
+        } else {
+          console.error('❌ No active session found despite ambulance status being active');
+          toast.error('Could not find active session. Please refresh the page.');
+        }
+      } catch (error) {
+        console.error('❌ Failed to fetch active session:', error);
+        toast.error('Failed to load session details');
+      }
     } else {
+      console.warn('⚠️ Ambulance status is not active:', ambulance.status);
       toast.info('No active onboarding for this ambulance');
     }
   };
@@ -366,7 +373,7 @@ export const Onboarding = () => {
       header: 'Onboarding Status',
       render: (row) => (
         <div>
-          {row.hasActiveOnboarding ? (
+          {row.status === 'active' ? (
             <span className="text-sm text-green-600 font-medium">Active Onboarding</span>
           ) : (
             <span className="text-sm text-gray-500">No Active Onboarding</span>
@@ -376,40 +383,55 @@ export const Onboarding = () => {
     },
     {
       header: 'Actions',
-      render: (row) => (
-        <div className="flex items-center gap-2">
-          <Button 
-            size="sm" 
-            variant="primary"
-            onClick={() => handleOpenPatientModal(row)}
-            disabled={row.hasActiveOnboarding}
-          >
-            <UserPlus className="w-4 h-4 mr-1" />
-            Onboard Patient
-          </Button>
-          {row.hasActiveOnboarding && (
-            <>
-              <Button 
-                size="sm" 
-                variant="secondary"
-                onClick={() => handleViewOnboarding(row)}
-              >
-                <Eye className="w-4 h-4 mr-1" />
-                View
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => handleOffboardFromTable(row)}
-                className="ml-1"
-              >
-                <Power className="w-4 h-4 mr-1" />
-                Offboard
-              </Button>
-            </>
-          )}
-        </div>
-      ),
+      render: (row) => {
+        const isInactive = row.status === 'inactive';
+        const isActive = row.status === 'active';
+        
+        return (
+          <div className="flex items-center gap-2">
+            {/* **SECURITY**: Disable all actions for inactive ambulances */}
+            {isInactive ? (
+              <span className="text-xs text-gray-400 italic">Ambulance Inactive</span>
+            ) : (
+              <>
+                {/* Only show onboard if ambulance is available */}
+                {!isActive && (
+                  <Button 
+                    size="sm" 
+                    variant="primary"
+                    onClick={() => handleOpenPatientModal(row)}
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    Onboard Patient
+                  </Button>
+                )}
+
+                {isActive && (
+                  <>
+                    <Button 
+                      size="sm" 
+                      variant="secondary"
+                      onClick={() => handleViewOnboarding(row)}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => handleOffboardFromTable(row)}
+                      className="ml-1"
+                    >
+                      <Power className="w-4 h-4 mr-1" />
+                      Offboard
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -504,7 +526,12 @@ export const Onboarding = () => {
               <p className="text-secondary">No ambulances found</p>
             </Card>
           ) : (
-            <Table columns={columns} data={filteredAmbulances} />
+            <Table
+              columns={columns}
+              data={filteredAmbulances}
+              onRefresh={() => { if (user?.role === 'superadmin' && !selectedOrgId) { toast.info('Please select an organization first'); } else fetchAmbulances(true); }}
+              isRefreshing={loading}
+            />
           )}
         </>
       )}
@@ -587,22 +614,88 @@ export const Onboarding = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Select Patient *</label>
-            <Select
-              placeholder="Select a patient to onboard"
-              options={availablePatients.map(p => ({
-                value: p.id,
-                label: `${p.firstName || p.first_name} ${p.lastName || p.last_name} - ${p.phone}`
-              }))}
-              value={selectedPatient ? {
-                value: selectedPatient,
-                label: availablePatients.find(p => p.id === selectedPatient)
-                  ? `${availablePatients.find(p => p.id === selectedPatient)?.firstName || availablePatients.find(p => p.id === selectedPatient)?.first_name} ${availablePatients.find(p => p.id === selectedPatient)?.lastName || availablePatients.find(p => p.id === selectedPatient)?.last_name}`
-                  : ''
-              } : null}
-              onChange={(opt) => setSelectedPatient(opt?.value || null)}
-              classNamePrefix="react-select"
-            />
+            <label className="block text-sm font-medium mb-2">Select Patient * <span className="text-xs text-secondary">(or create new)</span></label>
+            <div>
+              <div>
+                <Select
+                  placeholder="Select a patient to onboard"
+                  options={availablePatients.map(p => ({
+                    value: p.id,
+                    label: `${p.firstName || p.first_name} ${p.lastName || p.last_name} - ${p.phone}`
+                  }))}
+                  value={selectedPatient ? {
+                    value: selectedPatient,
+                    label: availablePatients.find(p => p.id === selectedPatient)
+                      ? `${availablePatients.find(p => p.id === selectedPatient)?.firstName || availablePatients.find(p => p.id === selectedPatient)?.first_name} ${availablePatients.find(p => p.id === selectedPatient)?.lastName || availablePatients.find(p => p.id === selectedPatient)?.last_name}`
+                      : ''
+                  } : null}
+                  onChange={(opt) => setSelectedPatient(opt?.value || null)}
+                  classNamePrefix="react-select"
+                  isDisabled={inlineNewPatientMode}
+                />
+              </div>
+
+              <div className="mt-3">
+                {!inlineNewPatientMode ? (
+                  <Button size="sm" variant="outline" onClick={() => { setInlineNewPatientMode(true); setInlineNewPatientName(''); setSelectedPatient(null); }}>
+                    New Patient
+                  </Button>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Name *</label>
+                      <input
+                        type="text"
+                        className="input w-full"
+                        placeholder="Enter patient name"
+                        value={inlineNewPatientName}
+                        onChange={(e) => setInlineNewPatientName(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary" onClick={async () => {
+                        setInlineNewPatientMode(false);
+                        setInlineNewPatientName('');
+                      }}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" loading={inlineSaving} onClick={async () => {
+                        const name = (inlineNewPatientName || '').trim();
+                        if (!name) {
+                          toast.error('Name is required to create a patient');
+                          return;
+                        }
+                        const orgIdForCreate = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
+                        if (user?.role === 'superadmin' && !orgIdForCreate) {
+                          toast.error('Please select an organization before creating a patient');
+                          return;
+                        }
+                        setInlineSaving(true);
+                        try {
+                          const payload = { firstName: name, lastName: null };
+                          if (orgIdForCreate) payload.organizationId = orgIdForCreate;
+                          const resp = await patientService.create(payload);
+                          const created = resp.data?.data?.patient || resp.data?.patient || resp.data || null;
+                          const createdId = created?.id || created?.ID || created?.insertId || resp.data?.data?.patientId || null;
+                          await fetchPatients();
+                          setSelectedPatient(createdId || null);
+                          setInlineNewPatientMode(false);
+                          setInlineNewPatientName('');
+                          toast.success('Patient created');
+                        } catch (err) {
+                          console.error('Failed to create patient inline:', err);
+                          toast.error('Failed to create patient');
+                        } finally {
+                          setInlineSaving(false);
+                        }
+                      }}>
+                        Save
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             {availablePatients.length === 0 && (
               <p className="mt-2 text-sm text-yellow-600">
                 No available patients. All patients are currently onboarded.

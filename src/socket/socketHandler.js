@@ -248,78 +248,92 @@ const socketHandler = (io) => {
       console.log(`Call ended in session ${sessionId}`);
     });
 
-    // Handle video call request
-    socket.on(SOCKET_EVENTS.VIDEO_REQUEST, (data) => {
-      const { sessionId, receiverId, offer } = data;
-      
-      const messageData = {
-        sessionId,
-        callerId: socket.user.id,
-        callerRole: socket.user.role,
-        receiverId,
-        offer,
-        timestamp: new Date().toISOString()
-      };
-
-      // If receiverId is specified, send only to that user, otherwise broadcast to session
-      if (receiverId) {
-        io.to(`user_${receiverId}`).emit(SOCKET_EVENTS.VIDEO_REQUEST, messageData);
-        console.log(`Video call request from ${socket.user.id} to specific user ${receiverId} in session ${sessionId}`);
-      } else {
-        io.to(`session_${sessionId}`).emit(SOCKET_EVENTS.VIDEO_REQUEST, messageData);
-        console.log(`Video call request from ${socket.user.id} broadcast to session ${sessionId}`);
-      }
-    });
-
-    // Handle video call answer
-    socket.on(SOCKET_EVENTS.VIDEO_ANSWER, (data) => {
-      const { sessionId, callerId, accepted, answer } = data;
-      
-      const messageData = {
-        sessionId,
-        responderId: socket.user.id,
-        callerId,
-        accepted,
-        answer,
-        timestamp: new Date().toISOString()
-      };
-
-      // Send answer back to the caller
-      io.to(`user_${callerId}`).emit(SOCKET_EVENTS.VIDEO_ANSWER, messageData);
-      console.log(`Video call ${accepted ? 'accepted' : 'rejected'} from ${socket.user.id} to caller ${callerId} in session ${sessionId}`);
-    });
-
-    // Handle video call end
-    socket.on(SOCKET_EVENTS.VIDEO_END, (data) => {
+    // Handle user joining video room (Google Meet style - multi-participant)
+    socket.on('join_video_room', (data) => {
       const { sessionId } = data;
+      const videoRoomName = `video_session_${sessionId}`;
       
-      io.to(`session_${sessionId}`).emit(SOCKET_EVENTS.VIDEO_END, {
+      socket.join(videoRoomName);
+      
+      // Get current participants in the video room
+      const room = io.sockets.adapter.rooms.get(videoRoomName);
+      const participants = [];
+      
+      if (room) {
+        for (const socketId of room) {
+          const userSocket = io.sockets.sockets.get(socketId);
+          if (userSocket && userSocket.user && userSocket.user.id !== socket.user.id) {
+            participants.push({
+              id: userSocket.user.id,
+              firstName: userSocket.user.firstName,
+              lastName: userSocket.user.lastName,
+              role: userSocket.user.role
+            });
+          }
+        }
+      }
+      
+      // Notify the joining user of existing participants
+      socket.emit('video_room_joined', {
         sessionId,
-        endedBy: socket.user.id,
+        participants,
+        message: `Joined video room for session ${sessionId}`
+      });
+      
+      // Notify all other participants that a new user joined
+      socket.to(videoRoomName).emit('user_joined_video', {
+        sessionId,
+        userId: socket.user.id,
+        firstName: socket.user.firstName,
+        lastName: socket.user.lastName,
+        role: socket.user.role,
         timestamp: new Date().toISOString()
       });
-
-      console.log(`Video call ended in session ${sessionId}`);
+      
+      console.log(`📹 User ${socket.user.firstName} ${socket.user.lastName} joined video room: ${videoRoomName}. Total participants: ${room ? room.size : 1}`);
     });
 
-    // Handle WebRTC ICE candidates (for peer-to-peer connection)
-    socket.on('ice_candidate', (data) => {
-      const { sessionId, candidate, targetUserId } = data;
+    // Handle user leaving video room
+    socket.on('leave_video_room', (data) => {
+      const { sessionId } = data;
+      const videoRoomName = `video_session_${sessionId}`;
+      
+      socket.leave(videoRoomName);
+      
+      // Notify all participants that user left
+      socket.to(videoRoomName).emit('user_left_video', {
+        sessionId,
+        userId: socket.user.id,
+        firstName: socket.user.firstName,
+        lastName: socket.user.lastName,
+        timestamp: new Date().toISOString()
+      });
+      
+      console.log(`👋 User ${socket.user.id} left video room: ${videoRoomName}`);
+    });
+
+    // Handle WebRTC signaling for video rooms (offer, answer, ICE candidates)
+    socket.on('webrtc_signal', (data) => {
+      const { sessionId, targetUserId, signalType, signalData } = data;
+      const videoRoomName = `video_session_${sessionId}`;
       
       const messageData = {
         sessionId,
         fromUserId: socket.user.id,
-        candidate,
-        targetUserId
+        fromUserFirstName: socket.user.firstName,
+        fromUserLastName: socket.user.lastName,
+        signalType, // 'offer', 'answer', 'ice-candidate'
+        signalData,
+        timestamp: new Date().toISOString()
       };
 
-      // If targetUserId is specified, send only to that user, otherwise broadcast to session
+      // If targetUserId is specified, send to specific user, otherwise broadcast to whole room
       if (targetUserId) {
-        io.to(`user_${targetUserId}`).emit('ice_candidate', messageData);
-        console.log(`🧩 ICE candidate from ${socket.user.id} sent to specific user ${targetUserId} for session ${sessionId}`);
+        io.to(`user_${targetUserId}`).emit('webrtc_signal', messageData);
+        console.log(`🔌 WebRTC ${signalType} from user ${socket.user.id} to user ${targetUserId} in session ${sessionId}`);
       } else {
-        io.to(`session_${sessionId}`).emit('ice_candidate', messageData);
-        console.log(`🧩 ICE candidate from ${socket.user.id} broadcast to session ${sessionId}`);
+        socket.to(videoRoomName).emit('webrtc_signal', messageData);
+        console.log(`🔌 WebRTC ${signalType} from user ${socket.user.id} broadcast to video room ${videoRoomName}`);
       }
     });
 

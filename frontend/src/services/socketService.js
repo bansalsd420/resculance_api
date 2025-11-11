@@ -125,7 +125,72 @@ class SocketService {
     this.socket.once('online_users', callback);
   }
 
-  // Video call methods
+  // Video room methods (multi-participant)
+  joinVideoRoom(sessionId) {
+    if (!this.socket) return;
+    this.socket.emit('join_video_room', { sessionId });
+    console.log(`📹 Joining video room for session: ${sessionId}`);
+  }
+
+  leaveVideoRoom(sessionId) {
+    if (!this.socket) return;
+    this.socket.emit('leave_video_room', { sessionId });
+    console.log(`👋 Leaving video room for session: ${sessionId}`);
+  }
+
+  onVideoRoomJoined(callback) {
+    if (!this.socket) return;
+    this.socket.on('video_room_joined', callback);
+  }
+
+  onUserJoinedVideo(callback) {
+    if (!this.socket) return;
+    this.socket.on('user_joined_video', callback);
+  }
+
+  onUserLeftVideo(callback) {
+    if (!this.socket) return;
+    this.socket.on('user_left_video', callback);
+  }
+
+  offVideoRoomJoined(callback) {
+    if (!this.socket) return;
+    this.socket.off('video_room_joined', callback);
+  }
+
+  offUserJoinedVideo(callback) {
+    if (!this.socket) return;
+    this.socket.off('user_joined_video', callback);
+  }
+
+  offUserLeftVideo(callback) {
+    if (!this.socket) return;
+    this.socket.off('user_left_video', callback);
+  }
+
+  // WebRTC signaling for multi-participant rooms
+  sendWebRTCSignal(sessionId, targetUserId, signalType, signalData) {
+    if (!this.socket) return;
+    this.socket.emit('webrtc_signal', {
+      sessionId,
+      targetUserId,
+      signalType, // 'offer', 'answer', 'ice-candidate'
+      signalData
+    });
+    console.log(`🔌 Sent WebRTC ${signalType} to user ${targetUserId || 'all'} in session ${sessionId}`);
+  }
+
+  onWebRTCSignal(callback) {
+    if (!this.socket) return;
+    this.socket.on('webrtc_signal', callback);
+  }
+
+  offWebRTCSignal(callback) {
+    if (!this.socket) return;
+    this.socket.off('webrtc_signal', callback);
+  }
+
+  // Deprecated 1:1 video call methods (kept for backward compatibility)
   requestVideoCall(sessionId, receiverId = null) {
     if (!this.socket) return;
     // If an offer is passed as the third argument, include it so the server can relay it to peers
@@ -160,7 +225,7 @@ class SocketService {
     this.socket.on('video_end', callback);
   }
 
-  // WebRTC signaling
+  // Deprecated ICE candidate method (use sendWebRTCSignal instead)
   sendIceCandidate(sessionId, candidate, targetUserId) {
     if (!this.socket) return;
     this.socket.emit('ice_candidate', { sessionId, candidate, targetUserId });

@@ -42,8 +42,9 @@ router.patch(
 
 router.patch(
   '/:id/reject',
-  requireOrgType(ORG_TYPES.FLEET_OWNER),
   authorize(
+    ROLES.HOSPITAL_ADMIN,
+    ROLES.HOSPITAL_STAFF,
     ROLES.FLEET_ADMIN,
     ROLES.FLEET_STAFF
   ),
@@ -52,10 +53,11 @@ router.patch(
 
 router.patch(
   '/:id/cancel',
-  requireOrgType(ORG_TYPES.HOSPITAL),
   authorize(
     ROLES.HOSPITAL_ADMIN,
-    ROLES.HOSPITAL_STAFF
+    ROLES.HOSPITAL_STAFF,
+    ROLES.FLEET_ADMIN,
+    ROLES.FLEET_STAFF
   ),
   CollaborationController.cancel
 );

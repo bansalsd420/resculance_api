@@ -56,7 +56,6 @@ export default function OnboardingDetail() {
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
-  const [pendingVideoCall, setPendingVideoCall] = useState(null); // Store incoming call data
   const [activeTab, setActiveTab] = useState('notes');
   const [controls, setControls] = useState({
     mainPower: false,
@@ -111,19 +110,9 @@ export default function OnboardingDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, token]);
 
-  // Listen for incoming video calls and auto-open the video panel
+  // Listen for session data updates (no longer listen for video calls - video room model)
   useEffect(() => {
     if (!sessionId) return;
-
-    const handleIncomingVideoCall = (data) => {
-      if (data.sessionId === sessionId && data.callerId !== user?.id) {
-        console.log('📞 Incoming video call detected, opening video panel');
-        console.log('Video call data:', data);
-        setPendingVideoCall(data); // Store the call data
-        setShowVideoCall(true);
-        toast.info('Incoming video call...');
-      }
-    };
 
     // Listen for session data updates
     const handleSessionDataAdded = (data) => {
@@ -141,7 +130,6 @@ export default function OnboardingDetail() {
       }
     };
 
-    socketService.onVideoRequest(handleIncomingVideoCall);
     socketService.socket?.on('session_data_added', handleSessionDataAdded);
     socketService.socket?.on('session_data_deleted', handleSessionDataDeleted);
 
@@ -149,7 +137,6 @@ export default function OnboardingDetail() {
     socketService.joinSession(sessionId);
 
     return () => {
-      socketService.socket?.off('video_request', handleIncomingVideoCall);
       socketService.socket?.off('session_data_added', handleSessionDataAdded);
       socketService.socket?.off('session_data_deleted', handleSessionDataDeleted);
       // Leave the session room when component unmounts
@@ -1118,12 +1105,8 @@ export default function OnboardingDetail() {
       <VideoCallPanel 
         sessionId={sessionId} 
         isOpen={showVideoCall} 
-        onClose={() => {
-          setShowVideoCall(false);
-          setPendingVideoCall(null); // Clear pending call when closing
-        }}
-        pendingCall={pendingVideoCall} // Pass the pending call data
-        session={session} // Pass session data for crew information
+        onClose={() => setShowVideoCall(false)}
+        session={session} // Pass session data for reference
       />
 
       {/* Floating Action Buttons - Chat and Video only (hidden while chat/video panels are open to avoid interference) */}

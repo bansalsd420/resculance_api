@@ -93,10 +93,14 @@ class PatientController {
 
   static async getAll(req, res, next) {
     try {
-      const { search, limit = 50, offset = 0 } = req.query;
+      const { search, limit = 50, offset = 0, includeInactive } = req.query;
 
       // Scope patient listing by organization for non-superadmins. Superadmin may pass organizationId to scope.
       const filters = { search, limit, offset };
+      // includeInactive may come as 'true'|'1'|1|true
+      if (includeInactive === 'true' || includeInactive === '1' || includeInactive === 1 || includeInactive === true) {
+        filters.includeInactive = true;
+      }
       if (req.user.role === 'superadmin') {
         if (req.query.organizationId) filters.organizationId = req.query.organizationId;
         // if superadmin does not pass organizationId, we allow listing across all orgs
@@ -104,10 +108,14 @@ class PatientController {
         filters.organizationId = req.user.organizationId;
       }
   const patients = await PatientModel.findAll(filters);
-  const total = await PatientModel.count({ search, organizationId: filters.organizationId });
+  const total = await PatientModel.count({ search, organizationId: filters.organizationId, includeInactive: filters.includeInactive });
 
-      // Map snake_case to camelCase for frontend
-      const mappedPatients = patients.map(mapPatientFields);
+      // Map snake_case to camelCase for frontend and include latest session status
+      const mappedPatients = patients.map(p => {
+        const mp = mapPatientFields(p);
+        mp.latestSessionStatus = p.latest_session_status || null;
+        return mp;
+      });
 
       res.json({
         success: true,
@@ -143,6 +151,35 @@ class PatientController {
       res.json({
         success: true,
         data: { patient: mapPatientFields(patient) }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // **NEW DENORMALIZED ENDPOINT** - Blazing fast query for available patients
+  static async getAvailablePatients(req, res, next) {
+    try {
+      const { search, limit = 100, offset = 0 } = req.query;
+
+      const filters = { search, limit, offset };
+      
+      // Scope by organization for non-superadmins
+      if (req.user.role !== 'superadmin') {
+        filters.organizationId = req.user.organizationId;
+      } else if (req.query.organizationId) {
+        filters.organizationId = req.query.organizationId;
+      }
+
+      // Use denormalized query - no joins, instant results
+      const patients = await PatientModel.findAvailablePatients(filters);
+
+      res.json({
+        success: true,
+        data: {
+          patients: patients.map(mapPatientFields),
+          count: patients.length
+        }
       });
     } catch (error) {
       next(error);
@@ -245,37 +282,88 @@ class PatientController {
         destinationHospitalId, chiefComplaint, initialAssessment
       } = req.body;
 
-      // Check if ambulance is available
+      // **SECURITY CHECK**: Authorization - verify user has access to this operation
+      if (!req.user || !req.user.organizationId) {
+        return next(new AppError('Unauthorized: User organization not found', 403));
+      }
+
+      // **SECURITY CHECK**: Validate required fields
+      if (!ambulanceId) {
+        return next(new AppError('Ambulance ID is required', 400));
+      }
+      if (!pickupLocation || pickupLatitude === undefined || pickupLongitude === undefined) {
+        return next(new AppError('Pickup location details are required', 400));
+      }
+      if (!destinationLocation || destinationLatitude === undefined || destinationLongitude === undefined) {
+        return next(new AppError('Destination location details are required', 400));
+      }
+
+      // **SECURITY CHECK**: Validate ambulance exists and is operational
       const ambulance = await AmbulanceModel.findById(ambulanceId);
       if (!ambulance) {
         return next(new AppError('Ambulance not found', 404));
       }
 
-      // Prevent onboarding on maintenance or inactive ambulances
-      if (['maintenance', 'inactive'].includes(ambulance.status)) {
-        return next(new AppError(`Cannot onboard patient: Ambulance is in ${ambulance.status} status`, 400));
+      // **SECURITY CHECK**: Strict status validation - only allow 'available' ambulances for new onboarding
+      const allowedStatuses = ['available'];
+      if (!allowedStatuses.includes(ambulance.status)) {
+        return next(new AppError(
+          `Cannot onboard patient: Ambulance status is '${ambulance.status}'. Only ambulances with 'available' status can accept new patients.`,
+          400
+        ));
       }
 
-      if (!['active', 'available'].includes(ambulance.status)) {
-        return next(new AppError('Ambulance is not available', 400));
-      }
-
-      // Check if ambulance already has an active session
+      // **SECURITY CHECK**: Verify ambulance is not already assigned
       const activeSession = await PatientSessionModel.findActiveByAmbulance(ambulanceId);
       if (activeSession) {
         return next(new AppError('Ambulance already has an active patient session', 400));
       }
 
-      // Ensure patient exists and is active
+      // **SECURITY CHECK**: Ensure patient exists and is active
       const patient = await PatientModel.findById(patientId);
       if (!patient) {
-        return next(new AppError('Patient not found or inactive', 404));
+        return next(new AppError('Patient not found', 404));
+      }
+      
+      // **SECURITY CHECK**: Verify patient belongs to user's organization (unless superadmin)
+      if (req.user.role !== 'superadmin' && patient.organizationId !== req.user.organizationId) {
+        return next(new AppError('Unauthorized: You can only onboard patients from your organization', 403));
+      }
+      
+      if (patient.status !== 'active') {
+        return next(new AppError(`Cannot onboard patient: Patient status is '${patient.status}'. Only active patients can be onboarded.`, 400));
       }
 
-      // Prevent onboarding if patient already has an active session
+      // **SECURITY CHECK**: Prevent onboarding if patient already has an active session
       const patientActiveSession = await PatientSessionModel.findActiveByPatient(patientId);
       if (patientActiveSession) {
-        return next(new AppError('Patient already has an active session', 400));
+        return next(new AppError('Patient already has an active session. Please offboard the patient from the current session first.', 400));
+      }
+
+      // **SECURITY CHECK**: Verify ambulance belongs to accessible organization
+      // For fleet owners, the ambulance must be theirs
+      // For hospitals, the ambulance can be from a partnered fleet
+      if (req.user.role !== 'superadmin') {
+        const userOrgType = req.user.organizationType || 'hospital';
+        
+        if (userOrgType === 'fleet_owner') {
+          // Fleet owners can only use their own ambulances
+          if (ambulance.organizationId !== req.user.organizationId) {
+            return next(new AppError('Unauthorized: You can only use ambulances from your fleet', 403));
+          }
+        } else if (userOrgType === 'hospital') {
+          // Hospitals can use ambulances from partnered fleets
+          // This is validated by checking if there's an active collaboration
+          const CollaborationModel = require('../models/CollaborationRequest');
+          const partnership = await CollaborationModel.findActivePartnership(
+            req.user.organizationId,
+            ambulance.organizationId
+          );
+          
+          if (!partnership && ambulance.organizationId !== req.user.organizationId) {
+            return next(new AppError('Unauthorized: No active partnership with this ambulance\'s fleet', 403));
+          }
+        }
       }
 
       const sessionCode = `SES-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -303,6 +391,9 @@ class PatientController {
         status: 'active',
         current_hospital_id: req.user.organizationId
       });
+
+      // **DENORMALIZATION UPDATE**: Mark patient as onboarded
+      await PatientModel.markAsOnboarded(patientId, sessionId);
 
       // Emit socket event
       const io = req.app.get('io');
@@ -353,6 +444,9 @@ class PatientController {
         status: 'available',
         current_hospital_id: null
       });
+
+      // **DENORMALIZATION UPDATE**: Mark patient as offboarded
+      await PatientModel.markAsOffboarded(session.patient_id);
 
       // Emit socket event
       const io = req.app.get('io');
@@ -702,6 +796,16 @@ class PatientController {
       if (activeSession) {
         // Offboard the patient first
         await PatientSessionModel.offboard(activeSession.id, req.user.id);
+        // Ensure ambulance status is updated back to available when patient is offboarded via this flow
+        try {
+          await AmbulanceModel.update(activeSession.ambulance_id, {
+            status: 'available',
+            current_hospital_id: null
+          });
+        } catch (err) {
+          // log and continue - don't block patient deactivation on ambulance status update failures
+          console.warn('Failed to update ambulance status after patient deactivation/offboard:', err);
+        }
       }
 
       // Soft delete - deactivate the patient
@@ -720,7 +824,8 @@ class PatientController {
     try {
       const { id } = req.params;
 
-      const patient = await PatientModel.findById(id);
+      // Allow activation of patients that are currently inactive, so fetch without active filter
+      const patient = await PatientModel.findByIdIncludeInactive(id);
       if (!patient) {
         return next(new AppError('Patient not found', 404));
       }

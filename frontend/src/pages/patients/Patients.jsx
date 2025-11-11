@@ -17,6 +17,13 @@ import {
   Phone,
   Calendar,
   AlertCircle,
+  Eye,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Ambulance as AmbulanceIcon,
+  User,
+  MapPin,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -24,6 +31,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Table } from '../../components/ui/Table';
 import { Card } from '../../components/ui/Card';
 import { patientService, organizationService } from '../../services';
+import { Tabs } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
 import { hasPermission, PERMISSIONS } from '../../utils/permissions';
@@ -55,6 +63,10 @@ const vitalSignsSchema = yup.object({
 
 export const Patients = () => {
   const [patients, setPatients] = useState([]);
+  const [selectedTab, setSelectedTab] = useState('new');
+  const [activePatientIds, setActivePatientIds] = useState(new Set());
+  const [offboardedPatientIds, setOffboardedPatientIds] = useState(new Set());
+  const [patientsCache, setPatientsCache] = useState({});
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showVitalsModal, setShowVitalsModal] = useState(false);
@@ -99,7 +111,7 @@ export const Patients = () => {
   }, []);
 
   useEffect(() => {
-    // Only fetch patients if superadmin has selected an org, or if non-superadmin
+    // Only fetch patients when scope (selectedOrgId/user) changes. Do NOT refetch on every tab change.
     const doFetch = async () => {
       // clear current patients while loading to avoid stale data
       setPatients([]);
@@ -119,6 +131,22 @@ export const Patients = () => {
       console.error('Error fetching patients with loader', err);
     });
   }, [selectedOrgId, user]);
+
+  // When user switches to inactive tab, fetch inclusive dataset if not cached
+  useEffect(() => {
+    if (selectedTab === 'inactive') {
+      const scopeKey = user?.role === 'superadmin' ? `org:${selectedOrgId || 'none'}` : `org:${user?.organizationId || 'own'}`;
+      const cached = patientsCache[scopeKey] || {};
+      if (!cached.all) {
+        runWithLoader(async () => {
+          await fetchPatients(false, true);
+        }, 'Loading inactive patients...').catch(err => console.error(err));
+      } else {
+        // ensure UI shows cached all
+        setPatients(cached.all);
+      }
+    }
+  }, [selectedTab, selectedOrgId, user]);
 
   const fetchOrganizations = async () => {
     try {
@@ -146,26 +174,110 @@ export const Patients = () => {
     return () => window.removeEventListener('global:cache-reset', handler);
   }, []);
 
-  const fetchPatients = async () => {
+  const fetchPatients = async (force = false, includeInactive = false) => {
     try {
       setLoading(true);
-      const params = {};
-      // For superadmin: pass organizationId to scope the query
-      if (user?.role === 'superadmin' && selectedOrgId) {
-        params.organizationId = selectedOrgId;
+
+      const scopeKey = user?.role === 'superadmin' ? `org:${selectedOrgId || 'none'}` : `org:${user?.organizationId || 'own'}`;
+      const cached = patientsCache[scopeKey] || {};
+
+      // If not forcing and we have cached data use it
+      if (!force) {
+        if (includeInactive && cached.all) {
+          setPatients(cached.all);
+          computeSessionSetsFromPatients(cached.all);
+          setLoading(false);
+          return;
+        }
+        if (!includeInactive && cached.active) {
+          setPatients(cached.active);
+          computeSessionSetsFromPatients(cached.active);
+          setLoading(false);
+          return;
+        }
       }
+
+      const params = {};
+      if (user?.role === 'superadmin' && selectedOrgId) params.organizationId = selectedOrgId;
+      if (includeInactive) params.includeInactive = true;
+
       const response = await patientService.getAll(params);
-      // API returns { success: true, data: { patients: [...] } }
-      setPatients(response.data?.data?.patients || response.data?.patients || response.data || []);
+      const fetched = response.data?.data?.patients || response.data?.patients || response.data || [];
+
+      setPatientsCache(prev => {
+        const next = { ...prev };
+        next[scopeKey] = next[scopeKey] || {};
+        if (includeInactive) {
+          next[scopeKey].all = fetched;
+    next[scopeKey].active = fetched.filter(p => !(Number(p.is_active) === 0 || Number(p.isActive) === 0));
+        } else {
+          next[scopeKey].active = fetched;
+        }
+        next[scopeKey].ts = Date.now();
+        return next;
+      });
+
+      setPatients(fetched);
+      computeSessionSetsFromPatients(fetched);
     } catch (error) {
       console.error('Failed to fetch patients:', error);
-  const msg = getErrorMessage(error, 'Failed to load patients');
+      const msg = getErrorMessage(error, 'Failed to load patients');
       toast.error(msg);
       setPatients([]);
     } finally {
       setLoading(false);
     }
   };
+
+  const computeSessionSetsFromPatients = (fetched) => {
+    try {
+      const activeSet = new Set();
+      const offSet = new Set();
+      fetched.forEach(p => {
+        const status = (p.latestSessionStatus || '').toLowerCase();
+        if (['active', 'onboarded', 'in_transit'].includes(status)) activeSet.add(p.id);
+        if (status === 'offboarded') offSet.add(p.id);
+      });
+      setActivePatientIds(activeSet);
+      setOffboardedPatientIds(offSet);
+    } catch (e) {
+      setActivePatientIds(new Set());
+      setOffboardedPatientIds(new Set());
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      onboarded: { color: 'bg-blue-100 text-blue-800', icon: Activity, label: 'Onboarded' },
+      in_transit: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'In Transit' },
+      offboarded: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Offboarded' },
+      cancelled: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Cancelled' },
+    };
+    const config = statusConfig[status?.toLowerCase()] || statusConfig.onboarded;
+    const Icon = config.icon;
+
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        <Icon className="w-3.5 h-3.5" />
+        {config.label}
+      </span>
+    );
+  };
+
+  const formatDuration = (onboardedAt, offboardedAt) => {
+    if (!onboardedAt) return 'N/A';
+    const start = new Date(onboardedAt);
+    const end = offboardedAt ? new Date(offboardedAt) : new Date();
+    const durationMs = end - start;
+    const minutes = Math.floor(durationMs / (1000 * 60));
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    if (hours > 0) {
+      return `${hours}h ${remainingMinutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
 
   const fetchVitalSigns = async (patientId) => {
     try {
@@ -227,7 +339,7 @@ export const Patients = () => {
         await patientService.create(data);
         toast.success('Patient created successfully');
       }
-      await fetchPatients();
+      await fetchPatients(true);
       handleCloseModal();
     } catch (error) {
       console.error('Failed to save patient:', error);
@@ -281,7 +393,7 @@ export const Patients = () => {
       try {
         await patientService.delete(id);
         toast.success('Patient deactivated successfully');
-        await fetchPatients();
+        await fetchPatients(true);
       } catch (error) {
         console.error('Failed to deactivate patient:', error);
   const msg = getErrorMessage(error, 'Failed to deactivate patient');
@@ -329,6 +441,41 @@ export const Patients = () => {
       patient.email?.toLowerCase().includes(searchLower)
     );
   });
+
+  // Tab filtering
+  const tabFilteredPatients = (() => {
+    // Rules:
+    // - new: patients that haven't onboarded yet (no sessions / no latestSessionStatus)
+    // - onboarded: patients currently onboarded (statuses like active, onboarded, in_transit)
+    // - offboarded: patients whose latest session status is offboarded
+    // - inactive: patients with is_active === false
+
+    if (selectedTab === 'new') {
+      return filteredPatients.filter(p => !p.latestSessionStatus);
+    }
+
+    if (selectedTab === 'onboarded') {
+      return filteredPatients.filter(p => {
+        const status = (p.latestSessionStatus || '').toLowerCase();
+        return ['active', 'onboarded', 'in_transit'].includes(status);
+      });
+    }
+
+    if (selectedTab === 'offboarded') {
+      return filteredPatients.filter(p => {
+        const status = (p.latestSessionStatus || '').toLowerCase();
+        // Exclude patients that are inactive (is_active stored as numeric 0/1 or camelCase variants)
+        const isInactive = Number(p.is_active) === 0 || Number(p.isActive) === 0;
+        return status === 'offboarded' && !isInactive;
+      });
+    }
+
+    if (selectedTab === 'inactive') {
+      return filteredPatients.filter(p => Number(p.is_active) === 0 || Number(p.isActive) === 0);
+    }
+
+    return filteredPatients;
+  })();
 
   const columns = [
     {
@@ -401,7 +548,7 @@ export const Patients = () => {
             <Edit className="w-4 h-4" />
           </Button>
           )}
-          {patient.is_active !== false ? (
+          {!(Number(patient.is_active) === 0 || Number(patient.isActive) === 0) ? (
             <Button
               variant="danger"
               size="sm"
@@ -574,18 +721,35 @@ export const Patients = () => {
         </Card>
       )}
 
-      {/* Search Bar */}
+      {/* Tabs + Search */}
       {(user?.role !== 'superadmin' || selectedOrgId) && (
-        <Card className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-secondary" />
-            <input
-              type="text"
-              placeholder="Search patients by name, phone, or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="input w-full pl-10 pr-4 py-2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-text-secondary"
-            />
+        <Card className="p-3 mb-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Tabs
+                tabs={[
+                  { key: 'new', label: 'New' },
+                  { key: 'onboarded', label: 'Onboarded' },
+                  { key: 'offboarded', label: 'Offboarded' },
+                  { key: 'inactive', label: 'Inactive' }
+                ]}
+                activeKey={selectedTab}
+                onChange={(k) => setSelectedTab(k)}
+              />
+            </div>
+
+            <div className="w-full md:w-1/3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-secondary" />
+                <input
+                  type="text"
+                  placeholder="Search patients by name, phone, or email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="input w-full pl-10 pr-4 py-2 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-text-secondary"
+                />
+              </div>
+            </div>
           </div>
         </Card>
       )}
@@ -596,9 +760,11 @@ export const Patients = () => {
           <div className="p-6">
             <Table
               columns={columns}
-              data={filteredPatients}
+              data={tabFilteredPatients}
               loading={loading}
               onRowClick={handleViewDetails}
+              onRefresh={() => fetchPatients(true, selectedTab === 'inactive')}
+              isRefreshing={loading}
             />
           </div>
         </Card>
@@ -976,130 +1142,66 @@ export const Patients = () => {
               </div>
             </div>
 
-            {/* Sessions History */}
+            {/* Sessions History (compact: ambulance, duration, onboarded, actions) */}
             <div>
-              <h3 className="font-semibold mb-4">Ambulance Sessions</h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {(!Array.isArray(sessions) || sessions.length === 0) ? (
-                  <p className="text-secondary text-center py-8">No sessions found</p>
-                ) : (
-                  sessions.map((session, index) => (
-                    <div
-                      key={index}
-                      className="p-4 border-2 border-border rounded-2xl hover:bg-background-card transition-colors space-y-3"
-                    >
-                      {/* Session Header */}
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <p className="font-semibold text-lg">{session.chiefComplaint || session.chief_complaint || 'N/A'}</p>
-                          <p className="text-sm text-secondary mt-1">
-                            📍 Pickup: {session.pickupLocation || session.pickup_location || 'N/A'}
-                          </p>
-                          {(session.destination_hospital_name || session.destinationHospitalName) && (
-                            <p className="text-sm text-secondary">
-                              🏥 Destination: {session.destination_hospital_name || session.destinationHospitalName}
-                            </p>
+              <h3 className="font-semibold mb-4">Patient Sessions</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full table-auto">
+                        <thead>
+                          <tr className="text-left text-sm text-secondary">
+                            <th className="px-4 py-2">Ambulance</th>
+                            <th className="px-4 py-2">Status</th>
+                            <th className="px-4 py-2">Duration</th>
+                            <th className="px-4 py-2">Onboarded At</th>
+                            <th className="px-4 py-2">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(!Array.isArray(sessions) || sessions.length === 0) ? (
+                            <tr>
+                              <td colSpan={5} className="text-center p-6 text-secondary">No sessions found</td>
+                            </tr>
+                          ) : (
+                            sessions.map((session) => {
+                              const start = session.onboarded_at || session.onboardedAt || session.created_at || session.createdAt;
+                              const end = session.offboarded_at || session.offboardedAt || session.actual_arrival_time || session.offboarded_at;
+                              const duration = formatDuration(start, end);
+                              const ambulanceLabel = session.registration_number || session.ambulance_code || session.ambulance?.registration_number || 'N/A';
+                              return (
+                                <tr key={session.id} className="border-t hover:bg-background-card transition-colors">
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                                        <AmbulanceIcon className="w-4 h-4 text-red-600" />
+                                      </div>
+                                      <div>
+                                        <div className="font-medium text-sm">{ambulanceLabel}</div>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    {getStatusBadge(session.status)}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-sm text-secondary">{duration}</td>
+
+                                  <td className="px-4 py-3 text-sm text-secondary">
+                                    {start ? new Date(start).toLocaleString() : 'N/A'}
+                                  </td>
+
+                                  <td className="px-4 py-3">
+                                    <Button size="sm" variant="secondary" onClick={() => window.open(`/sessions/${session.id}`, '_blank')}>
+                                      <Eye className="w-4 h-4 mr-1" />
+                                      View
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })
                           )}
-                        </div>
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            session.status === 'active' || session.status === 'onboarded' || session.status === 'in_transit'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : session.status === 'offboarded'
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400'
-                          }`}
-                        >
-                          {session.status}
-                        </span>
-                      </div>
-
-                      {/* Ambulance Info */}
-                      <div className="bg-background rounded-xl p-3 border border-border">
-                        <p className="text-xs font-medium text-secondary mb-2">🚑 Ambulance Details</p>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-secondary">Registration:</span>
-                            <span className="ml-2 font-medium text-text">
-                              {session.registration_number || session.ambulance_code || 'N/A'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-secondary">Model:</span>
-                            <span className="ml-2 font-medium text-text">
-                              {session.vehicle_model || session.vehicleModel || 'N/A'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-secondary">Type:</span>
-                            <span className="ml-2 font-medium text-text">
-                              {session.vehicle_type || session.vehicleType || 'Basic'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-secondary">Owner:</span>
-                            <span className="ml-2 font-medium text-text">
-                              {session.organization_name || session.organizationName || 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Crew Information */}
-                      {(session.crew && session.crew.length > 0) && (
-                        <div className="bg-background rounded-xl p-3 border border-border">
-                          <p className="text-xs font-medium text-secondary mb-2">👥 Crew Members</p>
-                          <div className="space-y-2">
-                            {session.doctors && session.doctors.length > 0 && (
-                              <div>
-                                <span className="text-xs text-secondary">Doctors:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {session.doctors.map((doc, idx) => (
-                                    <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-medium">
-                                      Dr. {doc.first_name} {doc.last_name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {session.paramedics && session.paramedics.length > 0 && (
-                              <div>
-                                <span className="text-xs text-secondary">Paramedics:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {session.paramedics.map((para, idx) => (
-                                    <span key={idx} className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg text-xs font-medium">
-                                      {para.first_name} {para.last_name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            {session.drivers && session.drivers.length > 0 && (
-                              <div>
-                                <span className="text-xs text-secondary">Drivers:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {session.drivers.map((driver, idx) => (
-                                    <span key={idx} className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-lg text-xs font-medium">
-                                      {driver.first_name} {driver.last_name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Session Timestamp */}
-                      <p className="text-xs text-secondary flex items-center gap-1">
-                        <span>⏰</span>
-                        {session.startTime || session.start_time || session.createdAt || session.created_at 
-                          ? new Date(session.startTime || session.start_time || session.createdAt || session.created_at).toLocaleString()
-                          : 'N/A'}
-                      </p>
-                    </div>
-                  ))
-                )}
+                        </tbody>
+                      </table>
               </div>
             </div>
           </div>

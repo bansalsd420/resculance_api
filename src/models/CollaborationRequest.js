@@ -129,6 +129,21 @@ class CollaborationRequestModel {
     const [rows] = await db.query(query, params);
     return rows[0].total;
   }
+
+  /**
+   * Find active partnership between hospital and fleet
+   * Used for access control validation
+   */
+  static async findActivePartnership(hospitalId, fleetId) {
+    const [rows] = await db.query(
+      `SELECT * FROM collaboration_requests 
+       WHERE (hospital_id = ? AND fleet_id = ? OR hospital_id = ? AND fleet_id = ?)
+       AND status = 'approved'
+       LIMIT 1`,
+      [hospitalId, fleetId, fleetId, hospitalId]
+    );
+    return rows[0];
+  }
 }
 
 module.exports = CollaborationRequestModel;

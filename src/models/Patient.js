@@ -36,13 +36,22 @@ class PatientModel {
     return rows[0];
   }
 
+  // Return patient regardless of is_active flag (useful for activate endpoint)
+  static async findByIdIncludeInactive(id) {
+    const [rows] = await db.query('SELECT * FROM patients WHERE id = ?', [id]);
+    return rows[0];
+  }
+
   static async findByCode(code) {
     const [rows] = await db.query('SELECT * FROM patients WHERE patient_code = ? AND is_active = TRUE', [code]);
     return rows[0];
   }
 
   static async findAll(filters = {}) {
-    let query = 'SELECT * FROM patients WHERE 1=1';
+    // Include latest session status per patient using a correlated subquery to avoid extra queries
+    let query = `SELECT p.*, (
+      SELECT ps.status FROM patient_sessions ps WHERE ps.patient_id = p.id ORDER BY ps.created_at DESC LIMIT 1
+    ) as latest_session_status FROM patients p WHERE 1=1`;
     const params = [];
 
     if (filters.search) {
@@ -61,7 +70,7 @@ class PatientModel {
       query += ' AND is_active = TRUE';
     }
 
-    query += ' ORDER BY created_at DESC';
+  query += ' ORDER BY created_at DESC';
 
     if (filters.limit) {
       query += ' LIMIT ?';
@@ -158,6 +167,62 @@ class PatientModel {
 
     const [rows] = await db.query(query, params);
     return rows[0].total;
+  }
+
+  // **DENORMALIZED QUERIES** - Blazing fast, no joins needed
+  static async findAvailablePatients(filters = {}) {
+    let query = `SELECT * FROM patients WHERE is_onboarded = FALSE AND is_active = TRUE`;
+    const params = [];
+
+    if (filters.search) {
+      query += ' AND (first_name LIKE ? OR last_name LIKE ? OR patient_code LIKE ?)';
+      const searchTerm = `%${filters.search}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    if (filters.organizationId) {
+      query += ' AND organization_id = ?';
+      params.push(filters.organizationId);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(parseInt(filters.limit));
+    }
+
+    if (filters.offset) {
+      query += ' OFFSET ?';
+      params.push(parseInt(filters.offset));
+    }
+
+    const [rows] = await db.query(query, params);
+    return rows;
+  }
+
+  static async markAsOnboarded(patientId, sessionId) {
+    const [result] = await db.query(
+      `UPDATE patients 
+       SET is_onboarded = TRUE, 
+           current_session_id = ?, 
+           onboarded_at = NOW() 
+       WHERE id = ?`,
+      [sessionId, patientId]
+    );
+    return result.affectedRows > 0;
+  }
+
+  static async markAsOffboarded(patientId) {
+    const [result] = await db.query(
+      `UPDATE patients 
+       SET is_onboarded = FALSE, 
+           current_session_id = NULL, 
+           onboarded_at = NULL 
+       WHERE id = ?`,
+      [patientId]
+    );
+    return result.affectedRows > 0;
   }
 }
 

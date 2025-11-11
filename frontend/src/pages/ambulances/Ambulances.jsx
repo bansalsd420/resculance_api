@@ -8,7 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import Select from '../../components/ui/Select';
-import { ambulanceService, organizationService, userService } from '../../services';
+import { ambulanceService, organizationService, userService, patientService } from '../../services';
 import { useAuthStore } from '../../store/authStore';
 import { useToast } from '../../hooks/useToast';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
@@ -28,19 +28,7 @@ export const Ambulances = () => {
   const [ambulancesCache, setAmbulancesCache] = useState({});
   const AMB_CACHE_TTL = 1000 * 60 * 5; // 5 minutes TTL for cache entries
 
-  // Load cache from sessionStorage on mount (non-blocking)
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem('ambulancesCache');
-      if (raw) {
-        const parsed = JSON.parse(raw || '{}');
-        setAmbulancesCache(parsed);
-      }
-    } catch (err) {
-      // non-fatal
-      console.warn('Failed to load ambulances cache from sessionStorage', err);
-    }
-  }, []);
+  // All state declarations
   const [organizations, setOrganizations] = useState([]);
   const [orgTypeFilter, setOrgTypeFilter] = useState('');
   const [selectedOrgId, setSelectedOrgId] = useState(null);
@@ -50,6 +38,7 @@ export const Ambulances = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAmbulance, setSelectedAmbulance] = useState(null);
+  const [selectedAmbulanceActiveSession, setSelectedAmbulanceActiveSession] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,16 +54,25 @@ export const Ambulances = () => {
   const { toast } = useToast();
   const runWithLoader = useWithGlobalLoader();
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm({
-    defaultValues: {
-      devices: []
+  // Load cache from sessionStorage on mount (non-blocking)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('ambulancesCache');
+      if (raw) {
+        const parsed = JSON.parse(raw || '{}');
+        setAmbulancesCache(parsed);
+      }
+    } catch (err) {
+      console.warn('Failed to load ambulances cache from sessionStorage', err);
     }
+  }, []);
+
+  // Form state for Add/Edit ambulance
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm({
+    defaultValues: { devices: [] }
   });
 
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: 'devices'
-  });
+  const { fields, append, remove } = useFieldArray({ control, name: 'devices' });
 
   useEffect(() => {
     // load organizations with global loader
@@ -199,25 +197,10 @@ export const Ambulances = () => {
 
   const response = await ambulanceService.getAll(params);
   const ambulancesData = response.data?.data?.ambulances || response.data?.ambulances || response.data || [];
-  setAmbulances(ambulancesData);
-
-      // Fetch assigned users in parallel (tolerate individual failures)
-      const assignmentPromises = ambulancesData.map(a => (
-        ambulanceService.getAssignedUsers(a.id)
-          .then(res => ({ id: a.id, users: res.data?.data?.users || res.data?.users || [] }))
-          .catch(err => {
-            console.error(`Failed to fetch assigned users for ambulance ${a.id}:`, err);
-            return { id: a.id, users: [] };
-          })
-      ));
-
-      const settled = await Promise.allSettled(assignmentPromises);
-      const assignments = {};
-      for (const s of settled) {
-        if (s.status === 'fulfilled' && s.value) {
-          assignments[s.value.id] = s.value.users || [];
-        }
-      }
+      // Set ambulances quickly. Assigned users are fetched on demand (when opening assignment modal)
+      setAmbulances(ambulancesData);
+      // clear assignments cache to avoid heavy per-ambulance network calls here
+      setAmbulanceAssignments({});
       setAmbulanceAssignments(assignments);
 
       // Cache the result (ambulances list + assignments) for this scope/tab with timestamp
@@ -260,7 +243,7 @@ export const Ambulances = () => {
         registrationNumber: ambulance.registration_number || ambulance.vehicleNumber || ambulance.registrationNumber,
         vehicleModel: ambulance.vehicle_model || ambulance.vehicleModel,
         vehicleType: ambulance.vehicle_type || ambulance.vehicleType,
-        status: ambulance.status,
+        status: ambulance.status || '',
         organizationId: ambulance.organization_id || ambulance.organizationId,
         devices: ambulanceDevices.map(d => ({
           id: d.id,
@@ -274,6 +257,17 @@ export const Ambulances = () => {
           model: d.model
         }))
       });
+
+      // Fetch any active session associated with this ambulance so we can safely offboard if needed
+      try {
+        const sessionsResp = await patientService.getAllSessions({ ambulanceId: ambulance.id });
+        const allSessions = sessionsResp.data?.data?.sessions || sessionsResp.data?.sessions || sessionsResp.data || [];
+        const active = allSessions.find(s => ['active', 'onboarded', 'in_transit'].includes((s.status || '').toLowerCase()));
+        setSelectedAmbulanceActiveSession(active || null);
+      } catch (err) {
+        console.error('Failed to fetch sessions for ambulance on edit modal:', err);
+        setSelectedAmbulanceActiveSession(null);
+      }
     } else {
       const defaultData = user?.role === 'superadmin' ? {} : { organizationId: user?.organizationId };
       // If the page has an organization selected, preload it into the create form
@@ -296,6 +290,7 @@ export const Ambulances = () => {
     setSelectedAmbulance(null);
     setDevices([]);
     reset({ devices: [] });
+    setSelectedAmbulanceActiveSession(null);
   };
 
   const onSubmit = async (data) => {
@@ -312,8 +307,23 @@ export const Ambulances = () => {
         const updatePayload = {
           vehicleModel: ambulanceData.vehicleModel,
           vehicleType: ambulanceData.vehicleType,
-          status: ambulanceData.status,
+          // allow explicit status updates from UI; we'll perform safe offboard first if necessary
+          ...(ambulanceData.status !== undefined ? { status: ambulanceData.status } : {}),
         };
+
+        // If user is setting status to available while ambulance currently has an active session,
+        // attempt to offboard that session first to avoid inconsistent state.
+        if (ambulanceData.status === 'available' && selectedAmbulanceActiveSession) {
+          try {
+            await patientService.offboard(selectedAmbulanceActiveSession.id, { treatmentNotes: 'Offboarded due to ambulance status change' });
+            toast.info('Offboarded active patient before changing ambulance status');
+          } catch (err) {
+            console.error('Failed to offboard active session before ambulance status change:', err);
+            toast.error('Failed to offboard active patient. Abort status change');
+            setSubmitting(false);
+            return;
+          }
+        }
 
         const updateResp = await ambulanceService.update(selectedAmbulance.id, updatePayload);
         ambulanceId = selectedAmbulance.id;
@@ -323,6 +333,8 @@ export const Ambulances = () => {
         } else {
           toast.success('Ambulance updated successfully');
         }
+        // Refresh ambulances to ensure UI shows authoritative status
+        await fetchAmbulances(true);
       } else {
         // Create: backend expects vehicleNumber, vehicleModel, vehicleType, organizationId
         // For superadmin, organizationId is taken from the page selection (`selectedOrgId`).
@@ -346,7 +358,7 @@ export const Ambulances = () => {
         toast.success('Ambulance created successfully');
       }
 
-      // Handle devices
+  // Handle devices
       if (deviceData && deviceData.length > 0) {
         // Delete existing devices that are not in the new list
         const existingDeviceIds = devices.map(d => d.id);
@@ -377,6 +389,11 @@ export const Ambulances = () => {
             toast.error(`Failed to save device ${device.deviceName}: ${msg}`);
           }
         }
+      }
+
+      // After create/update finish, refresh list to reflect new data
+      if (!selectedAmbulance) {
+        await fetchAmbulances(true);
       }
 
       if (ensureOrgSelected()) runWithLoader(async () => { await fetchAmbulances(true); }, 'Refreshing ambulances...').catch(err => console.error(err));
@@ -457,78 +474,64 @@ export const Ambulances = () => {
     });
   };
 
-  const handleOpenAssignmentModal = async (ambulance) => {
+  const handleOpenAssignmentModal = (ambulance) => {
+    // Open assignment modal immediately to improve perceived performance,
+    // then fetch assigned/available users in background.
     setAssignmentAmbulance(ambulance);
-    
-    try {
-      // Fetch assigned users for this ambulance
-      const assignedResponse = await ambulanceService.getAssignedUsers(ambulance.id);
-      const assigned = assignedResponse.data?.data?.users || assignedResponse.data?.users || [];
-      setAssignedUsers(assigned);
-
-      // Fetch available users for assignment. Rules:
-      // - If superadmin and a hospital is selected in the page (selectedOrgId), fetch that hospital's staff so superadmin can assign hospital staff.
-      // - If the requester is a hospital user, fetch the hospital's staff (they assign their own staff to partnered ambulances).
-      // - Otherwise (fleet view), fetch staff from the ambulance's owning organization (fleet owner).
-      let orgIdForUsers = null;
-      const selectedIsHospital = selectedOrgInfo && selectedOrgInfo.type === 'hospital';
-      if (user?.role === 'superadmin' && selectedOrgId && selectedIsHospital) {
-        orgIdForUsers = selectedOrgId;
-      } else if (user?.organizationType === 'hospital') {
-        orgIdForUsers = user.organizationId;
-      } else {
-        orgIdForUsers = ambulance.organization_id || ambulance.organizationId || selectedOrgId || user?.organizationId;
-      }
-      const usersResponse = await userService.getAll({
-        organizationId: orgIdForUsers,
-      });
-      const allUsers = usersResponse.data?.data?.users || usersResponse.data?.users || usersResponse.data || [];
-      
-      // Filter for doctors, paramedics, and drivers only, AND must have status 'active' (approved users only).
-      // Roles in the backend may be namespaced (e.g. 'hospital_doctor' or 'fleet_doctor'),
-      // so match by substring to include those variants.
-      const staffUsers = allUsers.filter(u => {
-        const r = (u.role || '').toString().toLowerCase();
-        const s = (u.status || '').toString().toLowerCase();
-        const isStaff = r.includes('doctor') || r.includes('paramedic') || r.includes('driver');
-        const isApproved = s === 'active';
-        return isStaff && isApproved;
-      }).map(u => ({
-        ...u,
-        // normalize role label for display (e.g. 'fleet_doctor' -> 'Doctor')
-        roleLabel: (u.role || '').toString().toLowerCase().includes('doctor') ? 'Doctor'
-          : (u.role || '').toString().toLowerCase().includes('paramedic') ? 'Paramedic'
-          : (u.role || '').toString().toLowerCase().includes('driver') ? 'Driver'
-          : (u.role || '').toString()
-      }));
-      
-      // Filter out already assigned users
-      const assignedUserIds = assigned.map(u => u.id);
-      const available = staffUsers.filter(u => !assignedUserIds.includes(u.id));
-      // For UI convenience map to expected frontend fields and show roleLabel
-      const availableMapped = available.map(u => ({
-        id: u.id,
-        firstName: u.firstName || u.first_name || u.first_name || '',
-        lastName: u.lastName || u.last_name || u.last_name || '',
-        role: u.roleLabel || u.role || '',
-        roleKey: u.role || ''
-      }));
-      setAvailableUsers(availableMapped);
-      
-      console.log('Assignment Modal: Fetched users', { 
-        assigned: assigned.length, 
-        available: availableMapped.length,
-        staffUsers: staffUsers.length 
-      });
-      
-    } catch (error) {
-      console.error('Failed to fetch users:', error);
-      toast.error('Failed to load users for assignment');
-      setAvailableUsers([]);
-      setAssignedUsers([]);
-    }
-    
+    setAssignedUsers([]);
+    setAvailableUsers([]);
     setIsAssignmentModalOpen(true);
+
+    (async () => {
+      try {
+        // Fetch assigned users for this ambulance
+        const assignedResponse = await ambulanceService.getAssignedUsers(ambulance.id);
+        const assigned = assignedResponse.data?.data?.users || assignedResponse.data?.users || [];
+        setAssignedUsers(assigned);
+
+        // Determine org scope for fetching available users
+        let orgIdForUsers = null;
+        const selectedIsHospital = selectedOrgInfo && selectedOrgInfo.type === 'hospital';
+        if (user?.role === 'superadmin' && selectedOrgId && selectedIsHospital) {
+          orgIdForUsers = selectedOrgId;
+        } else if (user?.organizationType === 'hospital') {
+          orgIdForUsers = user.organizationId;
+        } else {
+          orgIdForUsers = ambulance.organization_id || ambulance.organizationId || selectedOrgId || user?.organizationId;
+        }
+
+        const usersResponse = await userService.getAll({ organizationId: orgIdForUsers });
+        const allUsers = usersResponse.data?.data?.users || usersResponse.data?.users || usersResponse.data || [];
+
+        const staffUsers = allUsers.filter(u => {
+          const r = (u.role || '').toString().toLowerCase();
+          const s = (u.status || '').toString().toLowerCase();
+          const isStaff = r.includes('doctor') || r.includes('paramedic') || r.includes('driver');
+          const isApproved = s === 'active';
+          return isStaff && isApproved;
+        }).map(u => ({
+          ...u,
+          roleLabel: (u.role || '').toString().toLowerCase().includes('doctor') ? 'Doctor'
+            : (u.role || '').toString().toLowerCase().includes('paramedic') ? 'Paramedic'
+            : (u.role || '').toString().toLowerCase().includes('driver') ? 'Driver'
+            : (u.role || '').toString()
+        }));
+
+        const assignedUserIds = assigned.map(u => u.id);
+        const available = staffUsers.filter(u => !assignedUserIds.includes(u.id));
+        const availableMapped = available.map(u => ({
+          id: u.id,
+          firstName: u.firstName || u.first_name || '',
+          lastName: u.lastName || u.last_name || '',
+          role: u.roleLabel || u.role || '',
+          roleKey: u.role || ''
+        }));
+        setAvailableUsers(availableMapped);
+      } catch (error) {
+        console.error('Failed to fetch users for assignment modal:', error);
+        // keep modal open but show empty lists
+      }
+    })();
   };
 
   const handleCloseAssignmentModal = () => {
@@ -1111,12 +1114,10 @@ export const Ambulances = () => {
                 <Controller
                   name="status"
                   control={control}
-                  defaultValue={''}
+                  defaultValue={selectedAmbulance?.status || ''}
                   render={({ field }) => {
-                    // Available statuses for selection; pending_approval and inactive are not selectable here
                     const options = [
                       { value: 'available', label: 'Available' },
-                      { value: 'active', label: 'Active' },
                       { value: 'maintenance', label: 'Maintenance' },
                     ];
                     const value = options.find(o => o.value === field.value) || null;

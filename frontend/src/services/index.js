@@ -248,6 +248,12 @@ export const patientService = {
     return response;
   },
 
+  // **BLAZING FAST**: Denormalized query - only returns available patients
+  getAvailable: async (params) => {
+    const response = await api.get('/patients/available', { params });
+    return response;
+  },
+
   getById: async (id) => {
     const response = await api.get(`/patients/${id}`);
     return response;
@@ -468,4 +474,11 @@ export const dashboardService = {
     const response = await api.get('/dashboard/stats');
     return response;
   },
+};
+
+export const activityService = {
+  getAll: async (params = {}) => {
+    const response = await api.get('/activities', { params });
+    return response;
+  }
 };

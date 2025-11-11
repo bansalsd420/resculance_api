@@ -27,6 +27,7 @@ router.post(
 );
 
 router.get('/', PatientController.getAll);
+router.get('/available', PatientController.getAvailablePatients); // NEW: Denormalized query
 router.get('/code/:code', PatientController.getByCode);
 
 router.put(

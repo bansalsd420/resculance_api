@@ -43,6 +43,25 @@ class CollaborationController {
         }
       }
 
+      // Check for existing pending or approved requests between these organizations
+      const [existingRequests] = await db.query(
+        `SELECT id, status FROM collaboration_requests 
+         WHERE fleet_id = ? AND hospital_id = ? 
+         AND status IN ('pending', 'approved') 
+         LIMIT 1`,
+        [fleetId, hospitalId]
+      );
+
+      if (existingRequests && existingRequests.length > 0) {
+        const existing = existingRequests[0];
+        if (existing.status === 'approved') {
+          return next(new AppError('An active partnership already exists between these organizations', 400));
+        }
+        if (existing.status === 'pending') {
+          return next(new AppError('A pending partnership request already exists between these organizations', 400));
+        }
+      }
+
       const requestId = await CollaborationRequestModel.create({
         hospitalId,
         fleetId,
@@ -266,26 +285,24 @@ class CollaborationController {
       const { id } = req.params;
       const { rejectedReason } = req.body;
 
-      // Only fleet owner can reject requests (superadmin may also perform this action)
-      if (req.user.role !== 'superadmin' && req.user.organizationType !== 'fleet_owner') {
-        return next(new AppError('Only fleet owners can reject collaboration requests', 403));
-      }
-
       const request = await CollaborationRequestModel.findById(id);
       if (!request) {
         return next(new AppError('Collaboration request not found', 404));
       }
 
-      // Allow superadmin to act regardless of organization ownership
-      if (req.user.role !== 'superadmin' && request.fleet_id !== req.user.organizationId) {
-        return next(new AppError('Access denied', 403));
+      // Allow fleet owner OR hospital to reject (either party can decline)
+      const isFleetOwner = request.fleet_id === req.user.organizationId;
+      const isHospital = request.hospital_id === req.user.organizationId;
+      
+      if (req.user.role !== 'superadmin' && !isFleetOwner && !isHospital) {
+        return next(new AppError('You do not have permission to reject this collaboration request', 403));
       }
 
       if (request.status !== 'pending') {
         return next(new AppError('Request has already been processed', 400));
       }
 
-      const ok = await CollaborationRequestModel.reject(id, req.user.id, rejectedReason);
+      const ok = await CollaborationRequestModel.reject(id, rejectedReason);
 
       // Audit log the rejection
       try {

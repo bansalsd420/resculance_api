@@ -33,15 +33,15 @@ import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 const collaborationSchema = yup.object({
   // For non-superadmin users we require a single targetOrgId (they pick the counterpart org).
   // For superadmin users, targetOrgId is not required; instead both hospitalId and fleetId are required.
-  targetOrgId: yup.number().when('$isSuper', (isSuper, schema) => {
+  targetOrgId: yup.number().when('$isSuper', ([isSuper], schema) => {
     return isSuper ? schema.notRequired() : schema.typeError('Organization is required').required('Organization is required');
   }),
   // hospitalId is required only when superadmin is creating the partnership
-  hospitalId: yup.number().when('$isSuper', (isSuper, schema) => {
+  hospitalId: yup.number().when('$isSuper', ([isSuper], schema) => {
     return isSuper ? schema.typeError('Hospital is required').required('Hospital is required') : schema.notRequired();
   }),
   // fleetId is required only when superadmin is creating the partnership
-  fleetId: yup.number().when('$isSuper', (isSuper, schema) => {
+  fleetId: yup.number().when('$isSuper', ([isSuper], schema) => {
     return isSuper ? schema.typeError('Fleet is required').required('Fleet is required') : schema.notRequired();
   }),
   terms: yup.string().required('Terms are required'),
