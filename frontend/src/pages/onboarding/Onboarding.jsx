@@ -375,9 +375,9 @@ export const Onboarding = () => {
       toast.success('Patient onboarded successfully');
       handleClosePatientModal();
 
-      // Update local ambulances and patients state to avoid refetching the entire lists
-      setAmbulances(prev => prev.map(a => (a.id === selectedAmbulance.id ? { ...a, status: 'active' } : a)));
-      setPatients(prev => prev.map(p => (p.id === selectedPatient ? { ...p, isOnboarded: true } : p)));
+      // Refresh ambulances and patients lists to show updated status
+      await fetchAmbulances();
+      await fetchPatients();
     } catch (error) {
       console.error('Failed to onboard patient:', error);
       const msg = error?.response?.data?.error || error?.response?.data?.message || 'Failed to onboard patient';
