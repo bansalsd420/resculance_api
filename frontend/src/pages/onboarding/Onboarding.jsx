@@ -393,12 +393,13 @@ export const Onboarding = () => {
     console.log('🔍 Ambulance ID:', ambulance.id);
     
     // If ambulance status is 'active', fetch the active session
+    // Note: Session status can be 'onboarded' or 'in_transit', but we search without status filter
+    // and just get the most recent session for this ambulance
     if (ambulance.status === 'active') {
       try {
-        console.log('📡 Fetching session with params:', { ambulanceId: ambulance.id, status: 'active', limit: 1 });
+        console.log('📡 Fetching session with params:', { ambulanceId: ambulance.id, limit: 1 });
         const response = await patientService.getAllSessions({
           ambulanceId: ambulance.id,
-          status: 'active',
           limit: 1
         });
         

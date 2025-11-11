@@ -200,7 +200,7 @@ export const Ambulances = () => {
       // Set ambulances quickly. Assigned users are fetched on demand (when opening assignment modal)
       setAmbulances(ambulancesData);
       // clear assignments cache to avoid heavy per-ambulance network calls here
-      setAmbulanceAssignments({});
+      const assignments = {};
       setAmbulanceAssignments(assignments);
 
       // Cache the result (ambulances list + assignments) for this scope/tab with timestamp

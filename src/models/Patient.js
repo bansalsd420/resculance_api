@@ -32,24 +32,33 @@ class PatientModel {
 
   static async findById(id) {
     // By default only return active patients. Pass { includeInactive: true } to override.
-    const [rows] = await db.query('SELECT * FROM patients WHERE id = ? AND is_active = TRUE', [id]);
+    const [rows] = await db.query(
+      'SELECT *, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE id = ? AND is_active = TRUE', 
+      [id]
+    );
     return rows[0];
   }
 
   // Return patient regardless of is_active flag (useful for activate endpoint)
   static async findByIdIncludeInactive(id) {
-    const [rows] = await db.query('SELECT * FROM patients WHERE id = ?', [id]);
+    const [rows] = await db.query(
+      'SELECT *, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE id = ?', 
+      [id]
+    );
     return rows[0];
   }
 
   static async findByCode(code) {
-    const [rows] = await db.query('SELECT * FROM patients WHERE patient_code = ? AND is_active = TRUE', [code]);
+    const [rows] = await db.query(
+      'SELECT *, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE patient_code = ? AND is_active = TRUE', 
+      [code]
+    );
     return rows[0];
   }
 
   static async findAll(filters = {}) {
     // Include latest session status per patient using a correlated subquery to avoid extra queries
-    let query = `SELECT p.*, (
+    let query = `SELECT p.*, IF(p.is_active = TRUE, "active", "inactive") as status, (
       SELECT ps.status FROM patient_sessions ps WHERE ps.patient_id = p.id ORDER BY ps.created_at DESC LIMIT 1
     ) as latest_session_status FROM patients p WHERE 1=1`;
     const params = [];
