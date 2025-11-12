@@ -270,6 +270,22 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
     }
   }, [localStream]);
 
+  // Ensure remote video elements get the streams when remoteStreams changes
+  useEffect(() => {
+    console.log('[VideoCallSFU] Remote streams updated:', remoteStreams.size);
+    
+    remoteStreams.forEach((stream, userId) => {
+      const videoElement = document.querySelector(`[data-user-id="${userId}"]`);
+      if (videoElement && stream) {
+        console.log(`[VideoCallSFU] Attaching stream for user ${userId}`);
+        videoElement.srcObject = stream;
+        videoElement.play().catch(err => {
+          console.error(`[VideoCallSFU] Failed to play remote video for user ${userId}:`, err);
+        });
+      }
+    });
+  }, [remoteStreams]);
+
   // Consume a producer (receive remote stream)
   const consumeProducer = async (producerInfo) => {
     try {
@@ -587,10 +603,13 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                       <video
                         autoPlay
                         playsInline
+                        muted={false}
                         className="w-full h-full object-cover"
+                        data-user-id={participant.userId}
                         ref={(el) => {
                           if (el && remoteStreams.get(participant.userId)) {
                             el.srcObject = remoteStreams.get(participant.userId);
+                            el.play().catch(err => console.error('Play error:', err));
                           }
                         }}
                       />
@@ -651,10 +670,13 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                         <video
                           autoPlay
                           playsInline
+                          muted={false}
                           className="w-full h-full object-cover"
+                          data-user-id={participant.userId}
                           ref={(el) => {
                             if (el && remoteStreams.get(participant.userId)) {
                               el.srcObject = remoteStreams.get(participant.userId);
+                              el.play().catch(err => console.error('Play error:', err));
                             }
                           }}
                         />
