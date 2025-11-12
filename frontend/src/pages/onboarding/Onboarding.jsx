@@ -204,7 +204,7 @@ export const Onboarding = () => {
       if (!hospitalsList || hospitalsList.length === 0) {
         await fetchHospitals();
         // Wait a bit for state to update, or fetch directly
-        const resp = await organizationService.getAll();
+        const resp = await organizationService.getAll({ type: 'HOSPITAL' });
         const allOrgs = resp.data?.data?.organizations || resp.data?.organizations || resp.data || [];
         hospitalsList = allOrgs.filter(org => {
           const orgType = (org.type || '').toString().toLowerCase();
