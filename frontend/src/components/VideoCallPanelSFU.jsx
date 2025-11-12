@@ -222,13 +222,25 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
         // Listen for new producers
         socketService.socket.on('newProducer', async (data) => {
           addDebug(`New producer from user ${data.userId}: ${data.kind}`);
-          await consumeProducer(data);
+          if (data && data.producerId && data.userId && data.kind) {
+            await consumeProducer(data);
+          }
         });
 
         // Listen for users joining/leaving
         socketService.onVideoRoomJoined(handleVideoRoomJoined);
         socketService.onUserJoinedVideo(handleUserJoined);
         socketService.onUserLeftVideo(handleUserLeft);
+        // Listen for participant list updates (optional, if backend supports)
+        if (socketService.onParticipantsUpdated) {
+          socketService.onParticipantsUpdated((data) => {
+            const updated = (data.participants || []).map(p => ({
+              userId: p.id || p.userId,
+              userName: `${p.firstName || ''} ${p.lastName || ''}`.trim()
+            }));
+            setParticipants(updated);
+          });
+        }
 
         setConnectionStatus('connected');
         hasJoinedRoom.current = true;
@@ -345,26 +357,26 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
       // Add track to remote stream
       setRemoteStreams(prev => {
         const copy = new Map(prev);
-        let stream = copy.get(userId);
-        
-        if (!stream) {
-          stream = new MediaStream();
+        // If already exists, add track to existing stream
+        if (copy.has(userId)) {
+          const stream = copy.get(userId);
+          stream.addTrack(consumer.track);
           copy.set(userId, stream);
+        } else {
+          // Create new stream for this user
+          const newStream = new MediaStream([consumer.track]);
+          copy.set(userId, newStream);
         }
-        
-        stream.addTrack(consumer.track);
         addDebug(`Added ${kind} track to stream for user ${userId}`);
         return copy;
       });
 
       // Update participants if not already added
       setParticipants(prev => {
+        // Only add if not present
         const exists = prev.find(p => p.userId === userId);
         if (!exists) {
-          return [...prev, { 
-            userId, 
-            userName: producerInfo.userName || `User ${userId}` 
-          }];
+          return [...prev, { userId, userName: producerInfo.userName || `User ${userId}` }];
         }
         return prev;
       });
@@ -405,6 +417,13 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
       const copy = new Map(prev);
       copy.delete(data.userId);
       return copy;
+    });
+    // Remove consumer for this user
+    consumers.current.forEach((consumer, id) => {
+      if (consumer.appData && consumer.appData.userId === data.userId) {
+        consumer.close();
+        consumers.current.delete(id);
+      }
     });
   };
 
@@ -549,57 +568,99 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
         {/* Video Grid */}
         <div className="flex-1 flex items-center justify-center p-6 overflow-hidden">
           <div className="w-full h-full max-w-7xl mx-auto">
-            {participants.length === 0 && (
-              <div className="relative w-full h-full bg-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+            {/* Always show local video as first grid item, then remote participants */}
+            <div
+              className={
+                participants.length === 0
+                  ? "relative w-full h-full bg-gray-800 rounded-2xl overflow-hidden shadow-2xl"
+                  : participants.length <= 3
+                  ? "grid grid-cols-2 gap-4 h-full"
+                  : "grid grid-cols-3 gap-3 h-full auto-rows-fr"
+              }
+            >
+              {/* Local video always first */}
+              <div className={
+                participants.length === 0
+                  ? "relative w-full h-full"
+                  : participants.length <= 3
+                  ? "relative bg-gray-800 rounded-2xl overflow-hidden shadow-xl"
+                  : "relative bg-gray-800 rounded-xl overflow-hidden"
+              }>
                 {localStream ? (
                   <>
-                    <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                    <video
+                      ref={
+                        participants.length === 0
+                          ? localVideoRef
+                          : participants.length <= 3
+                          ? localVideoRef2
+                          : localVideoRef3
+                      }
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
                     {!isVideoEnabled && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900">
-                        <VideoOff className="w-16 h-16 text-gray-500 mb-4" />
-                        <p className="text-gray-400">{user?.name || 'You'}</p>
+                        <VideoOff className={
+                          participants.length === 0
+                            ? "w-16 h-16 text-gray-500 mb-4"
+                            : participants.length <= 3
+                            ? "w-12 h-12 text-gray-600"
+                            : "w-8 h-8 text-gray-600"
+                        } />
+                        {participants.length === 0 && (
+                          <p className="text-gray-400">{user?.name || 'You'}</p>
+                        )}
                       </div>
                     )}
                   </>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white"></div>
+                    <div className={
+                      participants.length === 0
+                        ? "animate-spin rounded-full h-16 w-16 border-b-2 border-white"
+                        : participants.length <= 3
+                        ? "animate-spin rounded-full h-12 w-12 border-b-2 border-white"
+                        : "animate-spin rounded-full h-8 w-8 border-b-2 border-white"
+                    }></div>
                   </div>
                 )}
-                <div className="absolute bottom-6 left-6 bg-black/70 backdrop-blur-md px-4 py-2 rounded-xl">
-                  <p className="text-white font-medium">{user?.name || 'You'}</p>
-                </div>
-              </div>
-            )}
-
-            {participants.length > 0 && participants.length <= 3 && (
-              <div className="grid grid-cols-2 gap-4 h-full">
-                <div className="relative bg-gray-800 rounded-2xl overflow-hidden shadow-xl">
-                  {localStream ? (
-                    <>
-                      <video ref={localVideoRef2} autoPlay playsInline muted className="w-full h-full object-cover" />
-                      {!isVideoEnabled && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                          <VideoOff className="w-12 h-12 text-gray-600" />
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-                    </div>
-                  )}
-                  <div className="absolute bottom-4 left-4 bg-black/70 px-3 py-1.5 rounded-lg">
-                    <p className="text-white text-sm font-medium">{user?.name || 'You'}</p>
+                <div className={
+                  participants.length === 0
+                    ? "absolute bottom-6 left-6 bg-black/70 backdrop-blur-md px-4 py-2 rounded-xl"
+                    : participants.length <= 3
+                    ? "absolute bottom-4 left-4 bg-black/70 px-3 py-1.5 rounded-lg"
+                    : "absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs text-white"
+                }>
+                  <p className={
+                    participants.length === 0
+                      ? "text-white font-medium"
+                      : participants.length <= 3
+                      ? "text-white text-sm font-medium"
+                      : "text-white"
+                  }>{user?.name || 'You'}</p>
+                  {participants.length <= 3 && participants.length > 0 && (
                     <p className="text-gray-400 text-xs">
                       {localStream ? `${localStream.getTracks().length} tracks` : 'No stream'}
                     </p>
-                  </div>
+                  )}
                 </div>
+              </div>
 
-                {participants.map((participant) => (
-                  <div key={participant.userId} className="relative bg-gray-800 rounded-2xl overflow-hidden shadow-xl">
-                    {remoteStreams.get(participant.userId) ? (
+              {/* Remote participants */}
+              {participants.map((participant) => (
+                <div
+                  key={participant.userId}
+                  className={
+                    participants.length <= 3
+                      ? "relative bg-gray-800 rounded-2xl overflow-hidden shadow-xl"
+                      : "relative bg-gray-800 rounded-xl overflow-hidden"
+                  }
+                >
+                  {remoteStreams.get(participant.userId) ? (
+                    <>
                       <video
                         autoPlay
                         playsInline
@@ -613,93 +674,58 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                           }
                         }}
                       />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mb-3 mx-auto">
-                            <span className="text-white text-2xl">{participant.userName?.charAt(0) || '?'}</span>
-                          </div>
-                          <p className="text-gray-400">{participant.userName}</p>
-                          <p className="text-gray-500 text-xs mt-1">Connecting...</p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="absolute bottom-4 left-4 bg-black/70 px-3 py-1.5 rounded-lg">
-                      <p className="text-white text-sm font-medium">{participant.userName}</p>
-                    </div>
-                    {/* Active Speaker Indicator */}
-                    {remoteStreams.get(participant.userId) && (
-                      <div className="absolute top-4 left-4">
-                        <div className="bg-green-500/80 px-2 py-1 rounded-lg flex items-center gap-1">
-                          <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse"></div>
+                      <div className={
+                        participants.length <= 3
+                          ? "absolute top-4 left-4"
+                          : "absolute top-2 left-2"
+                      }>
+                        <div className={
+                          participants.length <= 3
+                            ? "bg-green-500/80 px-2 py-1 rounded-lg flex items-center gap-1"
+                            : "bg-green-500/80 px-1.5 py-0.5 rounded flex items-center gap-1"
+                        }>
+                          <div className={
+                            participants.length <= 3
+                              ? "w-2 h-2 bg-green-300 rounded-full animate-pulse"
+                              : "w-1.5 h-1.5 bg-green-300 rounded-full animate-pulse"
+                          }></div>
                           <span className="text-white text-xs font-medium">Live</span>
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {participants.length > 3 && (
-              <div className="grid grid-cols-3 gap-3 h-full auto-rows-fr">
-                <div className="relative bg-gray-800 rounded-xl overflow-hidden">
-                  {localStream ? (
-                    <>
-                      <video ref={localVideoRef3} autoPlay playsInline muted className="w-full h-full object-cover" />
-                      {!isVideoEnabled && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-                          <VideoOff className="w-8 h-8 text-gray-600" />
-                        </div>
-                      )}
                     </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                      <div className="text-center">
+                        {participants.length <= 3 ? (
+                          <div className="w-20 h-20 bg-gray-700 rounded-full flex items-center justify-center mb-3 mx-auto">
+                            <span className="text-white text-2xl">{participant.userName?.charAt(0) || '?'}</span>
+                          </div>
+                        ) : (
+                          <span className="text-white text-lg">{participant.userName?.charAt(0) || '?'}</span>
+                        )}
+                        <p className={
+                          participants.length <= 3
+                            ? "text-gray-400"
+                            : "text-gray-500 text-xs mt-1"
+                        }>{participant.userName}</p>
+                        <p className="text-gray-500 text-xs mt-1">Connecting...</p>
+                      </div>
                     </div>
                   )}
-                  <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs text-white">
-                    {user?.name || 'You'}
+                  <div className={
+                    participants.length <= 3
+                      ? "absolute bottom-4 left-4 bg-black/70 px-3 py-1.5 rounded-lg"
+                      : "absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs text-white"
+                  }>
+                    <p className={
+                      participants.length <= 3
+                        ? "text-white text-sm font-medium"
+                        : "text-white"
+                    }>{participant.userName}</p>
                   </div>
                 </div>
-
-                {participants.map((participant) => (
-                  <div key={participant.userId} className="relative bg-gray-800 rounded-xl overflow-hidden">
-                    {remoteStreams.get(participant.userId) ? (
-                      <>
-                        <video
-                          autoPlay
-                          playsInline
-                          muted={false}
-                          className="w-full h-full object-cover"
-                          data-user-id={participant.userId}
-                          ref={(el) => {
-                            if (el && remoteStreams.get(participant.userId)) {
-                              el.srcObject = remoteStreams.get(participant.userId);
-                              el.play().catch(err => console.error('Play error:', err));
-                            }
-                          }}
-                        />
-                        <div className="absolute top-2 left-2">
-                          <div className="bg-green-500/80 px-1.5 py-0.5 rounded flex items-center gap-1">
-                            <div className="w-1.5 h-1.5 bg-green-300 rounded-full animate-pulse"></div>
-                            <span className="text-white text-xs font-medium">Live</span>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="text-center">
-                          <span className="text-white text-lg">{participant.userName?.charAt(0) || '?'}</span>
-                          <p className="text-gray-500 text-xs mt-1">Connecting...</p>
-                        </div>
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 left-2 bg-black/70 px-2 py-1 rounded text-xs text-white">{participant.userName}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         </div>
 
