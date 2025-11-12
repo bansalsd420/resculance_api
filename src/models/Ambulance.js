@@ -99,11 +99,13 @@ class AmbulanceModel {
 
   static async findMappedToUser(userId) {
     const [rows] = await db.query(
-      `SELECT a.*, o.name as organization_name, o.code as organization_code
+      `SELECT a.*, a.organization_id as organizationId, 
+              o.name as organization_name, o.code as organization_code, o.type as organization_type
        FROM ambulances a
        JOIN organizations o ON a.organization_id = o.id
        JOIN ambulance_assignments aa ON a.id = aa.ambulance_id
-       WHERE aa.user_id = ? AND aa.is_active = TRUE AND (a.status = 'active' OR a.status = 'available')`,
+       WHERE aa.user_id = ? AND aa.is_active = TRUE 
+       AND (a.status IN ('active', 'available', 'onboarded', 'in_transit', 'on_trip'))`,
       [userId]
     );
     return rows;

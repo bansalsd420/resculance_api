@@ -1268,7 +1268,10 @@ export const Ambulances = () => {
         size="xl"
       >
         <div className="space-y-6">
-          {assignmentAmbulance?.current_hospital_id && assignmentAmbulance?.current_hospital_id !== user?.organizationId && (
+          {/* Only show warning if ambulance is locked by ANOTHER hospital AND it's not owned by current hospital */}
+          {assignmentAmbulance?.current_hospital_id && 
+           assignmentAmbulance?.current_hospital_id !== user?.organizationId && 
+           assignmentAmbulance?.organization_id !== user?.organizationId && (
             <div className="p-4 bg-warning/10 border-2 border-warning/30 rounded-xl flex items-start gap-3">
               <div className="w-8 h-8 bg-warning/20 rounded-lg flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="w-5 h-5 text-warning" />

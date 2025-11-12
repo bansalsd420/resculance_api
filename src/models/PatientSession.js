@@ -101,8 +101,19 @@ class PatientSessionModel {
     if (filters.hospitalId || filters.organizationId) {
       // If caller requests allowDestination, include sessions where the destination hospital
       // equals the provided organizationId (useful for hospital users who should see inbound trips).
-      if (filters.allowDestination) {
+      // If caller requests allowAmbulanceOwner, include sessions where the ambulance's organization
+      // equals the provided organizationId (useful for fleet owners to see sessions from their ambulances).
+      if (filters.allowDestination && filters.allowAmbulanceOwner) {
+        query += ' AND (ps.organization_id = ? OR ps.destination_hospital_id = ? OR a.organization_id = ?)';
+        params.push(filters.hospitalId || filters.organizationId);
+        params.push(filters.hospitalId || filters.organizationId);
+        params.push(filters.hospitalId || filters.organizationId);
+      } else if (filters.allowDestination) {
         query += ' AND (ps.organization_id = ? OR ps.destination_hospital_id = ?)';
+        params.push(filters.hospitalId || filters.organizationId);
+        params.push(filters.hospitalId || filters.organizationId);
+      } else if (filters.allowAmbulanceOwner) {
+        query += ' AND (ps.organization_id = ? OR a.organization_id = ?)';
         params.push(filters.hospitalId || filters.organizationId);
         params.push(filters.hospitalId || filters.organizationId);
       } else {

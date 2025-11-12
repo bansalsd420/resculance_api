@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const NotificationService = require('../services/notificationService');
 const ActivityLogService = require('../services/activityLogService');
 const pool = require('../config/database');
+const db = require('../config/database');
 
 class AmbulanceController {
   static async create(req, res, next) {
@@ -58,10 +59,8 @@ class AmbulanceController {
       const { isMedicalStaff } = require('../config/permissions');
 
       // Medical staff (doctors/paramedics) can only see ambulances assigned to them
-      // except when explicitly requesting the partnered view (they should be able to
-      // view partnered ambulances list too). If partnered=true is requested, fall
-      // through to partnered handling below; otherwise return only mapped ambulances.
-      if (isMedicalStaff(req.user.role) && req.query.partnered !== 'true') {
+      // This applies to both their organization's ambulances AND partnered ambulances
+      if (isMedicalStaff(req.user.role)) {
         // Medical staff should see only ambulances assigned to them.
         // However, when they filter by status (tabs like 'available', 'inactive'),
         // apply that status filter server-side so the tab contents are accurate.
@@ -70,6 +69,38 @@ class AmbulanceController {
 
         if (req.query.status) {
           ambulances = ambulances.filter(a => String(a.status) === String(req.query.status));
+        }
+
+        // If requesting partnered view, filter to show only partnered ambulances from the assigned list
+        if (req.query.partnered === 'true') {
+          // Get the hospital ID to check partnerships
+          let hospitalIdForPartnered;
+          if (req.user.organizationType === 'hospital') {
+            hospitalIdForPartnered = req.user.organizationId;
+          } else if (req.user.organizationType === 'fleet_owner') {
+            // Fleet medical staff viewing "partnered" means ambulances assigned to them
+            // that are going to hospitals they partner with - but they still only see assigned ones
+            // So we don't need special filtering here, just return their assignments
+            hospitalIdForPartnered = null;
+          }
+
+          if (hospitalIdForPartnered) {
+            // Filter to only show ambulances that belong to partnered fleets
+            // Get active partnerships
+            const [partnerships] = await db.query(
+              'SELECT fleet_id FROM partnerships WHERE hospital_id = ? AND status = "active"',
+              [hospitalIdForPartnered]
+            );
+            const partneredFleetIds = partnerships.map(p => p.fleet_id);
+            
+            // Filter ambulances to only those from partnered fleets
+            ambulances = ambulances.filter(a => partneredFleetIds.includes(a.organizationId || a.organization_id));
+          }
+        } else {
+          // Regular view - filter to only show ambulances from their own organization
+          ambulances = ambulances.filter(a => 
+            (a.organizationId || a.organization_id) === req.user.organizationId
+          );
         }
 
         const total = ambulances.length;
@@ -453,9 +484,19 @@ class AmbulanceController {
             return next(new AppError('Your hospital does not have a partnership with this ambulance\'s fleet owner', 403));
           }
           
-          // If ambulance is currently locked by another hospital, prevent assignment
+          // If ambulance is currently locked by another hospital (not this one), prevent assignment
+          // Allow if current_hospital_id is null (available) or matches the requesting hospital
           if (ambulance.current_hospital_id && ambulance.current_hospital_id !== hospitalIdToValidate) {
-            return next(new AppError('Ambulance is currently active for another hospital and cannot be assigned', 403));
+            // Additionally check if the ambulance has an active session going to a different hospital
+            const [activeSessions] = await db.query(
+              `SELECT destination_hospital_id FROM patient_sessions 
+               WHERE ambulance_id = ? AND status IN ('onboarded', 'in_transit') LIMIT 1`,
+              [id]
+            );
+            
+            if (activeSessions.length > 0 && activeSessions[0].destination_hospital_id !== hospitalIdToValidate) {
+              return next(new AppError('Ambulance is currently active for another hospital and cannot be assigned', 403));
+            }
           }
         }
         // Case 3: Hospital trying to assign to another hospital's ambulance - not allowed

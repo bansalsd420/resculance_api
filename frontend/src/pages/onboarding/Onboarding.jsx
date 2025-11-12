@@ -198,7 +198,21 @@ export const Onboarding = () => {
       if (!userOrgId) return;
       
       console.log('🏥 Fetching partnered hospitals for fleet org:', userOrgId);
-      console.log('🏥 All hospitals available:', hospitals.map(h => `${h.id}:${h.name}`));
+      
+      // Ensure we have the hospitals list first
+      let hospitalsList = hospitals;
+      if (!hospitalsList || hospitalsList.length === 0) {
+        await fetchHospitals();
+        // Wait a bit for state to update, or fetch directly
+        const resp = await organizationService.getAll();
+        const allOrgs = resp.data?.data?.organizations || resp.data?.organizations || resp.data || [];
+        hospitalsList = allOrgs.filter(org => {
+          const orgType = (org.type || '').toString().toLowerCase();
+          return orgType === 'hospital';
+        });
+      }
+      
+      console.log('🏥 All hospitals available:', hospitalsList.map(h => `${h.id}:${h.name}`));
       
       const resp = await collaborationService.getAll({ status: 'approved' });
       const collabData = resp.data?.data?.requests || resp.data?.requests || resp.data || [];
@@ -222,13 +236,8 @@ export const Onboarding = () => {
       // Normalize IDs to numbers for reliable comparison
       const normalizedHospitalIds = hospitalIds.map(id => Number(id));
 
-      // Ensure we have the hospitals list; if not, fetch it
-      if (!hospitals || hospitals.length === 0) {
-        await fetchHospitals();
-      }
-
       // Filter hospitals to only show partnered ones (compare as numbers)
-      const partnered = (hospitals || []).filter(h => normalizedHospitalIds.includes(Number(h.id)));
+      const partnered = (hospitalsList || []).filter(h => normalizedHospitalIds.includes(Number(h.id)));
       console.log('🏥 Partnered hospitals:', partnered.map(h => h.name));
       setPartneredHospitals(partnered);
     } catch (error) {

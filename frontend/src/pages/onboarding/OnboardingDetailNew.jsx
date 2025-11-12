@@ -56,7 +56,8 @@ export default function OnboardingDetail() {
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
-  const [activeTab, setActiveTab] = useState('notes');
+  const [mainTab, setMainTab] = useState('vitals'); // vitals | communications | devices | controls | details
+  const [activeTab, setActiveTab] = useState('notes'); // notes | meds | files (for communications tab)
   const [controls, setControls] = useState({
     mainPower: false,
     emergencyLights: false,
@@ -397,206 +398,167 @@ export default function OnboardingDetail() {
       </div>
 
       <div className="px-6 pt-6 space-y-6">
-        {/* Main Grid: Camera Feeds + Live Meeting */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Camera Feeds - 2/3 width */}
-          <Card className="lg:col-span-2 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-text flex items-center gap-2">
-                <Camera className="w-5 h-5" /> Live Camera Feeds
-              </h2>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => setShowCameraModal(true)}>
-                  <Camera className="w-4 h-4 mr-1" /> View All
-                </Button>
-                <Button size="sm" variant="outline" onClick={fetchSessionDetails}>
-                  Refresh
-                </Button>
-              </div>
-            </div>
-
-            <LiveCameraFeed 
-              ambulance={ambulance}
-              session={session}
-              onCameraClick={(device) => {
-                setSelectedCamera(device);
-                setShowCameraModal(true);
-              }}
-            />
-          </Card>
-
-          {/* Live Meeting - 1/3 width */}
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-text flex items-center gap-2"><Video className="w-5 h-5" /> Live Meeting</h2>
-            </div>
-            <div className="space-y-4">
-              <p className="text-sm text-text-secondary">Telemedicine & dispatch bridge</p>
-
-              <div className="aspect-video bg-gray-900 rounded-xl flex flex-col items-center justify-center text-white/60">
-                <VideoIcon className="w-16 h-16 mb-3" />
-                <p className="text-sm font-medium mb-1">{isActive ? 'Active session' : 'No active session'}</p>
-                <Button size="sm" onClick={() => setShowVideoCall(true)} className="mt-2">Join Session</Button>
-              </div>
-            </div>
-          </Card>
+        {/* Main Tabs */}
+        <div className="bg-background-card rounded-lg border border-border p-1">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setMainTab('vitals')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                mainTab === 'vitals'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text hover:bg-background'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              Live Vitals & CCTV
+            </button>
+            <button
+              onClick={() => setMainTab('communications')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                mainTab === 'communications'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text hover:bg-background'
+              }`}
+            >
+              <MessageCircle className="w-4 h-4" />
+              Communications
+            </button>
+            <button
+              onClick={() => setMainTab('devices')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                mainTab === 'devices'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text hover:bg-background'
+              }`}
+            >
+              <MapPin className="w-4 h-4" />
+              Devices
+            </button>
+            <button
+              onClick={() => setMainTab('controls')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                mainTab === 'controls'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text hover:bg-background'
+              }`}
+            >
+              <Power className="w-4 h-4" />
+              Controls
+            </button>
+            <button
+              onClick={() => setMainTab('details')}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                mainTab === 'details'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-secondary hover:text-text hover:bg-background'
+              }`}
+            >
+              <UserPlus className="w-4 h-4" />
+              Details
+            </button>
+          </div>
         </div>
 
-        {/* Ambulance & Crew Info Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Ambulance Details */}
-          <Card className="p-6">
-            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
-              <AmbulanceIcon className="w-5 h-5" /> Ambulance Details
-            </h2>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-secondary mb-1">Registration</p>
-                  <p className="text-sm font-medium text-text">{session.ambulance_code || session.ambulanceCode || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-secondary mb-1">Model</p>
-                  <p className="text-sm font-medium text-text">{session.vehicle_model || session.vehicleModel || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-secondary mb-1">Type</p>
-                  <p className="text-sm font-medium text-text">{session.vehicle_type || session.vehicleType || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-secondary mb-1">Owner</p>
-                  <p className="text-sm font-medium text-text">{session.ambulance_owner_name || session.ambulanceOwnerName || 'N/A'}</p>
+        {/* TAB 1: Live Vitals & CCTV */}
+        {mainTab === 'vitals' && (
+          <div className="space-y-6">
+            {/* Camera Feeds */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-text flex items-center gap-2">
+                  <Camera className="w-5 h-5" /> Live Camera Feeds
+                </h2>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setShowCameraModal(true)}>
+                    <Camera className="w-4 h-4 mr-1" /> View All
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={fetchSessionDetails}>
+                    Refresh
+                  </Button>
                 </div>
               </div>
-            </div>
-          </Card>
 
-          {/* Crew Members */}
-          <Card className="p-6">
-            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
-              <UserPlus className="w-5 h-5" /> Crew Members
-            </h2>
-            {session.crew && session.crew.length > 0 ? (
+              <LiveCameraFeed 
+                ambulance={ambulance}
+                session={session}
+                onCameraClick={(device) => {
+                  setSelectedCamera(device);
+                  setShowCameraModal(true);
+                }}
+              />
+            </Card>
+
+            {/* Patient Status with Vitals */}
+            <Card className="p-6">
+              <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><Activity className="w-5 h-5" /> Patient Status</h2>
+              <p className="text-xs text-text-secondary mb-4">Session: {session.session_code || session.sessionCode}</p>
+
+              <div className="mb-4">
+                <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium ${
+                  session.status?.toLowerCase() === 'onboarded' ? 'bg-primary/10 text-primary' : session.status?.toLowerCase() === 'in_transit' ? 'bg-warning/10 text-warning' : session.status?.toLowerCase() === 'offboarded' ? 'bg-success/10 text-success' : 'bg-gray-100 text-gray-700'
+                }`}>
+                  <span className="w-2 h-2 rounded-full mr-2 animate-pulse" style={{ backgroundColor: session.status?.toLowerCase() === 'onboarded' ? 'var(--color-primary)' : session.status?.toLowerCase() === 'in_transit' ? 'var(--color-warning)' : session.status?.toLowerCase() === 'offboarded' ? 'var(--color-success)' : 'gray' }} />
+                  {session.status?.toUpperCase() || 'UNKNOWN'}
+                </span>
+              </div>
+
               <div className="space-y-3">
-                {session.doctors && session.doctors.length > 0 && (
-                  <div>
-                    <p className="text-xs text-secondary mb-2">Doctors</p>
-                    <div className="flex flex-wrap gap-2">
-                      {session.doctors.map((doc) => (
-                        <span 
-                          key={doc.id} 
-                          className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
-                        >
-                          {doc.first_name || doc.firstName} {doc.last_name || doc.lastName}
-                        </span>
-                      ))}
-                    </div>
+                {session.status?.toLowerCase() === 'offboarded' ? (
+                  <div className="text-center p-4 bg-success/10 rounded-lg">
+                    <p className="text-sm text-success font-medium">Patient Offboarded</p>
+                    <p className="text-xs text-text-secondary mt-1">Session completed</p>
                   </div>
-                )}
-                {session.paramedics && session.paramedics.length > 0 && (
-                  <div>
-                    <p className="text-xs text-secondary mb-2">Paramedics</p>
-                    <div className="flex flex-wrap gap-2">
-                      {session.paramedics.map((para) => (
-                        <span 
-                          key={para.id} 
-                          className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
-                        >
-                          {para.first_name || para.firstName} {para.last_name || para.lastName}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {session.drivers && session.drivers.length > 0 && (
-                  <div>
-                    <p className="text-xs text-secondary mb-2">Drivers</p>
-                    <div className="flex flex-wrap gap-2">
-                      {session.drivers.map((driver) => (
-                        <span 
-                          key={driver.id} 
-                          className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200"
-                        >
-                          {driver.first_name || driver.firstName} {driver.last_name || driver.lastName}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                ) : (
+                  <Button variant="outline" className="w-full justify-center" onClick={handleOffboardPatient} disabled={!isActive}>Offboard Patient</Button>
                 )}
               </div>
-            ) : (
-              <p className="text-sm text-secondary">No crew members assigned</p>
-            )}
-          </Card>
-        </div>
 
-        {/* Second Row: Patient Flow, Medical Reports, Live Location */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Patient Flow */}
-          <Card className="p-6">
-            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><Activity className="w-5 h-5" /> Patient Status</h2>
-            <p className="text-xs text-text-secondary mb-4">Session: {session.session_code || session.sessionCode}</p>
-
-            <div className="mb-4">
-              <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium ${
-                session.status?.toLowerCase() === 'onboarded' ? 'bg-primary/10 text-primary' : session.status?.toLowerCase() === 'in_transit' ? 'bg-warning/10 text-warning' : session.status?.toLowerCase() === 'offboarded' ? 'bg-success/10 text-success' : 'bg-gray-100 text-gray-700'
-              }`}>
-                <span className="w-2 h-2 rounded-full mr-2 animate-pulse" style={{ backgroundColor: session.status?.toLowerCase() === 'onboarded' ? 'var(--color-primary)' : session.status?.toLowerCase() === 'in_transit' ? 'var(--color-warning)' : session.status?.toLowerCase() === 'offboarded' ? 'var(--color-success)' : 'gray' }} />
-                {session.status?.toUpperCase() || 'UNKNOWN'}
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {session.status?.toLowerCase() === 'offboarded' ? (
-                <div className="text-center p-4 bg-success/10 rounded-lg">
-                  <p className="text-sm text-success font-medium">Patient Offboarded</p>
-                  <p className="text-xs text-text-secondary mt-1">Session completed</p>
-                </div>
-              ) : (
-                <Button variant="outline" className="w-full justify-center" onClick={handleOffboardPatient} disabled={!isActive}>Offboard Patient</Button>
-              )}
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-border">
-              <h3 className="text-sm font-semibold text-text mb-3">Patient Vitals</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-background rounded-lg p-3 border border-border">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-text-secondary">Heart Rate</span>
-                    <Heart className="w-4 h-4 text-error" />
+              <div className="mt-6 pt-6 border-t border-border">
+                <h3 className="text-sm font-semibold text-text mb-3">Patient Vitals</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-background rounded-lg p-3 border border-border">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-text-secondary">Heart Rate</span>
+                      <Heart className="w-4 h-4 text-error" />
+                    </div>
+                    <p className="text-lg font-bold text-text">{vitals.heartRate} <span className="text-sm font-normal text-text-secondary">bpm</span></p>
                   </div>
-                  <p className="text-lg font-bold text-text">{vitals.heartRate} <span className="text-sm font-normal text-text-secondary">bpm</span></p>
-                </div>
-                
-                <div className="bg-background rounded-lg p-3 border border-border">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-text-secondary">SpO₂</span>
-                    <Activity className="w-4 h-4 text-success" />
+                  
+                  <div className="bg-background rounded-lg p-3 border border-border">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-text-secondary">SpO₂</span>
+                      <Activity className="w-4 h-4 text-success" />
+                    </div>
+                    <p className="text-lg font-bold text-text">{vitals.spo2}<span className="text-sm font-normal text-text-secondary">%</span></p>
                   </div>
-                  <p className="text-lg font-bold text-text">{vitals.spo2}<span className="text-sm font-normal text-text-secondary">%</span></p>
-                </div>
-                
-                <div className="bg-background rounded-lg p-3 border border-border">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-text-secondary">Blood Pressure</span>
-                    <Activity className="w-4 h-4 text-primary" />
+                  
+                  <div className="bg-background rounded-lg p-3 border border-border">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-text-secondary">Blood Pressure</span>
+                      <Activity className="w-4 h-4 text-primary" />
+                    </div>
+                    <p className="text-lg font-bold text-text">{vitals.bloodPressure}</p>
                   </div>
-                  <p className="text-lg font-bold text-text">{vitals.bloodPressure}</p>
-                </div>
-                
-                <div className="bg-background rounded-lg p-3 border border-border">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-text-secondary">Temperature</span>
-                    <Activity className="w-4 h-4 text-warning" />
+                  
+                  <div className="bg-background rounded-lg p-3 border border-border">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-text-secondary">Temperature</span>
+                      <Activity className="w-4 h-4 text-warning" />
+                    </div>
+                    <p className="text-lg font-bold text-text">{vitals.temp}<span className="text-sm font-normal text-text-secondary">°C</span></p>
                   </div>
-                  <p className="text-lg font-bold text-text">{vitals.temp}<span className="text-sm font-normal text-text-secondary">°C</span></p>
                 </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
+        )}
 
-          {/* Medical Reports */}
-          <Card className="p-6">
+        {/* TAB 2: Communications */}
+        {mainTab === 'communications' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Medical Reports - 2/3 width */}
+              <Card className="lg:col-span-2 p-6">
             <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
               <Activity className="w-5 h-5" /> Medical Reports
             </h2>
@@ -1003,6 +965,29 @@ export default function OnboardingDetail() {
             </div>
           </Card>
 
+          {/* Live Meeting - 1/3 width */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-text flex items-center gap-2"><Video className="w-5 h-5" /> Live Meeting</h2>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-text-secondary">Telemedicine & dispatch bridge</p>
+
+              <div className="aspect-video bg-gray-900 rounded-xl flex flex-col items-center justify-center text-white/60">
+                <VideoIcon className="w-16 h-16 mb-3" />
+                <p className="text-sm font-medium mb-1">{isActive ? 'Active session' : 'No active session'}</p>
+                <Button size="sm" onClick={() => setShowVideoCall(true)} className="mt-2">Join Session</Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+          </div>
+        )}
+
+        {/* TAB 3: Devices */}
+        {mainTab === 'devices' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Live Location */}
           <Card className="p-6">
             <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><MapPin className="w-5 h-5" /> Live Location</h2>
@@ -1024,32 +1009,6 @@ export default function OnboardingDetail() {
             </div>
 
             <div className="mt-4 text-right"><p className="text-xs text-text-secondary">ETA 08 min</p></div>
-          </Card>
-        </div>
-
-        {/* Third Row: Ambulance Controls + SOS Data */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Ambulance Controls */}
-          <Card className="p-6">
-            <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><Activity className="w-5 h-5" /> Ambulance Controls</h2>
-            <p className="text-xs text-text-secondary mb-6">Switches & power systems</p>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[
-                { key: 'mainPower', icon: Power, label: 'Main Power', color: 'green' },
-                { key: 'emergencyLights', icon: Lightbulb, label: 'Emergency Lights', color: 'yellow' },
-                { key: 'siren', icon: Volume2, label: 'Siren', color: 'red' },
-                { key: 'airConditioning', icon: Wind, label: 'Air Conditioning', color: 'blue' },
-                { key: 'oxygenSupply', icon: Heart, label: 'Oxygen Supply', color: 'green' },
-                { key: 'cabinCamera', icon: Camera, label: 'Cabin Camera', color: 'purple' },
-              ].map(({ key, icon: Icon, label, color }) => (
-                <motion.button key={key} whileTap={{ scale: 0.95 }} onClick={() => toggleControl(key)} className={`p-4 rounded-xl border-2 transition-all ${controls[key] ? 'bg-opacity-100 border-opacity-100' : 'bg-background border-border hover:border-border-hover'}`}>
-                  <Icon className={`w-6 h-6 mb-2 mx-auto ${controls[key] ? 'text-text' : 'text-text-secondary'}`} />
-                  <p className={`text-xs font-medium text-center ${controls[key] ? 'text-text' : 'text-text-secondary'}`}>{label}</p>
-                  <p className="text-[10px] text-center mt-1 text-text-secondary">Manual</p>
-                </motion.button>
-              ))}
-            </div>
           </Card>
 
           {/* SOS Data */}
@@ -1098,6 +1057,129 @@ export default function OnboardingDetail() {
             <div className="mt-4 text-center"><p className="text-xs text-text-secondary">All data is for demo only</p></div>
           </Card>
         </div>
+          </div>
+        )}
+
+        {/* TAB 4: Controls */}
+        {mainTab === 'controls' && (
+          <div className="space-y-6">
+            {/* Ambulance Controls */}
+            <Card className="p-6">
+              <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2"><Activity className="w-5 h-5" /> Ambulance Controls</h2>
+              <p className="text-xs text-text-secondary mb-6">Switches & power systems</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {[
+                  { key: 'mainPower', icon: Power, label: 'Main Power', color: 'green' },
+                  { key: 'emergencyLights', icon: Lightbulb, label: 'Emergency Lights', color: 'yellow' },
+                  { key: 'siren', icon: Volume2, label: 'Siren', color: 'red' },
+                  { key: 'airConditioning', icon: Wind, label: 'Air Conditioning', color: 'blue' },
+                  { key: 'oxygenSupply', icon: Heart, label: 'Oxygen Supply', color: 'green' },
+                  { key: 'cabinCamera', icon: Camera, label: 'Cabin Camera', color: 'purple' },
+                ].map(({ key, icon: Icon, label, color }) => (
+                  <motion.button key={key} whileTap={{ scale: 0.95 }} onClick={() => toggleControl(key)} className={`p-4 rounded-xl border-2 transition-all ${controls[key] ? 'bg-opacity-100 border-opacity-100' : 'bg-background border-border hover:border-border-hover'}`}>
+                    <Icon className={`w-6 h-6 mb-2 mx-auto ${controls[key] ? 'text-text' : 'text-text-secondary'}`} />
+                    <p className={`text-xs font-medium text-center ${controls[key] ? 'text-text' : 'text-text-secondary'}`}>{label}</p>
+                    <p className="text-[10px] text-center mt-1 text-text-secondary">Manual</p>
+                  </motion.button>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* TAB 5: Details */}
+        {mainTab === 'details' && (
+          <div className="space-y-6">
+            {/* Ambulance & Crew Info Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Ambulance Details */}
+              <Card className="p-6">
+                <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+                  <AmbulanceIcon className="w-5 h-5" /> Ambulance Details
+                </h2>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-secondary mb-1">Registration</p>
+                      <p className="text-sm font-medium text-text">{session.ambulance_code || session.ambulanceCode || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary mb-1">Model</p>
+                      <p className="text-sm font-medium text-text">{session.vehicle_model || session.vehicleModel || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary mb-1">Type</p>
+                      <p className="text-sm font-medium text-text">{session.vehicle_type || session.vehicleType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-secondary mb-1">Owner</p>
+                      <p className="text-sm font-medium text-text">{session.organization_name || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Crew Members */}
+              <Card className="p-6">
+                <h2 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5" /> Crew Members
+                </h2>
+                {session.crew && session.crew.length > 0 ? (
+                  <div className="space-y-3">
+                    {session.doctors && session.doctors.length > 0 && (
+                      <div>
+                        <p className="text-xs text-secondary mb-2">Doctors</p>
+                        <div className="flex flex-wrap gap-2">
+                          {session.doctors.map((doc) => (
+                            <span 
+                              key={doc.id} 
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
+                            >
+                              {doc.first_name || doc.firstName} {doc.last_name || doc.lastName}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {session.paramedics && session.paramedics.length > 0 && (
+                      <div>
+                        <p className="text-xs text-secondary mb-2">Paramedics</p>
+                        <div className="flex flex-wrap gap-2">
+                          {session.paramedics.map((para) => (
+                            <span 
+                              key={para.id} 
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+                            >
+                              {para.first_name || para.firstName} {para.last_name || para.lastName}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {session.drivers && session.drivers.length > 0 && (
+                      <div>
+                        <p className="text-xs text-secondary mb-2">Drivers</p>
+                        <div className="flex flex-wrap gap-2">
+                          {session.drivers.map((driver) => (
+                            <span 
+                              key={driver.id} 
+                              className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200"
+                            >
+                              {driver.first_name || driver.firstName} {driver.last_name || driver.lastName}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-secondary">No crew members assigned</p>
+                )}
+              </Card>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Chat and Video Call Panels */}

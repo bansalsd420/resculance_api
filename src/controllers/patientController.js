@@ -736,6 +736,62 @@ class PatientController {
       // Get communications
       const communications = await CommunicationModel.findBySession(sessionId);
 
+      // Filter crew visibility based on user's organization
+      // Hospital users should see: their hospital's assigned crew + fleet owner's assigned crew
+      // Fleet users should see: their fleet's assigned crew + destination hospital's assigned crew
+      // Superadmin sees all crew
+      if (req.user.role !== 'superadmin' && session.crew && session.crew.length > 0) {
+        // Get the ambulance's fleet organization
+        const [ambRows] = await db.query(
+          'SELECT organization_id FROM ambulances WHERE id = ? LIMIT 1',
+          [session.ambulance_id]
+        );
+        const ambulanceFleetId = ambRows && ambRows[0] ? ambRows[0].organization_id : null;
+
+        // Get assigning organization for each crew member
+        const [crewWithOrgs] = await db.query(
+          `SELECT aa.user_id, aa.assigning_organization_id
+           FROM ambulance_assignments aa
+           WHERE aa.ambulance_id = ? AND aa.is_active = TRUE`,
+          [session.ambulance_id]
+        );
+        
+        const crewOrgMap = {};
+        crewWithOrgs.forEach(c => {
+          crewOrgMap[c.user_id] = c.assigning_organization_id;
+        });
+
+        // Filter crew based on user type
+        let allowedOrgIds = [];
+        
+        if (req.user.organizationType === 'hospital') {
+          // Hospital users see: their hospital's crew + fleet owner's crew
+          allowedOrgIds = [req.user.organizationId];
+          if (ambulanceFleetId) {
+            allowedOrgIds.push(ambulanceFleetId);
+          }
+        } else if (req.user.organizationType === 'fleet_owner') {
+          // Fleet users see: their fleet's crew + destination hospital's crew
+          allowedOrgIds = [req.user.organizationId];
+          if (session.destination_hospital_id) {
+            allowedOrgIds.push(session.destination_hospital_id);
+          }
+        }
+
+        // Filter crew arrays
+        const filterCrewByOrg = (crewArray) => {
+          return crewArray.filter(member => {
+            const assigningOrg = crewOrgMap[member.id];
+            return allowedOrgIds.includes(assigningOrg);
+          });
+        };
+
+        session.crew = filterCrewByOrg(session.crew);
+        session.doctors = filterCrewByOrg(session.doctors);
+        session.paramedics = filterCrewByOrg(session.paramedics);
+        session.drivers = filterCrewByOrg(session.drivers);
+      }
+
       res.json({
         success: true,
         data: {
@@ -823,6 +879,10 @@ class PatientController {
           if (req.user.organizationType === 'hospital') {
             filters.organizationId = req.user.organizationId;
             filters.allowDestination = true; // custom flag handled in model
+          } else if (req.user.organizationType === 'fleet_owner') {
+            // For fleet owners, include sessions where they own the ambulance (even if another org created the session)
+            filters.organizationId = req.user.organizationId;
+            filters.allowAmbulanceOwner = true; // custom flag handled in model
           } else {
             filters.organizationId = req.user.organizationId;
           }
