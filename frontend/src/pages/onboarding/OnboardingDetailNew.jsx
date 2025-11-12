@@ -35,7 +35,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import ChatPanel from '../../components/ChatPanel';
-import VideoCallPanel from '../../components/VideoCallPanel';
+import VideoCallPanelSFU from '../../components/VideoCallPanelSFU';
 import { LiveCameraFeed } from '../../components/LiveCameraFeed';
 import { patientService, ambulanceService, sessionService } from '../../services';
 import socketService from '../../services/socketService';
@@ -1184,7 +1184,7 @@ export default function OnboardingDetail() {
 
       {/* Chat and Video Call Panels */}
       <ChatPanel sessionId={sessionId} isOpen={showChat} onClose={() => setShowChat(false)} />
-      <VideoCallPanel 
+      <VideoCallPanelSFU 
         sessionId={sessionId} 
         isOpen={showVideoCall} 
         onClose={() => setShowVideoCall(false)}

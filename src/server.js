@@ -14,6 +14,7 @@ const runComprehensiveMigration = require('./database/comprehensive-migration');
 const errorHandler = require('./middleware/errorHandler');
 const routes = require('./routes');
 const socketHandler = require('./socket/socketHandler');
+const mediasoupService = require('./services/mediasoupService');
 
 // Validate required environment variables
 const requiredEnvVars = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
@@ -167,6 +168,15 @@ db.getConnection()
       process.exit(1);
     } finally {
       connection.release();
+    }
+
+    // Initialize mediasoup worker
+    try {
+      await mediasoupService.initialize();
+      console.log('✅ Mediasoup service initialized');
+    } catch (mediasoupErr) {
+      console.error('❌ Failed to initialize mediasoup:', mediasoupErr.message);
+      console.error('Video calls will not work properly. Consider restarting the server.');
     }
 
     server.listen(PORT, () => {

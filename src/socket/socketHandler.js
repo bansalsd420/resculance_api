@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { SOCKET_EVENTS } = require('../config/constants');
+const mediasoupService = require('../services/mediasoupService');
 
 // Store socket.io instance globally for access from other modules
 let ioInstance = null;
@@ -29,6 +30,9 @@ const socketHandler = (io) => {
 
   io.on(SOCKET_EVENTS.CONNECTION, (socket) => {
     console.log(`✅ User connected: ${socket.user.id} (${socket.user.role})`);
+
+    // Track active video sessions for cleanup on disconnect
+    socket.activeVideoSessions = new Set();
 
     // Join user's personal notification room
     socket.join(`user_${socket.user.id}`);
@@ -291,14 +295,27 @@ const socketHandler = (io) => {
       });
       
       console.log(`📹 User ${socket.user.firstName} ${socket.user.lastName} joined video room: ${videoRoomName}. Total participants: ${room ? room.size : 1}`);
+      
+      // Track this session for cleanup on disconnect
+      socket.activeVideoSessions.add(sessionId);
     });
 
     // Handle user leaving video room
-    socket.on('leave_video_room', (data) => {
+    socket.on('leave_video_room', async (data) => {
       const { sessionId } = data;
       const videoRoomName = `video_session_${sessionId}`;
       
       socket.leave(videoRoomName);
+      
+      // Clean up mediasoup resources
+      try {
+        await mediasoupService.cleanupPeer(sessionId, socket.user.id);
+      } catch (error) {
+        console.error('Error cleaning up mediasoup peer:', error);
+      }
+      
+      // Remove from active sessions
+      socket.activeVideoSessions.delete(sessionId);
       
       // Notify all participants that user left
       socket.to(videoRoomName).emit('user_left_video', {
@@ -337,6 +354,130 @@ const socketHandler = (io) => {
       }
     });
 
+    // ==================== MEDIASOUP SFU HANDLERS ====================
+
+    // Get router RTP capabilities
+    socket.on('getRouterRtpCapabilities', async (data, callback) => {
+      try {
+        const { sessionId } = data;
+        const rtpCapabilities = await mediasoupService.getRtpCapabilities(sessionId);
+        callback({ success: true, rtpCapabilities });
+        console.log(`📡 Sent RTP capabilities for session ${sessionId} to user ${socket.user.id}`);
+      } catch (error) {
+        console.error('Error getting RTP capabilities:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Create WebRTC transport
+    socket.on('createWebRtcTransport', async (data, callback) => {
+      try {
+        const { sessionId, direction } = data; // direction: 'send' or 'recv'
+        const transportOptions = await mediasoupService.createWebRtcTransport(sessionId, socket.user.id);
+        callback({ success: true, ...transportOptions });
+        console.log(`🚚 Created ${direction} transport for user ${socket.user.id} in session ${sessionId}`);
+      } catch (error) {
+        console.error('Error creating transport:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Connect transport
+    socket.on('connectWebRtcTransport', async (data, callback) => {
+      try {
+        const { transportId, dtlsParameters } = data;
+        await mediasoupService.connectTransport(transportId, dtlsParameters);
+        callback({ success: true });
+        console.log(`🔌 Connected transport ${transportId} for user ${socket.user.id}`);
+      } catch (error) {
+        console.error('Error connecting transport:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Produce media (user starts sending video/audio)
+    socket.on('produce', async (data, callback) => {
+      try {
+        const { transportId, kind, rtpParameters, sessionId } = data;
+        const producerId = await mediasoupService.produce(transportId, kind, rtpParameters, sessionId, socket.user.id);
+        
+        // Notify other participants in the room about new producer
+        const videoRoomName = `video_session_${sessionId}`;
+        socket.to(videoRoomName).emit('newProducer', {
+          producerId,
+          userId: socket.user.id,
+          userName: `${socket.user.firstName} ${socket.user.lastName}`,
+          kind
+        });
+        
+        callback({ success: true, producerId });
+        console.log(`🎥 User ${socket.user.id} started producing ${kind} (producer: ${producerId}) in session ${sessionId}`);
+      } catch (error) {
+        console.error('Error producing:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Consume media (user starts receiving video/audio from another user)
+    socket.on('consume', async (data, callback) => {
+      try {
+        const { transportId, producerId, rtpCapabilities, sessionId } = data;
+        const consumerParams = await mediasoupService.consume(transportId, producerId, rtpCapabilities, sessionId, socket.user.id);
+        
+        if (!consumerParams) {
+          callback({ success: false, error: 'Cannot consume this producer' });
+          return;
+        }
+        
+        callback({ success: true, ...consumerParams });
+        console.log(`🎧 User ${socket.user.id} started consuming producer ${producerId} (consumer: ${consumerParams.id}) in session ${sessionId}`);
+      } catch (error) {
+        console.error('Error consuming:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Resume consumer
+    socket.on('resumeConsumer', async (data, callback) => {
+      try {
+        const { consumerId } = data;
+        await mediasoupService.resumeConsumer(consumerId);
+        callback({ success: true });
+        console.log(`▶️  Resumed consumer ${consumerId} for user ${socket.user.id}`);
+      } catch (error) {
+        console.error('Error resuming consumer:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Pause consumer
+    socket.on('pauseConsumer', async (data, callback) => {
+      try {
+        const { consumerId } = data;
+        await mediasoupService.pauseConsumer(consumerId);
+        callback({ success: true });
+        console.log(`⏸️  Paused consumer ${consumerId} for user ${socket.user.id}`);
+      } catch (error) {
+        console.error('Error pausing consumer:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // Get existing producers when joining
+    socket.on('getProducers', async (data, callback) => {
+      try {
+        const { sessionId } = data;
+        const producers = mediasoupService.getProducersInSession(sessionId, socket.user.id);
+        callback({ success: true, producers });
+        console.log(`📋 Sent ${producers.length} existing producers to user ${socket.user.id} in session ${sessionId}`);
+      } catch (error) {
+        console.error('Error getting producers:', error);
+        callback({ success: false, error: error.message });
+      }
+    });
+
+    // ==================== END MEDIASOUP SFU HANDLERS ====================
+
     // Handle emergency alerts
     socket.on('emergency_alert', (data) => {
       const { ambulanceId, sessionId, alertType, message } = data;
@@ -356,8 +497,31 @@ const socketHandler = (io) => {
     });
 
     // Handle disconnect
-    socket.on(SOCKET_EVENTS.DISCONNECT, (reason) => {
+    socket.on(SOCKET_EVENTS.DISCONNECT, async (reason) => {
       console.log(`❌ User disconnected: ${socket.user.id}, Reason: ${reason}`);
+      
+      // Clean up any active video sessions
+      if (socket.activeVideoSessions && socket.activeVideoSessions.size > 0) {
+        console.log(`🧹 Cleaning up ${socket.activeVideoSessions.size} active video sessions for user ${socket.user.id}`);
+        
+        for (const sessionId of socket.activeVideoSessions) {
+          try {
+            await mediasoupService.cleanupPeer(sessionId, socket.user.id);
+            
+            // Notify other participants
+            const videoRoomName = `video_session_${sessionId}`;
+            socket.to(videoRoomName).emit('user_left_video', {
+              sessionId,
+              userId: socket.user.id,
+              firstName: socket.user.firstName,
+              lastName: socket.user.lastName,
+              timestamp: new Date().toISOString()
+            });
+          } catch (error) {
+            console.error(`Error cleaning up session ${sessionId}:`, error);
+          }
+        }
+      }
     });
 
     // Handle errors
