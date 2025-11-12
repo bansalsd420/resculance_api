@@ -20,7 +20,8 @@ class AmbulanceModel {
 
   static async findById(id) {
     const [rows] = await db.query(
-      `SELECT a.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
+      `SELECT a.*, a.organization_id as organizationId, a.current_hospital_id as currentHospitalId,
+              o.name as organization_name, o.code as organization_code, o.type as organization_type,
               ch.name as current_hospital_name
        FROM ambulances a
        JOIN organizations o ON a.organization_id = o.id
@@ -43,8 +44,9 @@ class AmbulanceModel {
   }
 
   static async findAll(filters = {}) {
-    let query = `SELECT a.*, o.name as organization_name, o.code as organization_code, o.type as organization_type,
-                        ch.name as current_hospital_name
+  let query = `SELECT a.*, a.organization_id as organizationId, a.current_hospital_id as currentHospitalId,
+            o.name as organization_name, o.code as organization_code, o.type as organization_type,
+            ch.name as current_hospital_name
                  FROM ambulances a
                  LEFT JOIN organizations o ON a.organization_id = o.id
                  LEFT JOIN organizations ch ON a.current_hospital_id = ch.id

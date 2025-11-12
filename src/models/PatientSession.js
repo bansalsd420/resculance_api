@@ -117,8 +117,14 @@ class PatientSessionModel {
     }
 
     if (filters.status) {
-      query += ' AND ps.status = ?';
-      params.push(filters.status);
+      // Backwards-compat: some clients pass status='active' meaning any in-progress status.
+      // Map 'active' to the DB statuses we use ('onboarded' and 'in_transit').
+      if (filters.status === 'active') {
+        query += " AND ps.status IN ('onboarded','in_transit')";
+      } else {
+        query += ' AND ps.status = ?';
+        params.push(filters.status);
+      }
     }
 
     query += ' ORDER BY ps.created_at DESC';
@@ -164,6 +170,12 @@ class PatientSessionModel {
        LIMIT 1`,
       [ambulanceId]
     );
+    // Debug: log when a lookup is performed so we can correlate frontend requests with DB results
+    try {
+      console.log('🔎 findActiveByAmbulance lookup', { ambulanceId, found: Array.isArray(rows) ? rows.length : 0, row: rows[0] || null });
+    } catch (e) {
+      // swallow logging errors
+    }
     return rows[0];
   }
 
@@ -461,8 +473,12 @@ class PatientSessionModel {
     }
 
     if (filters.status) {
-      query += ' AND status = ?';
-      params.push(filters.status);
+      if (filters.status === 'active') {
+        query += " AND status IN ('onboarded','in_transit')";
+      } else {
+        query += ' AND status = ?';
+        params.push(filters.status);
+      }
     }
 
     const [rows] = await db.query(query, params);

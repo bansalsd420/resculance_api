@@ -33,7 +33,7 @@ class PatientModel {
   static async findById(id) {
     // By default only return active patients. Pass { includeInactive: true } to override.
     const [rows] = await db.query(
-      'SELECT *, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE id = ? AND is_active = TRUE', 
+      'SELECT *, organization_id as organizationId, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE id = ? AND is_active = TRUE', 
       [id]
     );
     return rows[0];
@@ -42,7 +42,7 @@ class PatientModel {
   // Return patient regardless of is_active flag (useful for activate endpoint)
   static async findByIdIncludeInactive(id) {
     const [rows] = await db.query(
-      'SELECT *, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE id = ?', 
+      'SELECT *, organization_id as organizationId, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE id = ?', 
       [id]
     );
     return rows[0];
@@ -50,7 +50,7 @@ class PatientModel {
 
   static async findByCode(code) {
     const [rows] = await db.query(
-      'SELECT *, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE patient_code = ? AND is_active = TRUE', 
+      'SELECT *, organization_id as organizationId, IF(is_active = TRUE, "active", "inactive") as status FROM patients WHERE patient_code = ? AND is_active = TRUE', 
       [code]
     );
     return rows[0];

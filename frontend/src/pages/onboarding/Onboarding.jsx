@@ -48,6 +48,8 @@ export const Onboarding = () => {
   // Offboard confirmation modal state
   const [showOffboardModal, setShowOffboardModal] = useState(false);
   const [offboardTarget, setOffboardTarget] = useState(null);
+  const [offboardSession, setOffboardSession] = useState(null); // Store the actual session
+  const [sessionsByAmbulance, setSessionsByAmbulance] = useState({}); // ambulanceId -> session or null
 
   // Determine if current context is hospital or fleet
   const isHospitalContext = user?.role === 'superadmin' 
@@ -65,20 +67,15 @@ export const Onboarding = () => {
 
   // Offboard handler for table (must be top-level, not inside useEffect)
   const handleOffboardFromTable = async (row) => {
-    setOffboardTarget(row);
-    setShowOffboardModal(true);
-  };
-
-  const handleConfirmOffboard = async () => {
-    if (!offboardTarget) return;
-    
-    setSubmitting(true);
     try {
-      // Fetch active session for this ambulance
+      // Fetch the active session for this ambulance
+      // Request the most recent session for this ambulance (don't pass status='active' —
+      // that mixes ambulance and session concepts). This matches the `View` flow which
+      // fetches the latest session without status filter.
       const response = await patientService.getAllSessions({
-        ambulanceId: offboardTarget.id,
-        status: 'active',
-        limit: 1
+        ambulanceId: row.id,
+        limit: 1,
+        _ts: Date.now()
       });
       
       const sessions = response.data?.data?.sessions || 
@@ -91,8 +88,21 @@ export const Onboarding = () => {
         return;
       }
       
-      const sessionId = sessions[0].id;
-      await patientService.offboard(sessionId, { treatmentNotes: 'Patient offboarded from table view' });
+      setOffboardTarget(row);
+      setOffboardSession(sessions[0]); // Store the session
+      setShowOffboardModal(true);
+    } catch (error) {
+      console.error('Failed to fetch session:', error);
+      toast.error('Failed to load session details');
+    }
+  };
+
+  const handleConfirmOffboard = async () => {
+    if (!offboardTarget || !offboardSession) return;
+    
+    setSubmitting(true);
+    try {
+      await patientService.offboard(offboardSession.id, { treatmentNotes: 'Patient offboarded from table view' });
       toast.success('Patient offboarded successfully');
       // Refresh ambulances and patients
       await fetchAmbulances();
@@ -105,12 +115,14 @@ export const Onboarding = () => {
       setSubmitting(false);
       setShowOffboardModal(false);
       setOffboardTarget(null);
+      setOffboardSession(null);
     }
   };
 
   const handleCancelOffboard = () => {
     setShowOffboardModal(false);
     setOffboardTarget(null);
+    setOffboardSession(null);
   };
 
   useEffect(() => {
@@ -177,15 +189,22 @@ export const Onboarding = () => {
       const userOrgId = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
       if (!userOrgId) return;
       
+      console.log('🏥 Fetching partnered hospitals for fleet org:', userOrgId);
+      console.log('🏥 All hospitals available:', hospitals.map(h => `${h.id}:${h.name}`));
+      
       const resp = await collaborationService.getAll({ status: 'approved' });
       const collabData = resp.data?.data?.requests || resp.data?.requests || resp.data || [];
+      
+      console.log('🏥 All collaborations:', collabData);
       
       // Filter partnerships for this fleet and extract hospital IDs
       const hospitalIds = collabData
         .filter(c => {
           const status = (c.status || c.request_status || '').toLowerCase();
           const fleetId = c.fleet_id || c.fleetId;
-          return status === 'approved' && Number(fleetId) === Number(userOrgId);
+          const match = status === 'approved' && Number(fleetId) === Number(userOrgId);
+          console.log(`🔍 Checking collab: Fleet ${fleetId} vs ${userOrgId}, status: ${status}, match: ${match}`);
+          return match;
         })
         .map(c => c.hospital_id || c.hospitalId)
         .filter(Boolean);
@@ -205,14 +224,15 @@ export const Onboarding = () => {
   const fetchAmbulances = async () => {
     setLoading(true);
     try {
-      const params = {};
       console.log('🚑 User context:', { role: user?.role, orgId: user?.organizationId, orgType: user?.organizationType });
       
+      const params = {};
       if (user?.role === 'superadmin') {
         if (selectedOrgId) params.organizationId = selectedOrgId;
         else {
           console.log('⚠️ Superadmin without selected org - skipping fetch');
-          return; // Don't fetch if superadmin hasn't selected org
+          setLoading(false);
+          return;
         }
       } else {
         params.organizationId = user?.organizationId;
@@ -220,21 +240,23 @@ export const Onboarding = () => {
 
       console.log('🚑 Fetching ambulances with params:', params);
       const response = await ambulanceService.getAll(params);
-      console.log('🚑 Ambulances API response:', response);
-      
-      const ambulancesData = response.data?.data?.ambulances || response.data?.ambulances || response.data || [];
-      console.log('🚑 Extracted ambulances:', ambulancesData.length, 'items');
+      const data = response.data?.data?.ambulances || response.data?.ambulances || response.data?.data || response.data || [];
+      console.log('🚑 Fetched ambulances:', data.length);
+      const arr = Array.isArray(data) ? data : [];
+      setAmbulances(arr);
 
-      // **BLAZING FAST**: Use ambulance status directly - no need to fetch sessions!
-      // Ambulances with status='active' already have patients onboarded
-      // Ambulances with status='available' are free for new patients
-      setAmbulances(ambulancesData);
-      
-      // For hospital context, also fetch partnered fleet ambulances
+      // Preload sessions for active ambulances to determine action availability
+      const activeAmbIds = arr.filter(a => a.status === 'active').map(a => a.id);
+      if (activeAmbIds.length > 0) {
+        await Promise.all(activeAmbIds.map(id => fetchSessionForAmbulance(id)));
+      }
+
+      // For HOSPITAL context, also fetch partnered fleet ambulances
       if (isHospitalContext) {
-        console.log('🏥 Hospital context detected - fetching partnered ambulances');
+        console.log('🏥 Hospital context - also fetching partnered fleet ambulances');
         await fetchPartneredAmbulances();
       }
+      // For FLEET context, do NOT fetch partnered hospital ambulances (fleets can't use hospital ambulances)
     } catch (error) {
       console.error('❌ Failed to fetch ambulances:', error);
       console.error('❌ Error response:', error.response?.data);
@@ -250,48 +272,97 @@ export const Onboarding = () => {
       const userOrgId = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
       if (!userOrgId) return;
       
+      console.log('🚑 Fetching partnered ambulances for hospital org:', userOrgId);
+      
       // Get approved partnerships for this hospital
       const resp = await collaborationService.getAll({ status: 'approved' });
       const collabData = resp.data?.data?.requests || resp.data?.requests || resp.data || [];
+      
+      console.log('🚑 All collaborations:', collabData);
       
       // Extract fleet IDs that are partnered with this hospital
       const fleetIds = collabData
         .filter(c => {
           const status = (c.status || c.request_status || '').toLowerCase();
           const hospitalId = c.hospital_id || c.hospitalId;
-          return status === 'approved' && Number(hospitalId) === Number(userOrgId);
+          const match = status === 'approved' && Number(hospitalId) === Number(userOrgId);
+          console.log(`🔍 Checking collab: Hospital ${hospitalId} vs ${userOrgId}, status: ${status}, match: ${match}`);
+          return match;
         })
         .map(c => c.fleet_id || c.fleetId)
         .filter(Boolean);
       
       console.log('🚑 Found partnered fleet IDs:', fleetIds);
       
-      // Fetch ambulances for each partnered fleet
-      const partneredAmbulancesByFleet = [];
-      for (const fleetId of fleetIds) {
-        try {
-          const resp = await ambulanceService.getAll({ organizationId: fleetId });
-          const ambs = resp.data?.data?.ambulances || resp.data?.ambulances || resp.data || [];
-          
-          // Get fleet name from collaborations
-          const collab = collabData.find(c => (c.fleet_id || c.fleetId) === fleetId);
+      // Fetch all partnered ambulances in one call (use backend partnered view)
+      // For hospitals (and superadmin acting on behalf of a hospital) the backend
+      // exposes a partnered view via ?partnered=true&hospitalId={id}
+      try {
+        const partneredResp = await ambulanceService.getAll({ partnered: 'true', hospitalId: userOrgId });
+        const allPartnered = partneredResp.data?.data?.ambulances || partneredResp.data?.ambulances || partneredResp.data || [];
+  console.log('🚑 Fetched all partnered ambulances:', allPartnered.length, allPartnered.map(a => `${a.id}:${a.registration_number}`));
+
+        // Group by fleet organization id
+        const grouped = {};
+        (allPartnered || []).forEach(a => {
+          const fid = a.organization_id || a.organizationId || a.organization || null;
+          const key = fid ? String(fid) : 'unknown';
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(a);
+        });
+
+        const partneredAmbulancesByFleet = Object.keys(grouped).map(fid => {
+          const fleetId = fid === 'unknown' ? null : parseInt(fid, 10);
+          const collab = collabData.find(c => (c.fleet_id || c.fleetId) === fleetId) || {};
           const fleetName = collab?.fleet_name || collab?.fleetName || `Fleet ${fleetId}`;
-          
-          partneredAmbulancesByFleet.push({
+          return {
             fleetId,
             fleetName,
-            ambulances: ambs
-          });
-        } catch (err) {
-          console.error(`Failed to fetch ambulances for fleet ${fleetId}:`, err);
+            ambulances: grouped[fid]
+          };
+        });
+
+        console.log('🚑 Partnered ambulances grouped by fleet:', partneredAmbulancesByFleet);
+        setPartneredAmbulances(partneredAmbulancesByFleet);
+
+        // Preload sessions for active partnered ambulances
+        const partneredActiveIds = (allPartnered || []).filter(a => a.status === 'active').map(a => a.id);
+        if (partneredActiveIds.length > 0) {
+          await Promise.all(partneredActiveIds.map(id => fetchSessionForAmbulance(id)));
         }
+      } catch (err) {
+        console.error('Failed to fetch partnered ambulances via partnered view:', err);
+        // Fallback: attempt per-fleet fetch (best-effort)
+        const partneredAmbulancesByFleet = [];
+        for (const fleetId of fleetIds) {
+          try {
+            const resp = await ambulanceService.getAll({ organizationId: fleetId });
+            const ambs = resp.data?.data?.ambulances || resp.data?.ambulances || resp.data || [];
+            partneredAmbulancesByFleet.push({ fleetId, fleetName: `Fleet ${fleetId}`, ambulances: Array.isArray(ambs) ? ambs : [] });
+          } catch (e) {
+            console.error(`Fallback failed to fetch ambulances for fleet ${fleetId}:`, e);
+            partneredAmbulancesByFleet.push({ fleetId, fleetName: `Fleet ${fleetId}`, ambulances: [] });
+          }
+        }
+        setPartneredAmbulances(partneredAmbulancesByFleet);
       }
-      
-      console.log('🚑 Partnered ambulances by fleet:', partneredAmbulancesByFleet);
-      setPartneredAmbulances(partneredAmbulancesByFleet);
     } catch (error) {
       console.error('Failed to fetch partnered ambulances:', error);
       setPartneredAmbulances([]);
+    }
+  };
+
+  const fetchSessionForAmbulance = async (ambulanceId) => {
+    try {
+      const resp = await patientService.getAllSessions({ ambulanceId, limit: 1, _ts: Date.now() });
+      const sessions = resp.data?.data?.sessions || resp.data?.sessions || resp.data?.data || (Array.isArray(resp.data) ? resp.data : []);
+      const session = Array.isArray(sessions) && sessions.length > 0 ? sessions[0] : null;
+      setSessionsByAmbulance(prev => ({ ...prev, [ambulanceId]: session }));
+      return session;
+    } catch (e) {
+      console.error('Failed to fetch session for ambulance', ambulanceId, e);
+      setSessionsByAmbulance(prev => ({ ...prev, [ambulanceId]: null }));
+      return null;
     }
   };
 
@@ -438,7 +509,7 @@ export const Onboarding = () => {
   const availablePatients = patients.filter(p => !p.isOnboarded);
   
   // Filter ambulances based on search
-  const filteredAmbulances = ambulances.filter(amb => 
+  const filteredAmbulances = (Array.isArray(ambulances) ? ambulances : []).filter(amb => 
     (amb.registration_number || amb.vehicleNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (amb.vehicle_model || amb.vehicleModel || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -517,27 +588,50 @@ export const Onboarding = () => {
                   </Button>
                 )}
 
-                {isActive && (
-                  <>
-                    <Button 
-                      size="sm" 
-                      variant="secondary"
-                      onClick={() => handleViewOnboarding(row)}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleOffboardFromTable(row)}
-                      className="ml-1"
-                    >
-                      <Power className="w-4 h-4 mr-1" />
-                      Offboard
-                    </Button>
-                  </>
-                )}
+                {isActive && (() => {
+                  const session = sessionsByAmbulance[row.id];
+                  // While session is being loaded, show a small loader (or disable actions)
+                  if (session === undefined) {
+                    return <span className="text-sm text-gray-400">Loading...</span>;
+                  }
+
+                  // If there is no active session data, show informational text
+                  if (!session) {
+                    return <span className="text-sm text-gray-500">No active session</span>;
+                  }
+
+                  // For hospital users: deny view/offboard if destination is a different hospital
+                  const userOrgId = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
+                  const sessionDestination = session.destination_hospital_id || session.destinationHospitalId;
+                  const sessionOwnerOrg = session.organization_id || session.organizationId;
+
+                  if (isHospitalContext && sessionDestination && parseInt(sessionDestination) !== parseInt(userOrgId) && parseInt(sessionOwnerOrg) !== parseInt(userOrgId)) {
+                    return <span className="text-sm text-yellow-700">This ambulance is outbound for a different hospital.</span>;
+                  }
+
+                  // Otherwise show View/Offboard
+                  return (
+                    <>
+                      <Button 
+                        size="sm" 
+                        variant="secondary"
+                        onClick={() => handleViewOnboarding(row)}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => handleOffboardFromTable(row)}
+                        className="ml-1"
+                      >
+                        <Power className="w-4 h-4 mr-1" />
+                        Offboard
+                      </Button>
+                    </>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -727,7 +821,7 @@ export const Onboarding = () => {
                 </div>
                 <div>
                   <p className="text-xs text-secondary mb-1">Session Code</p>
-                  <p className="font-medium">{offboardTarget.activeSession?.session_code || 'N/A'}</p>
+                  <p className="font-medium">{offboardSession?.session_code || offboardSession?.sessionCode || 'N/A'}</p>
                 </div>
               </div>
 
