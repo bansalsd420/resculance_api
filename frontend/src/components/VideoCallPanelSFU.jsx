@@ -659,6 +659,7 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                       : "relative bg-gray-800 rounded-xl overflow-hidden"
                   }
                 >
+                  {/* Render remote video and audio for each participant except self */}
                   {remoteStreams.get(participant.userId) ? (
                     <>
                       <video
@@ -673,6 +674,20 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                             el.play().catch(err => console.error('Play error:', err));
                           }
                         }}
+                      />
+                      {/* Attach audio for remote participant (not self) */}
+                      <audio
+                        autoPlay
+                        controls={false}
+                        muted={false}
+                        data-user-id={`audio-${participant.userId}`}
+                        ref={(el) => {
+                          if (el && remoteStreams.get(participant.userId)) {
+                            el.srcObject = remoteStreams.get(participant.userId);
+                            el.play().catch(err => {});
+                          }
+                        }}
+                        style={{ display: 'none' }}
                       />
                       <div className={
                         participants.length <= 3
