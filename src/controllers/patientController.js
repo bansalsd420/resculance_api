@@ -759,6 +759,23 @@ class PatientController {
         offset
       };
 
+      // If ambulanceId is provided and caller only requested a single latest session (limit=1),
+      // fetch the true latest session for that ambulance (no org scoping) and then authorize it.
+      if (ambulanceId && parseInt(limit) === 1) {
+        const latest = await PatientSessionModel.findLatestByAmbulance(ambulanceId);
+        if (!latest) {
+          return res.json({ success: true, data: { sessions: [], pagination: { total: 0, limit: 1, offset: 0, hasMore: false }, hasSession: false } });
+        }
+
+        // If user can access, return the session; otherwise return an empty array but indicate a session exists
+        const allowed = await userCanAccessSession(req, latest);
+        if (allowed) {
+          return res.json({ success: true, data: { sessions: [latest], pagination: { total: 1, limit: 1, offset: 0, hasMore: false }, hasSession: true } });
+        }
+
+        return res.json({ success: true, data: { sessions: [], pagination: { total: 0, limit: 1, offset: 0, hasMore: false }, hasSession: true } });
+      }
+
       // If ambulanceId is provided in query, include it in filters
       if (ambulanceId) {
         filters.ambulanceId = ambulanceId;

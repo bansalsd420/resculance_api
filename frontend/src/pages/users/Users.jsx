@@ -143,11 +143,9 @@ export const Users = () => {
     }
   };
 
-  // force: bypass cache
-  // soft: perform a non-disruptive refresh (no global loader)
-  const fetchUsers = async (force = false, soft = false) => {
+  const fetchUsers = async (force = false) => {
     setLoading(true);
-    if (!soft) showLoader('Loading users...');
+    showLoader('Loading users...');
     try {
       // Special case: superadmin can view all pending users without organization selection
       const isPendingTabForSuperadmin = user?.role === 'superadmin' && activeTab === 'pending';
@@ -218,7 +216,7 @@ export const Users = () => {
       setUsers([]);
     } finally {
       setLoading(false);
-      if (!soft) hideLoader();
+      hideLoader();
     }
   };
 
@@ -787,7 +785,7 @@ export const Users = () => {
       )}
 
       {/* Users Table */}
-  <Table columns={columns} data={filteredUsers} onRefresh={() => fetchUsers(true, true)} isRefreshing={loading} />
+  <Table columns={columns} data={filteredUsers} onRefresh={() => fetchUsers(true)} isRefreshing={loading} />
 
       {/* Add/Edit Modal */}
       <Modal

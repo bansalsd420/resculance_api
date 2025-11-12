@@ -59,20 +59,15 @@ class AmbulanceModel {
       params.push(filters.organizationId);
     }
 
-    // Support partnered ambulances: when filters.partneredHospitalId is set,
-    // Support partnered ambulances: when filters.partneredHospitalId is set,
-    // return ambulances that belong to fleets partnered with that hospital
+    // Support partnered ambulances: fetch ambulances that belong to fleets partnered with the given hospital
     if (filters.partneredHospitalId) {
+      // Only show ambulances from fleet organizations that have active partnerships with this hospital
       query += ' AND a.organization_id IN (SELECT fleet_id FROM partnerships WHERE hospital_id = ? AND status = "active")';
       params.push(filters.partneredHospitalId);
 
-      // Security: if the caller requested partnered ambulances on behalf of a hospital,
-      // do not expose fleet ambulances that are not yet approved/available. Only show
-      // ambulances with status = 'available' unless the caller explicitly overrides this
-      // using an internal flag (onlyApprovedForPartnered === false).
+      // Security: only show approved/available ambulances in partnered view
       if (filters.onlyApprovedForPartnered !== false) {
-        // Allow both 'available' and legacy 'active' statuses as approved/visible
-        query += " AND (a.status = 'available' OR a.status = 'active')";
+        query += " AND (a.status = 'available' OR a.status = 'active' OR a.status = 'onboarded' OR a.status = 'in_transit')";
       }
     }
 
@@ -178,7 +173,7 @@ class AmbulanceModel {
 
       // If caller should only see approved fleet ambulances in partnered view, enforce it here.
       if (filters.onlyApprovedForPartnered !== false) {
-        query += " AND (status = 'available' OR status = 'active')";
+        query += " AND (status = 'available' OR status = 'active' OR status = 'onboarded' OR status = 'in_transit')";
       }
     }
 

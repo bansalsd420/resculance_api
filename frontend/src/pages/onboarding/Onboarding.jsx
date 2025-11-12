@@ -82,12 +82,20 @@ export const Onboarding = () => {
                       response.data?.sessions || 
                       response.data?.data || 
                       (Array.isArray(response.data) ? response.data : []);
-      
-      if (sessions.length === 0 || !sessions[0].id) {
+
+      const hasSessionFlag = response.data?.data?.hasSession || response.data?.hasSession || false;
+
+      // If server indicates a session exists but it's redacted for this user, inform them
+      if ((Array.isArray(sessions) && sessions.length === 0) && hasSessionFlag) {
+        toast.error('This ambulance has an active session but you do not have permission to view it');
+        return;
+      }
+
+      if (!Array.isArray(sessions) || sessions.length === 0 || !sessions[0].id) {
         toast.error('No active session found for this ambulance');
         return;
       }
-      
+
       setOffboardTarget(row);
       setOffboardSession(sessions[0]); // Store the session
       setShowOffboardModal(true);
@@ -209,10 +217,18 @@ export const Onboarding = () => {
         .map(c => c.hospital_id || c.hospitalId)
         .filter(Boolean);
       
-      console.log('🏥 Found partnered hospital IDs:', hospitalIds);
-      
-      // Filter hospitals to only show partnered ones
-      const partnered = hospitals.filter(h => hospitalIds.includes(h.id));
+      console.log('🏥 Found partnered hospital IDs (raw):', hospitalIds);
+
+      // Normalize IDs to numbers for reliable comparison
+      const normalizedHospitalIds = hospitalIds.map(id => Number(id));
+
+      // Ensure we have the hospitals list; if not, fetch it
+      if (!hospitals || hospitals.length === 0) {
+        await fetchHospitals();
+      }
+
+      // Filter hospitals to only show partnered ones (compare as numbers)
+      const partnered = (hospitals || []).filter(h => normalizedHospitalIds.includes(Number(h.id)));
       console.log('🏥 Partnered hospitals:', partnered.map(h => h.name));
       setPartneredHospitals(partnered);
     } catch (error) {
@@ -245,8 +261,11 @@ export const Onboarding = () => {
       const arr = Array.isArray(data) ? data : [];
       setAmbulances(arr);
 
-      // Preload sessions for active ambulances to determine action availability
-      const activeAmbIds = arr.filter(a => a.status === 'active').map(a => a.id);
+      // Preload sessions for ambulances that have an in-progress session state so we can determine
+      // action availability and show outbound notices. Treat 'active', 'onboarded', and 'in_transit'
+      // as in-progress states.
+      const inProgressStates = ['active', 'onboarded', 'in_transit'];
+      const activeAmbIds = arr.filter(a => inProgressStates.includes((a.status || '').toString().toLowerCase())).map(a => a.id);
       if (activeAmbIds.length > 0) {
         await Promise.all(activeAmbIds.map(id => fetchSessionForAmbulance(id)));
       }
@@ -274,77 +293,43 @@ export const Onboarding = () => {
       
       console.log('🚑 Fetching partnered ambulances for hospital org:', userOrgId);
       
-      // Get approved partnerships for this hospital
-      const resp = await collaborationService.getAll({ status: 'approved' });
-      const collabData = resp.data?.data?.requests || resp.data?.requests || resp.data || [];
-      
-      console.log('🚑 All collaborations:', collabData);
-      
-      // Extract fleet IDs that are partnered with this hospital
-      const fleetIds = collabData
-        .filter(c => {
-          const status = (c.status || c.request_status || '').toLowerCase();
-          const hospitalId = c.hospital_id || c.hospitalId;
-          const match = status === 'approved' && Number(hospitalId) === Number(userOrgId);
-          console.log(`🔍 Checking collab: Hospital ${hospitalId} vs ${userOrgId}, status: ${status}, match: ${match}`);
-          return match;
-        })
-        .map(c => c.fleet_id || c.fleetId)
-        .filter(Boolean);
-      
-      console.log('🚑 Found partnered fleet IDs:', fleetIds);
-      
-      // Fetch all partnered ambulances in one call (use backend partnered view)
       // For hospitals (and superadmin acting on behalf of a hospital) the backend
       // exposes a partnered view via ?partnered=true&hospitalId={id}
-      try {
-        const partneredResp = await ambulanceService.getAll({ partnered: 'true', hospitalId: userOrgId });
-        const allPartnered = partneredResp.data?.data?.ambulances || partneredResp.data?.ambulances || partneredResp.data || [];
-  console.log('🚑 Fetched all partnered ambulances:', allPartnered.length, allPartnered.map(a => `${a.id}:${a.registration_number}`));
+      // This will fetch ambulances from fleets that have active partnerships with this hospital
+      const partneredResp = await ambulanceService.getAll({ partnered: 'true', hospitalId: userOrgId });
+      const allPartnered = partneredResp.data?.data?.ambulances || partneredResp.data?.ambulances || partneredResp.data || [];
+      console.log('🚑 Fetched partnered ambulances:', allPartnered.length, allPartnered.map(a => `${a.id}:${a.registration_number}:org${a.organization_id}`));
 
-        // Group by fleet organization id
-        const grouped = {};
-        (allPartnered || []).forEach(a => {
-          const fid = a.organization_id || a.organizationId || a.organization || null;
-          const key = fid ? String(fid) : 'unknown';
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(a);
-        });
+      // Group by fleet organization id
+      const grouped = {};
+      (allPartnered || []).forEach(a => {
+        const fid = a.organization_id || a.organizationId || a.organization || null;
+        const key = fid ? String(fid) : 'unknown';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(a);
+      });
 
-        const partneredAmbulancesByFleet = Object.keys(grouped).map(fid => {
-          const fleetId = fid === 'unknown' ? null : parseInt(fid, 10);
-          const collab = collabData.find(c => (c.fleet_id || c.fleetId) === fleetId) || {};
-          const fleetName = collab?.fleet_name || collab?.fleetName || `Fleet ${fleetId}`;
-          return {
-            fleetId,
-            fleetName,
-            ambulances: grouped[fid]
-          };
-        });
+      const partneredAmbulancesByFleet = Object.keys(grouped).map(fid => {
+        const fleetId = fid === 'unknown' ? null : parseInt(fid, 10);
+        // Use the organization_name returned from backend (already joined in the query)
+        const firstAmb = grouped[fid][0];
+        const fleetName = firstAmb?.organization_name || (organizations.find(o => Number(o.id) === Number(fleetId))?.name) || (fleetId ? `Fleet ${fleetId}` : 'Unknown Fleet');
+        return {
+          fleetId,
+          fleetName,
+          ambulances: grouped[fid]
+        };
+      });
 
-        console.log('🚑 Partnered ambulances grouped by fleet:', partneredAmbulancesByFleet);
-        setPartneredAmbulances(partneredAmbulancesByFleet);
+      console.log('🚑 Partnered ambulances grouped by fleet:', partneredAmbulancesByFleet);
+      setPartneredAmbulances(partneredAmbulancesByFleet);
 
-        // Preload sessions for active partnered ambulances
-        const partneredActiveIds = (allPartnered || []).filter(a => a.status === 'active').map(a => a.id);
-        if (partneredActiveIds.length > 0) {
-          await Promise.all(partneredActiveIds.map(id => fetchSessionForAmbulance(id)));
-        }
-      } catch (err) {
-        console.error('Failed to fetch partnered ambulances via partnered view:', err);
-        // Fallback: attempt per-fleet fetch (best-effort)
-        const partneredAmbulancesByFleet = [];
-        for (const fleetId of fleetIds) {
-          try {
-            const resp = await ambulanceService.getAll({ organizationId: fleetId });
-            const ambs = resp.data?.data?.ambulances || resp.data?.ambulances || resp.data || [];
-            partneredAmbulancesByFleet.push({ fleetId, fleetName: `Fleet ${fleetId}`, ambulances: Array.isArray(ambs) ? ambs : [] });
-          } catch (e) {
-            console.error(`Fallback failed to fetch ambulances for fleet ${fleetId}:`, e);
-            partneredAmbulancesByFleet.push({ fleetId, fleetName: `Fleet ${fleetId}`, ambulances: [] });
-          }
-        }
-        setPartneredAmbulances(partneredAmbulancesByFleet);
+      // Preload sessions for partnered ambulances that are in-progress so the UI can show
+      // outbound notices for hospital users. Use the same in-progress states as above.
+      const inProgressStates = ['active', 'onboarded', 'in_transit'];
+      const partneredActiveIds = (allPartnered || []).filter(a => inProgressStates.includes((a.status || '').toString().toLowerCase())).map(a => a.id);
+      if (partneredActiveIds.length > 0) {
+        await Promise.all(partneredActiveIds.map(id => fetchSessionForAmbulance(id)));
       }
     } catch (error) {
       console.error('Failed to fetch partnered ambulances:', error);
@@ -356,6 +341,16 @@ export const Onboarding = () => {
     try {
       const resp = await patientService.getAllSessions({ ambulanceId, limit: 1, _ts: Date.now() });
       const sessions = resp.data?.data?.sessions || resp.data?.sessions || resp.data?.data || (Array.isArray(resp.data) ? resp.data : []);
+      const hasSessionFlag = resp.data?.data?.hasSession || resp.data?.hasSession || false;
+
+      // If server indicates a session exists but the details are omitted for this user,
+      // store a sentinel so the UI can show an outbound/limited-access notice.
+      if ((Array.isArray(sessions) && sessions.length === 0) && hasSessionFlag) {
+        const sentinel = { redacted: true, hasSession: true };
+        setSessionsByAmbulance(prev => ({ ...prev, [ambulanceId]: sentinel }));
+        return sentinel;
+      }
+
       const session = Array.isArray(sessions) && sessions.length > 0 ? sessions[0] : null;
       setSessionsByAmbulance(prev => ({ ...prev, [ambulanceId]: session }));
       return session;
@@ -600,12 +595,28 @@ export const Onboarding = () => {
                     return <span className="text-sm text-gray-500">No active session</span>;
                   }
 
+                  // If the session was redacted for this user (server indicated a session exists
+                  // but didn't return details), show the outbound/limited-access notice.
+                  if (session && session.redacted) {
+                    return <span className="text-sm text-yellow-700">This ambulance is outbound for a different hospital.</span>;
+                  }
+
                   // For hospital users: deny view/offboard if destination is a different hospital
                   const userOrgId = user?.role === 'superadmin' ? selectedOrgId : user?.organizationId;
                   const sessionDestination = session.destination_hospital_id || session.destinationHospitalId;
                   const sessionOwnerOrg = session.organization_id || session.organizationId;
 
-                  if (isHospitalContext && sessionDestination && parseInt(sessionDestination) !== parseInt(userOrgId) && parseInt(sessionOwnerOrg) !== parseInt(userOrgId)) {
+                  // Determine if current user is part of the assigned crew for this session
+                  const crew = session.crew || [];
+                  const isAssignedCrew = Array.isArray(crew) && crew.some(c => parseInt(c.id) === parseInt(user?.id));
+
+                  // Fleet owners who own the ambulance are allowed
+                  const ambulanceOwnerOrg = row.organization_id || row.organizationId;
+                  const isFleetOwner = user?.organizationType === 'fleet_owner' && parseInt(ambulanceOwnerOrg) === parseInt(userOrgId);
+
+                  const hospitalDenied = isHospitalContext && sessionDestination && parseInt(sessionDestination) !== parseInt(userOrgId) && parseInt(sessionOwnerOrg) !== parseInt(userOrgId) && !isAssignedCrew;
+
+                  if (hospitalDenied) {
                     return <span className="text-sm text-yellow-700">This ambulance is outbound for a different hospital.</span>;
                   }
 

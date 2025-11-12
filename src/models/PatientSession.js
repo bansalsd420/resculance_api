@@ -140,7 +140,13 @@ class PatientSessionModel {
     }
 
     const [rows] = await db.query(query, params);
-    
+    try {
+      if (filters && filters.ambulanceId) {
+        console.log('🔎 findAll lookup for ambulance', { ambulanceId: filters.ambulanceId, paramsCount: params.length, returned: Array.isArray(rows) ? rows.length : 0, firstId: rows[0] ? rows[0].id : null });
+      }
+    } catch (e) {
+      // ignore logging failures
+    }
     // For each session, fetch the assigned crew members
     for (let i = 0; i < rows.length; i++) {
       const [crew] = await db.query(
@@ -177,6 +183,22 @@ class PatientSessionModel {
       // swallow logging errors
     }
     return rows[0];
+  }
+
+  static async findLatestByAmbulance(ambulanceId) {
+    const [rows] = await db.query(
+      `SELECT ps.* FROM patient_sessions ps
+       WHERE ps.ambulance_id = ?
+       ORDER BY ps.created_at DESC
+       LIMIT 1`,
+      [ambulanceId]
+    );
+    try {
+      console.log('🔎 findLatestByAmbulance', { ambulanceId, found: Array.isArray(rows) ? rows.length : 0, sessionId: rows[0] ? rows[0].id : null, createdAt: rows[0] ? rows[0].created_at : null });
+    } catch (e) {
+      // swallow logging errors
+    }
+    return rows[0] || null;
   }
 
   static async findActiveByPatient(patientId) {
