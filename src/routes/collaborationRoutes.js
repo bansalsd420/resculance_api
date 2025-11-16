@@ -32,8 +32,9 @@ router.get('/:id', CollaborationController.getById);
 
 router.patch(
   '/:id/accept',
-  requireOrgType(ORG_TYPES.FLEET_OWNER),
   authorize(
+    ROLES.HOSPITAL_ADMIN,
+    ROLES.HOSPITAL_STAFF,
     ROLES.FLEET_ADMIN,
     ROLES.FLEET_STAFF
   ),

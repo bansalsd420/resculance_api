@@ -571,17 +571,6 @@ export default function SessionDetail() {
         </Card>
       )}
 
-      {/* Raw Metadata (for superadmin debugging) */}
-      {metadata && (
-        <Card className="p-6">
-          <details>
-            <summary className="cursor-pointer font-semibold text-sm mb-4">Raw Metadata JSON (Debug)</summary>
-            <pre className="text-xs bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-auto max-h-96">
-              {JSON.stringify(metadata, null, 2)}
-            </pre>
-          </details>
-        </Card>
-      )}
     </div>
   );
 }

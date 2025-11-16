@@ -408,11 +408,22 @@ export const Collaborations = () => {
       render: (collab) => {
           const status = (collab.status || '').toLowerCase();
           const isSuper = user?.role === 'superadmin';
-          const isRequesterHospital = user?.organizationId && (user.organizationId === collab.hospital_id || user.organizationId === collab.hospitalId);
-          const isFleetOwner = user?.organizationId && (user.organizationId === collab.fleet_id || user.organizationId === collab.fleetId);
-
-          const canAcceptOrReject = status === 'pending' && (isSuper || isFleetOwner);
-          const canCancel = (status === 'pending' && (isSuper || isRequesterHospital || isFleetOwner)) || (status === 'approved' && (isSuper || isRequesterHospital || isFleetOwner));
+          
+          // Determine requester and recipient organizations
+          const requesterOrgId = collab.requester_organization_id || collab.requesterOrganizationId;
+          const isRequesterHospital = requesterOrgId === (collab.hospital_id || collab.hospitalId);
+          const recipientOrgId = isRequesterHospital ? (collab.fleet_id || collab.fleetId) : (collab.hospital_id || collab.hospitalId);
+          
+          // Only the RECIPIENT can approve/reject (or superadmin)
+          const isRecipient = user?.organizationId === recipientOrgId;
+          const canAcceptOrReject = status === 'pending' && (isSuper || isRecipient);
+          
+          // Any party involved can cancel
+          const isRequesterOrg = user?.organizationId === requesterOrgId;
+          const isFleetOwner = user?.organizationId && (user.organizationId === (collab.fleet_id || collab.fleetId));
+          const isHospitalOwner = user?.organizationId && (user.organizationId === (collab.hospital_id || collab.hospitalId));
+          const canCancel = (status === 'pending' && (isSuper || isRequesterOrg || isFleetOwner || isHospitalOwner)) || 
+                           (status === 'approved' && (isSuper || isRequesterOrg || isFleetOwner || isHospitalOwner));
 
           return (
             <div className="flex items-center gap-2">

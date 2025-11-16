@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { Login } from './pages/auth/Login';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { LandingPage } from './pages/landing/LandingPage';
 import { NotFound } from './pages/NotFound';
 import { Dashboard } from './pages/dashboard/Dashboard';
 import { Organizations } from './pages/organizations/Organizations';
@@ -37,6 +38,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             {/* Public Routes */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             {/* Register removed - users should be created by admins only */}
@@ -197,8 +199,15 @@ function App() {
             }
           />
 
-          {/* Redirect root to dashboard */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {/* Redirect /dashboard to dashboard or login based on auth */}
+          <Route 
+            path="/home" 
+            element={
+              <ProtectedRoute>
+                <Navigate to="/dashboard" replace />
+              </ProtectedRoute>
+            } 
+          />
 
           {/* 404 - Catch all */}
           <Route path="*" element={<NotFound />} />

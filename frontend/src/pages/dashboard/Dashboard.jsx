@@ -22,42 +22,19 @@ import { useToast } from '../../hooks/useToast';
 import getErrorMessage from '../../utils/getErrorMessage';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 
-const QuickStatItem = ({ title, value, icon: Icon, color = 'primary', to }) => {
-  const colorMap = {
-    primary: 'text-blue-600 dark:text-blue-400',
-    success: 'text-green-600 dark:text-green-400',
-    warning: 'text-amber-600 dark:text-amber-400',
-    info: 'text-cyan-600 dark:text-cyan-400',
-    purple: 'text-purple-600 dark:text-purple-400',
-    pink: 'text-pink-600 dark:text-pink-400',
-    error: 'text-red-600 dark:text-red-400',
-  };
-
-  const ringMap = {
-    primary: 'ring-blue-200/60 dark:ring-blue-900/30',
-    success: 'ring-green-200/60 dark:ring-green-900/30',
-    warning: 'ring-amber-200/60 dark:ring-amber-900/30',
-    info: 'ring-cyan-200/60 dark:ring-cyan-900/30',
-    purple: 'ring-purple-200/60 dark:ring-purple-900/30',
-    pink: 'ring-pink-200/60 dark:ring-pink-900/30',
-    error: 'ring-red-200/60 dark:ring-red-900/30',
-  };
-
-  const iconColor = colorMap[color] || colorMap.primary;
-  const ringColor = ringMap[color] || ringMap.primary;
-
+const QuickStatItem = ({ title, value, icon: Icon, to }) => {
   const content = (
-    <div className="p-3 rounded-lg bg-background dark:bg-gray-800 border border-border flex items-center justify-between transition-colors hover:shadow-sm cursor-pointer">
+    <div className="p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-between transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 bg-background-2 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 ring-2 ${ringColor}`}>
-          <Icon className={`${iconColor} w-5 h-5`} />
+        <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
+          <Icon className="text-gray-700 dark:text-gray-300 w-5 h-5" />
         </div>
         <div>
-          <p className="text-text-secondary text-xs font-medium">{title}</p>
-          <h3 className="text-text text-lg font-semibold">{value}</h3>
+          <p className="text-gray-600 dark:text-gray-400 text-xs font-medium">{title}</p>
+          <h3 className="text-gray-900 dark:text-gray-100 text-lg font-semibold">{value}</h3>
         </div>
       </div>
-      <ArrowRight className="w-4 h-4 text-text-secondary" />
+      <ArrowRight className="w-4 h-4 text-gray-400" />
     </div>
   );
 
@@ -180,7 +157,6 @@ export const Dashboard = () => {
               title="Organizations"
               value={loading ? '...' : stats.totalOrganizations || 0}
               icon={Building2}
-              color="primary"
               to="/organizations"
             />
 
@@ -188,7 +164,6 @@ export const Dashboard = () => {
               title="Hospitals"
               value={loading ? '...' : stats.totalHospitals || 0}
               icon={Building2}
-              color="success"
               to="/organizations"
             />
 
@@ -196,7 +171,6 @@ export const Dashboard = () => {
               title="Fleets"
               value={loading ? '...' : stats.totalFleets || 0}
               icon={Truck}
-              color="purple"
               to="/organizations"
             />
 
@@ -204,7 +178,6 @@ export const Dashboard = () => {
               title="Users"
               value={loading ? '...' : stats.totalUsers || 0}
               icon={Users}
-              color="info"
               to="/users"
             />
 
@@ -212,7 +185,6 @@ export const Dashboard = () => {
               title="Ambulances"
               value={loading ? '...' : stats.totalAmbulances || 0}
               icon={Ambulance}
-              color="success"
               to="/ambulances"
             />
 
@@ -220,7 +192,6 @@ export const Dashboard = () => {
               title="Patients"
               value={loading ? '...' : stats.totalPatients || 0}
               icon={Heart}
-              color="pink"
               to="/patients"
             />
 
@@ -228,7 +199,6 @@ export const Dashboard = () => {
               title="Collaborations"
               value={loading ? '...' : stats.totalCollaborations || 0}
               icon={Activity}
-              color="purple"
               to="/collaborations"
             />
           </Card>
@@ -242,54 +212,54 @@ export const Dashboard = () => {
           className="lg:col-span-3 space-y-6 overflow-y-auto pr-2"
         >
           {/* Active Operations - Highlight */}
-          <Card className="p-6 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border-2 border-blue-200 dark:border-blue-800">
-            <div className="flex items-start justify-between mb-4">
+          <Card className="p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+            <div className="flex items-start justify-between mb-6">
               <div>
-                <h2 className="text-xl font-bold text-text flex items-center gap-2">
-                  <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Activity className="w-6 h-6 text-gray-700 dark:text-gray-300" />
                   Active Operations
                 </h2>
-                <p className="text-sm text-text-secondary mt-1">Real-time emergency response status</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Real-time emergency response status</p>
               </div>
               <Link 
                 to="/sessions" 
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-gray-900 dark:bg-gray-700 hover:bg-gray-800 dark:hover:bg-gray-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
               >
                 View All <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Active Trips</span>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Active Trips</span>
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <h3 className="text-4xl font-bold text-text">{loading ? '...' : stats.activeTrips || 0}</h3>
-                  <span className="text-sm text-text-secondary">live now</span>
+                  <h3 className="text-4xl font-bold text-gray-900 dark:text-gray-100">{loading ? '...' : stats.activeTrips || 0}</h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">live now</span>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Available Units</span>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Available Units</span>
                   <CheckCircle className="w-4 h-4 text-green-500" />
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <h3 className="text-4xl font-bold text-text">{loading ? '...' : stats.totalAmbulances || 0}</h3>
-                  <span className="text-sm text-text-secondary">ready</span>
+                  <h3 className="text-4xl font-bold text-gray-900 dark:text-gray-100">{loading ? '...' : stats.totalAmbulances || 0}</h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">ready</span>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-text-secondary uppercase tracking-wide">Response Rate</span>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Response Rate</span>
                   <TrendingUp className="w-4 h-4 text-green-500" />
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <h3 className="text-4xl font-bold text-green-600 dark:text-green-400">98%</h3>
-                  <span className="text-sm text-text-secondary">avg</span>
+                  <h3 className="text-4xl font-bold text-gray-900 dark:text-gray-100">98%</h3>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">avg</span>
                 </div>
               </div>
             </div>
@@ -300,11 +270,11 @@ export const Dashboard = () => {
             {/* Recent Activity */}
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-text flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                   Recent Activity
                 </h3>
-                <Link to="/activities" className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 font-medium">View all</Link>
+                <Link to="/activities" className="text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 font-medium">View all</Link>
               </div>
               <div className="space-y-3">
                 {loadingActivities ? (
@@ -346,55 +316,55 @@ export const Dashboard = () => {
             {/* Quick Actions */}
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-text flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                   Quick Actions
                 </h3>
               </div>
               <div className="grid grid-cols-1 gap-3">
                 <Link 
                   to="/onboarding" 
-                  className="p-4 rounded-xl bg-background dark:bg-gray-800 border border-border text-text transition-all hover:shadow-sm"
+                  className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600"
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-bold text-lg">Start Emergency Session</p>
-                      <p className="text-sm text-text-secondary">Onboard patient & dispatch</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Onboard patient & dispatch</p>
                     </div>
-                    <ArrowRight className="w-6 h-6 text-text-secondary" />
+                    <ArrowRight className="w-6 h-6 text-gray-400" />
                   </div>
                 </Link>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Link 
                     to="/patients" 
-                    className="p-4 rounded-xl bg-background dark:bg-gray-800 border border-border text-text transition-all hover:shadow-sm flex flex-col items-start"
+                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Heart className="w-8 h-8 mb-2 text-pink-600 dark:text-pink-400" />
+                    <Heart className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
                     <p className="font-semibold text-sm">Add Patient</p>
                   </Link>
 
                   <Link 
                     to="/ambulances" 
-                    className="p-4 rounded-xl bg-background dark:bg-gray-800 border border-border text-text transition-all hover:shadow-sm flex flex-col items-start"
+                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Ambulance className="w-8 h-8 mb-2 text-green-600 dark:text-green-400" />
+                    <Ambulance className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
                     <p className="font-semibold text-sm">Add Ambulance</p>
                   </Link>
 
                   <Link 
                     to="/users" 
-                    className="p-4 rounded-xl bg-background dark:bg-gray-800 border border-border text-text transition-all hover:shadow-sm flex flex-col items-start"
+                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Users className="w-8 h-8 mb-2 text-blue-600 dark:text-blue-400" />
+                    <Users className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
                     <p className="font-semibold text-sm">Invite User</p>
                   </Link>
 
                   <Link 
                     to="/collaborations" 
-                    className="p-4 rounded-xl bg-background dark:bg-gray-800 border border-border text-text transition-all hover:shadow-sm flex flex-col items-start"
+                    className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Building2 className="w-8 h-8 mb-2 text-purple-600 dark:text-purple-400" />
+                    <Building2 className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
                     <p className="font-semibold text-sm">New Collaboration</p>
                   </Link>
                 </div>
@@ -405,20 +375,20 @@ export const Dashboard = () => {
           {/* System Health */}
           <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-text flex items-center gap-2">
-                <Activity className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                 System Health
               </h3>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'API Status', value: 'Operational', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' },
-                { label: 'Database', value: 'Healthy', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' },
-                { label: 'Socket.IO', value: 'Connected', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' },
-                { label: 'Uptime', value: '99.9%', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+                { label: 'API Status', value: 'Operational', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+                { label: 'Database', value: 'Healthy', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+                { label: 'Socket.IO', value: 'Connected', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+                { label: 'Uptime', value: '99.9%', color: 'text-gray-700 dark:text-gray-300', bg: 'bg-gray-100 dark:bg-gray-800' },
               ].map((item, idx) => (
-                <div key={idx} className={`${item.bg} rounded-lg p-3 text-center`}>
-                  <p className="text-xs text-text-secondary font-semibold mb-1">{item.label}</p>
+                <div key={idx} className={`${item.bg} rounded-lg p-3 text-center border border-gray-200 dark:border-gray-700`}>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-semibold mb-1">{item.label}</p>
                   <p className={`text-lg font-bold ${item.color}`}>{item.value}</p>
                 </div>
               ))}

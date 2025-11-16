@@ -185,19 +185,19 @@ class CollaborationController {
       const { id } = req.params;
       const { rejectedReason } = req.body;
 
-      // Only fleet owner can accept requests (superadmin may also perform this action)
-      if (req.user.role !== 'superadmin' && req.user.organizationType !== 'fleet_owner') {
-        return next(new AppError('Only fleet owners can accept collaboration requests', 403));
-      }
-
       const request = await CollaborationRequestModel.findById(id);
       if (!request) {
         return next(new AppError('Collaboration request not found', 404));
       }
 
-      // Allow superadmin to act regardless of organization ownership
-      if (req.user.role !== 'superadmin' && request.fleet_id !== req.user.organizationId) {
-        return next(new AppError('Access denied', 403));
+      // Determine who the requester was and who the recipient is
+      const requesterOrgId = request.requester_organization_id;
+      const isRequesterHospital = requesterOrgId === request.hospital_id;
+      const recipientOrgId = isRequesterHospital ? request.fleet_id : request.hospital_id;
+
+      // Only the RECIPIENT organization (or superadmin) can accept
+      if (req.user.role !== 'superadmin' && req.user.organizationId !== recipientOrgId) {
+        return next(new AppError('Only the recipient organization can accept this collaboration request', 403));
       }
 
       if (request.status !== 'pending') {

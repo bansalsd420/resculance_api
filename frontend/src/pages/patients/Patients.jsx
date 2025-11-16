@@ -13,16 +13,12 @@ import {
   Search,
   Activity,
   Heart,
-  Thermometer,
-  Phone,
-  Calendar,
   AlertCircle,
   Eye,
   CheckCircle,
   XCircle,
   Clock,
   Ambulance as AmbulanceIcon,
-  User,
   MapPin,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -52,15 +48,6 @@ const patientSchema = yup.object({
   emergencyContactRelation: yup.string().nullable(),
 });
 
-const vitalSignsSchema = yup.object({
-  heartRate: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
-  bloodPressureSystolic: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
-  bloodPressureDiastolic: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
-  temperature: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
-  oxygenSaturation: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).min(0).max(100).nullable(),
-  respiratoryRate: yup.number().transform((value, originalValue) => originalValue === '' || originalValue === null ? null : value).positive().nullable(),
-});
-
 export const Patients = () => {
   const [patients, setPatients] = useState([]);
   const [selectedTab, setSelectedTab] = useState('new');
@@ -69,11 +56,10 @@ export const Patients = () => {
   const [patientsCache, setPatientsCache] = useState({});
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [showVitalsModal, setShowVitalsModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [vitalSigns, setVitalSigns] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [orgTypeFilter, setOrgTypeFilter] = useState('');
@@ -95,15 +81,6 @@ export const Patients = () => {
     formState: { errors },
   } = useForm({
     resolver: yupResolver(patientSchema),
-  });
-
-  const {
-    register: registerVitals,
-    handleSubmit: handleSubmitVitals,
-    reset: resetVitals,
-    formState: { errors: vitalsErrors },
-  } = useForm({
-    resolver: yupResolver(vitalSignsSchema),
   });
 
   useEffect(() => {
@@ -279,20 +256,6 @@ export const Patients = () => {
   };
 
 
-  const fetchVitalSigns = async (patientId) => {
-    try {
-      const response = await patientService.getVitalSigns(patientId);
-      // Backend: { success: true, data: { vitalSigns: [...], sessionId } }
-      const vitals = response.data?.data?.vitalSigns || response.data?.vitalSigns || response.data || [];
-      setVitalSigns(vitals);
-    } catch (error) {
-      console.error('Failed to fetch vital signs:', error);
-  const msg = getErrorMessage(error, 'Failed to load vital signs');
-      toast.error(msg);
-      setVitalSigns([]);
-    }
-  };
-
   const fetchSessions = async (patientId) => {
     try {
       const response = await patientService.getSessions(patientId);
@@ -350,27 +313,6 @@ export const Patients = () => {
     }
   };
 
-  const onSubmitVitals = async (data) => {
-    try {
-      setLoading(true);
-      // Clean up empty strings to null
-      const cleanedData = Object.keys(data).reduce((acc, key) => {
-        acc[key] = data[key] === '' || data[key] === undefined ? null : data[key];
-        return acc;
-      }, {});
-      await patientService.addVitalSigns(selectedPatient.id, cleanedData);
-      toast.success('Vital signs added successfully');
-      await fetchVitalSigns(selectedPatient.id);
-      resetVitals();
-    } catch (error) {
-      console.error('Failed to save vital signs:', error);
-  const msg = getErrorMessage(error, 'Failed to add vital signs');
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleEdit = (patient) => {
     setEditingPatient(patient);
     // Pre-fill organization selection if present
@@ -418,9 +360,8 @@ export const Patients = () => {
 
   const handleViewDetails = async (patient) => {
     setSelectedPatient(patient);
-    await fetchVitalSigns(patient.id);
     await fetchSessions(patient.id);
-    setShowVitalsModal(true);
+    setShowDetailsModal(true);
   };
 
   const handleCloseModal = () => {
@@ -984,229 +925,141 @@ export const Patients = () => {
         </form>
       </Modal>
 
-      {/* Patient Details & Vitals Modal */}
+      {/* Patient Details Modal */}
       <Modal
-        isOpen={showVitalsModal}
-        onClose={() => setShowVitalsModal(false)}
+        isOpen={showDetailsModal}
+        onClose={() => setShowDetailsModal(false)}
+        title="Patient Details"
         size="xl"
       >
-        <div className="space-y-4">
-          {user?.role === 'superadmin' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-text mb-2">Organization Type</label>
-                <Select
-                  isClearable
-                  value={orgTypeFilter ? { value: orgTypeFilter, label: orgTypeFilter === 'hospital' ? 'Hospital' : 'Fleet Owner' } : null}
-                  onChange={(opt) => { const v = opt?.value || ''; setOrgTypeFilter(v); setSelectedOrgId(null); setSelectedOrgInfo(null); }}
-                  options={[{ value: '', label: 'All Types' }, { value: 'hospital', label: 'Hospital' }, { value: 'fleet_owner', label: 'Fleet Owner' }]}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-text mb-2">Organization</label>
-                <div>
-                  <Select
-                    isDisabled={!orgTypeFilter}
-                    placeholder={orgTypeFilter ? 'Type to search or pick an organization' : 'Select an organization type first'}
-                    options={organizations.filter(o => (!orgTypeFilter || o.type === orgTypeFilter)).map(o => ({ value: o.id, label: `${o.name} (${o.code})` }))}
-                    value={selectedOrgId ? { value: selectedOrgId, label: `${selectedOrgInfo?.name || ''} (${selectedOrgInfo?.code || ''})` } : null}
-                    onChange={(opt) => {
-                      if (opt) {
-                        setSelectedOrgId(opt.value);
-                        const info = organizations.find(o => o.id === opt.value) || null;
-                        setSelectedOrgInfo(info);
-                      } else {
-                        setSelectedOrgId(null);
-                        setSelectedOrgInfo(null);
-                      }
-                    }}
-                    classNamePrefix="react-select"
-                    menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                    menuPosition="fixed"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         {selectedPatient && (
           <div className="space-y-6">
-            {/* Patient Info */}
-            <div className="grid grid-cols-3 gap-4 p-4 bg-background-card rounded-2xl">
-              <div>
-                <p className="text-sm text-secondary">Blood Group</p>
-                <p className="font-semibold">{selectedPatient.bloodGroup}</p>
-              </div>
-              <div>
-                <p className="text-sm text-secondary">Age/Gender</p>
-                <p className="font-semibold">
-                  {selectedPatient.age || 'N/A'} / {selectedPatient.gender}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-secondary">Phone</p>
-                <p className="font-semibold">{selectedPatient.phone}</p>
-              </div>
-            </div>
-
-            {/* Add Vital Signs */}
-            <div className="border border-border rounded-2xl p-4">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Heart className="w-5 h-5 text-red-600" />
-                Add Vital Signs
-              </h3>
-              <form onSubmit={handleSubmitVitals(onSubmitVitals)} className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <Input
-                    label="Heart Rate (bpm)"
-                    type="number"
-                    {...registerVitals('heartRate')}
-                    error={vitalsErrors.heartRate?.message}
-                  />
-                  <Input
-                    label="Systolic BP (mmHg)"
-                    type="number"
-                    {...registerVitals('bloodPressureSystolic')}
-                    error={vitalsErrors.bloodPressureSystolic?.message}
-                  />
-                  <Input
-                    label="Diastolic BP (mmHg)"
-                    type="number"
-                    {...registerVitals('bloodPressureDiastolic')}
-                    error={vitalsErrors.bloodPressureDiastolic?.message}
-                  />
-                  <Input
-                    label="Temperature (°F)"
-                    type="number"
-                    step="0.1"
-                    {...registerVitals('temperature')}
-                    error={vitalsErrors.temperature?.message}
-                  />
-                  <Input
-                    label="Oxygen Sat. (%)"
-                    type="number"
-                    {...registerVitals('oxygenSaturation')}
-                    error={vitalsErrors.oxygenSaturation?.message}
-                  />
-                  <Input
-                    label="Resp. Rate (bpm)"
-                    type="number"
-                    {...registerVitals('respiratoryRate')}
-                    error={vitalsErrors.respiratoryRate?.message}
-                  />
+            {/* Patient Info Card */}
+            <Card className="p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                  {selectedPatient.firstName?.[0]}{selectedPatient.lastName?.[0]}
                 </div>
-                <Button type="submit" loading={loading}>
-                  Save Vital Signs
-                </Button>
-              </form>
-            </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-text">
+                    {selectedPatient.firstName} {selectedPatient.lastName}
+                  </h3>
+                  <p className="text-sm text-text-secondary">{selectedPatient.email}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
+                  <p className="text-xs font-medium text-text-secondary mb-1">Blood Group</p>
+                  <p className="text-lg font-bold text-text">{selectedPatient.bloodGroup || selectedPatient.blood_group || 'N/A'}</p>
+                </div>
+                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
+                  <p className="text-xs font-medium text-text-secondary mb-1">Age / Gender</p>
+                  <p className="text-lg font-bold text-text">
+                    {selectedPatient.age || 'N/A'} / {selectedPatient.gender || 'N/A'}
+                  </p>
+                </div>
+                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
+                  <p className="text-xs font-medium text-text-secondary mb-1">Phone</p>
+                  <p className="text-lg font-bold text-text">{selectedPatient.phone || 'N/A'}</p>
+                </div>
+              </div>
 
-            {/* Vital Signs History */}
-            <div>
-              <h3 className="font-semibold mb-4">Vital Signs History</h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {vitalSigns.length === 0 ? (
-                  <p className="text-secondary text-center py-8">No vital signs recorded yet</p>
-                ) : (
-                  vitalSigns.map((vital, index) => (
-                    <div
-                      key={index}
-                      className="p-4 border border-border rounded-2xl hover:bg-background-card transition-colors"
-                    >
-                      <div className="grid grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <p className="text-secondary">HR</p>
-                          <p className="font-semibold">{vital.heartRate} bpm</p>
-                        </div>
-                        <div>
-                          <p className="text-secondary">BP</p>
-                          <p className="font-semibold">
-                            {vital.bloodPressureSystolic}/{vital.bloodPressureDiastolic}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-secondary">Temp</p>
-                          <p className="font-semibold">{vital.temperature}°F</p>
-                        </div>
-                        <div>
-                          <p className="text-secondary">SpO2</p>
-                          <p className="font-semibold">{vital.oxygenSaturation}%</p>
-                        </div>
-                      </div>
-                      <p className="text-xs text-secondary mt-2">
-                        {new Date(vital.recordedAt).toLocaleString()}
+              {selectedPatient.address && (
+                <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
+                  <p className="text-xs font-medium text-text-secondary mb-1">Address</p>
+                  <p className="text-sm text-text">{selectedPatient.address}</p>
+                </div>
+              )}
+
+              {(selectedPatient.emergencyContactName || selectedPatient.emergency_contact_name) && (
+                <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
+                  <p className="text-xs font-medium text-text-secondary mb-2">Emergency Contact</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-text">
+                        {selectedPatient.emergencyContactName || selectedPatient.emergency_contact_name}
+                      </p>
+                      <p className="text-xs text-text-secondary">
+                        {selectedPatient.emergencyContactRelation || selectedPatient.emergency_contact_relation || 'Relation not specified'}
                       </p>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
+                    <p className="text-sm font-medium text-text">
+                      {selectedPatient.emergencyContactPhone || selectedPatient.emergency_contact_phone || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Card>
 
-            {/* Sessions History (compact: ambulance, duration, onboarded, actions) */}
+            {/* Sessions History */}
             <div>
-              <h3 className="font-semibold mb-4">Patient Sessions</h3>
+              <h3 className="text-xl font-bold text-text mb-4 flex items-center gap-2">
+                <Activity className="w-6 h-6 text-blue-600" />
+                Patient Sessions
+              </h3>
               <div className="overflow-x-auto">
                 <table className="w-full table-auto">
-                        <thead>
-                          <tr className="text-left text-sm text-secondary">
-                            <th className="px-4 py-2">Ambulance</th>
-                            <th className="px-4 py-2">Status</th>
-                            <th className="px-4 py-2">Duration</th>
-                            <th className="px-4 py-2">Onboarded At</th>
-                            <th className="px-4 py-2">Actions</th>
+                  <thead>
+                    <tr className="text-left text-sm text-text-secondary border-b border-border">
+                      <th className="px-4 py-3">Ambulance</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Duration</th>
+                      <th className="px-4 py-3">Onboarded At</th>
+                      <th className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(!Array.isArray(sessions) || sessions.length === 0) ? (
+                      <tr>
+                        <td colSpan={5} className="text-center p-8 text-text-secondary">
+                          <Activity className="w-12 h-12 text-text-secondary mx-auto mb-2 opacity-50" />
+                          <p>No sessions found for this patient</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      sessions.map((session) => {
+                        const start = session.onboarded_at || session.onboardedAt || session.created_at || session.createdAt;
+                        const end = session.offboarded_at || session.offboardedAt || session.actual_arrival_time;
+                        const duration = formatDuration(start, end);
+                        const ambulanceLabel = session.registration_number || session.ambulance_code || session.ambulance?.registration_number || 'N/A';
+                        return (
+                          <tr key={session.id} className="border-b border-border hover:bg-background-card transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-md">
+                                  <AmbulanceIcon className="w-5 h-5 text-white" />
+                                </div>
+                                <div className="font-medium text-sm text-text">{ambulanceLabel}</div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {getStatusBadge(session.status)}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-text-secondary font-medium">{duration}</td>
+                            <td className="px-4 py-3 text-sm text-text-secondary">
+                              {start ? new Date(start).toLocaleString() : 'N/A'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={() => window.open(`/sessions/${session.id}`, '_blank')}
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {(!Array.isArray(sessions) || sessions.length === 0) ? (
-                            <tr>
-                              <td colSpan={5} className="text-center p-6 text-secondary">No sessions found</td>
-                            </tr>
-                          ) : (
-                            sessions.map((session) => {
-                              const start = session.onboarded_at || session.onboardedAt || session.created_at || session.createdAt;
-                              const end = session.offboarded_at || session.offboardedAt || session.actual_arrival_time || session.offboarded_at;
-                              const duration = formatDuration(start, end);
-                              const ambulanceLabel = session.registration_number || session.ambulance_code || session.ambulance?.registration_number || 'N/A';
-                              return (
-                                <tr key={session.id} className="border-t hover:bg-background-card transition-colors">
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                                        <AmbulanceIcon className="w-4 h-4 text-red-600" />
-                                      </div>
-                                      <div>
-                                        <div className="font-medium text-sm">{ambulanceLabel}</div>
-                                      </div>
-                                    </div>
-                                  </td>
-
-                                  <td className="px-4 py-3">
-                                    {getStatusBadge(session.status)}
-                                  </td>
-
-                                  <td className="px-4 py-3 text-sm text-secondary">{duration}</td>
-
-                                  <td className="px-4 py-3 text-sm text-secondary">
-                                    {start ? new Date(start).toLocaleString() : 'N/A'}
-                                  </td>
-
-                                  <td className="px-4 py-3">
-                                    <Button size="sm" variant="secondary" onClick={() => window.open(`/sessions/${session.id}`, '_blank')}>
-                                      <Eye className="w-4 h-4 mr-1" />
-                                      View
-                                    </Button>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
-        </div>
       </Modal>
     </div>
   );

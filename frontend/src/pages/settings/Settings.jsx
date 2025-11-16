@@ -119,7 +119,6 @@ export const Settings = () => {
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'password', label: 'Password', icon: Lock },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'organization', label: 'Organization', icon: Building2 },
   ];
 
@@ -345,57 +344,6 @@ export const Settings = () => {
                     </Button>
                   </div>
                 </form>
-              </div>
-            )}
-
-            {/* Notifications Tab */}
-            {activeTab === 'notifications' && (
-              <div>
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">Notification Preferences</h2>
-                  <p className="text-secondary">
-                    Manage how you receive notifications and updates
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {[
-                    {
-                      label: 'Email Notifications',
-                      description: 'Receive email updates about important activities',
-                    },
-                    {
-                      label: 'Push Notifications',
-                      description: 'Get push notifications for urgent updates',
-                    },
-                    {
-                      label: 'SMS Notifications',
-                      description: 'Receive SMS alerts for critical events',
-                    },
-                    {
-                      label: 'Trip Alerts',
-                      description: 'Get notified about new trip assignments',
-                    },
-                    {
-                      label: 'User Approvals',
-                      description: 'Notifications for pending user approvals',
-                    },
-                  ].map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-4 border border-border rounded-2xl hover:bg-background-card transition-colors"
-                    >
-                      <div>
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-sm text-secondary">{item.description}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" defaultChecked />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                      </label>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
