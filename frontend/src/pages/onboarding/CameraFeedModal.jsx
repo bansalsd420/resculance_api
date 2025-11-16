@@ -47,6 +47,7 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
 
           // Get authenticated stream URL using camera service
           const streamUrl = await cameraService.getCameraStreamUrl({
+            id: device.id, // Database ID
             deviceId: device.device_id,
             username: device.device_username,
             password: device.device_password,
@@ -80,6 +81,7 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
 
       // Get authenticated stream URL using camera service
       const streamUrl = await cameraService.getCameraStreamUrl({
+        id: device.id, // Database ID
         deviceId: device.device_id,
         username: device.device_username,
         password: device.device_password,

@@ -74,17 +74,15 @@ export const GPSLocationModal = ({ isOpen, onClose, session, ambulance }) => {
         return;
       }
 
-      // Build API URL with authentication
-      const apiUrl = `http://205.147.109.152/StandardApiAction_getDeviceStatus.action`;
-      const params = new URLSearchParams({
-        jsession: device.device_password || device.device_username || '', // jsession from device password
-        devIdno: device.device_id,
-        toMap: '1',
-        language: 'zh'
+      // Call backend proxy endpoint instead of direct HTTP call
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/ambulances/devices/${device.id}/location`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        }
       });
-
-      const response = await fetch(`${apiUrl}?${params.toString()}`);
-      const data = await response.json();
+      
+      const result = await response.json();
+      const data = result.data;
 
       if (data.result === 0 && data.status && data.status.length > 0) {
         const deviceData = data.status[0];

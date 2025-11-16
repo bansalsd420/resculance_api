@@ -236,6 +236,30 @@ export const ambulanceService = {
     return response;
   },
 
+  // Get device location (proxied through backend)
+  getDeviceLocation: async (deviceId) => {
+    const response = await api.get(`/ambulances/devices/${deviceId}/location`);
+    return response;
+  },
+
+  // Get camera stream URL (proxied through backend)
+  getDeviceStream: async (deviceId) => {
+    const response = await api.get(`/ambulances/devices/${deviceId}/stream`);
+    return response;
+  },
+
+  // Get any device data based on type (proxied through backend)
+  getDeviceData: async (deviceId) => {
+    const response = await api.get(`/ambulances/devices/${deviceId}/data`);
+    return response;
+  },
+
+  // Get all device locations for an ambulance (proxied through backend)
+  getAmbulanceDevicesLocation: async (ambulanceId) => {
+    const response = await api.get(`/ambulances/${ambulanceId}/devices/location`);
+    return response;
+  },
+
   authenticateDevice: async (deviceId) => {
     const response = await api.post(`/ambulances/devices/${deviceId}/authenticate`);
     return response;

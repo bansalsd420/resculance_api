@@ -35,17 +35,31 @@ export default function DevicesCard({ sosAlerts, type = 'location', ambulance, o
       );
       
       if (gpsDevice) {
-        // Fetch location data from 808GPS API
-        const apiUrl = `http://205.147.109.152/StandardApiAction_getDeviceStatus.action`;
-        const params = new URLSearchParams({
-          jsession: gpsDevice.device_password || gpsDevice.device_username || '',
-          devIdno: gpsDevice.device_id,
-          toMap: '1',
-          language: 'zh'
+        // Fetch location data from backend proxy
+        const token = localStorage.getItem('accessToken');
+        const apiUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/ambulances/devices/${gpsDevice.id}/location`;
+        
+        const gpsResponse = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
-
-        const gpsResponse = await fetch(`${apiUrl}?${params.toString()}`);
-        const data = await gpsResponse.json();
+        
+        if (!gpsResponse.ok) {
+          console.error('GPS API failed:', gpsResponse.status, gpsResponse.statusText);
+          setLoading(false);
+          return;
+        }
+        
+        const result = await gpsResponse.json();
+        
+        if (!result.success || !result.data) {
+          console.error('Invalid GPS response:', result);
+          setLoading(false);
+          return;
+        }
+        
+        const data = result.data;
 
         if (data.result === 0 && data.status && data.status.length > 0) {
           const deviceData = data.status[0];

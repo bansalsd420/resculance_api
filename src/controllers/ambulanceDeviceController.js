@@ -159,6 +159,278 @@ class AmbulanceDeviceController {
     }
   }
 
+  static async getDeviceLocation(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const device = await AmbulanceDeviceModel.findById(id);
+      if (!device) {
+        return next(new AppError('Device not found', 404));
+      }
+
+      // Only for GPS/Location devices
+      if (!['GPS_TRACKER', 'LIVE_LOCATION'].includes(device.device_type)) {
+        return next(new AppError('Device is not a GPS tracker', 400));
+      }
+
+      if (!device.device_id) {
+        return next(new AppError('Device ID not configured', 400));
+      }
+
+      // Fetch location from 808GPS API
+      const apiUrl = 'http://205.147.109.152/StandardApiAction_getDeviceStatus.action';
+      
+      try {
+        const response = await axios.get(apiUrl, {
+          params: {
+            jsession: device.device_password || device.device_username || '',
+            devIdno: device.device_id,
+            toMap: '1',
+            language: 'zh'
+          },
+          timeout: 10000
+        });
+
+        res.json({
+          success: true,
+          data: response.data
+        });
+      } catch (apiError) {
+        console.error('GPS API error:', apiError);
+        return next(new AppError('Failed to fetch device location: ' + (apiError.message || 'Unknown error'), 500));
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getAmbulanceDevicesLocation(req, res, next) {
+    try {
+      const { ambulanceId } = req.params;
+
+      const devices = await AmbulanceDeviceModel.findByAmbulance(ambulanceId);
+      const gpsDevices = devices.filter(d => 
+        ['GPS_TRACKER', 'LIVE_LOCATION'].includes(d.device_type) && 
+        d.status === 'active' &&
+        d.device_id
+      );
+
+      if (gpsDevices.length === 0) {
+        return res.json({
+          success: true,
+          data: []
+        });
+      }
+
+      // Fetch location for all GPS devices
+      const apiUrl = 'http://205.147.109.152/StandardApiAction_getDeviceStatus.action';
+      const locationPromises = gpsDevices.map(async (device) => {
+        try {
+          const response = await axios.get(apiUrl, {
+            params: {
+              jsession: device.device_password || device.device_username || '',
+              devIdno: device.device_id,
+              toMap: '1',
+              language: 'zh'
+            },
+            timeout: 10000
+          });
+
+          return {
+            deviceId: device.id,
+            deviceName: device.device_name,
+            deviceIdno: device.device_id,
+            location: response.data
+          };
+        } catch (error) {
+          console.error(`Failed to fetch location for device ${device.device_id}:`, error);
+          return {
+            deviceId: device.id,
+            deviceName: device.device_name,
+            deviceIdno: device.device_id,
+            error: error.message
+          };
+        }
+      });
+
+      const locations = await Promise.all(locationPromises);
+
+      res.json({
+        success: true,
+        data: locations
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getDeviceStream(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const device = await AmbulanceDeviceModel.findById(id);
+      if (!device) {
+        return next(new AppError('Device not found', 404));
+      }
+
+      // Only for Camera devices
+      if (device.device_type !== 'CAMERA') {
+        return next(new AppError('Device is not a camera', 400));
+      }
+
+      if (!device.device_id || !device.device_username || !device.device_password) {
+        return next(new AppError('Device credentials not configured', 400));
+      }
+
+      // Authenticate with 808GPS API to get jsession
+      const apiBase = device.device_api || 'http://205.147.109.152';
+      const loginUrl = `${apiBase}/StandardApiAction_login.action`;
+      
+      try {
+        const response = await axios.get(loginUrl, {
+          params: {
+            account: device.device_username,
+            password: device.device_password
+          },
+          timeout: 10000
+        });
+
+        console.log('808GPS login response:', response.data);
+        
+        // Check for login failure
+        if (response.data?.result !== 0) {
+          const errorMsg = response.data?.message || 'Authentication failed';
+          console.error('808GPS authentication failed:', errorMsg);
+          return next(new AppError(`Camera authentication failed: ${errorMsg}. Please check device username and password.`, 401));
+        }
+        
+        const jsession = response.data?.jsession || response.data?.JSESSIONID;
+        
+        if (!jsession) {
+          console.error('No jsession in response:', response.data);
+          return next(new AppError('Failed to obtain camera session', 500));
+        }
+
+        // Build camera stream URL
+        const streamUrl = `${apiBase}/808gps/open/player/video.html?lang=en&devIdno=${encodeURIComponent(device.device_id)}&jsession=${encodeURIComponent(jsession)}`;
+
+        res.json({
+          success: true,
+          data: {
+            streamUrl,
+            jsession,
+            deviceId: device.device_id,
+            deviceName: device.device_name
+          }
+        });
+      } catch (apiError) {
+        console.error('Camera API error:', apiError);
+        return next(new AppError('Failed to authenticate camera: ' + (apiError.message || 'Unknown error'), 500));
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getDeviceData(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      const device = await AmbulanceDeviceModel.findById(id);
+      if (!device) {
+        return next(new AppError('Device not found', 404));
+      }
+
+      // Handle different device types
+      switch (device.device_type) {
+        case 'GPS_TRACKER':
+        case 'LIVE_LOCATION':
+          // Fetch GPS location
+          try {
+            const apiUrl = 'http://205.147.109.152/StandardApiAction_getDeviceStatus.action';
+            const response = await axios.get(apiUrl, {
+              params: {
+                jsession: device.device_password || device.device_username || '',
+                devIdno: device.device_id,
+                toMap: '1',
+                language: 'zh'
+              },
+              timeout: 10000
+            });
+
+            return res.json({
+              success: true,
+              deviceType: device.device_type,
+              data: response.data
+            });
+          } catch (apiError) {
+            return next(new AppError('Failed to fetch GPS data: ' + apiError.message, 500));
+          }
+
+        case 'CAMERA':
+          // Fetch camera stream URL
+          try {
+            const apiBase = device.device_api || 'http://205.147.109.152';
+            const loginUrl = `${apiBase}/StandardApiAction_login.action`;
+            
+            const response = await axios.get(loginUrl, {
+              params: {
+                account: device.device_username,
+                password: device.device_password
+              },
+              timeout: 10000
+            });
+
+            // Check for login failure
+            if (response.data?.result !== 0) {
+              const errorMsg = response.data?.message || 'Authentication failed';
+              return next(new AppError(`Camera authentication failed: ${errorMsg}. Please check device username and password.`, 401));
+            }
+
+            const jsession = response.data?.jsession || response.data?.JSESSIONID;
+            
+            if (!jsession) {
+              return next(new AppError('Failed to obtain camera session', 500));
+            }
+
+            const streamUrl = `${apiBase}/808gps/open/player/video.html?lang=en&devIdno=${encodeURIComponent(device.device_id)}&jsession=${encodeURIComponent(jsession)}`;
+
+            return res.json({
+              success: true,
+              deviceType: device.device_type,
+              data: {
+                streamUrl,
+                jsession,
+                deviceId: device.device_id
+              }
+            });
+          } catch (apiError) {
+            return next(new AppError('Failed to fetch camera data: ' + apiError.message, 500));
+          }
+
+        case 'ECG':
+        case 'VITAL_MONITOR':
+          // For ECG and Vital monitors, return device info
+          // These might need different API integrations based on device manufacturer
+          return res.json({
+            success: true,
+            deviceType: device.device_type,
+            data: {
+              deviceId: device.device_id,
+              deviceName: device.device_name,
+              status: device.status,
+              message: 'Real-time data streaming requires device-specific integration'
+            }
+          });
+
+        default:
+          return next(new AppError('Unknown device type', 400));
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async authenticate(req, res, next) {
     try {
       const { id } = req.params;

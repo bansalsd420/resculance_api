@@ -56,6 +56,7 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
 
       // Authenticate and get stream URL
       const streamUrl = await cameraService.getCameraStreamUrl({
+        id: camera.id, // Database ID
         deviceId: camera.device_id,
         username: camera.device_username,
         password: camera.device_password,
@@ -65,7 +66,21 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
       setLoading(false);
     } catch (err) {
       console.error('Failed to load camera:', err);
-      setError(`Failed to load camera: ${err.message}`);
+      
+      // Extract error message from response
+      let errorMessage = err.message;
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+      
+      // Check if it's an authentication error
+      if (errorMessage.includes('Username or password incorrect') || 
+          errorMessage.includes('authentication failed') ||
+          err.response?.status === 401) {
+        errorMessage = 'Camera credentials are incorrect. Please update the device username and password in ambulance settings.';
+      }
+      
+      setError(errorMessage);
       setLoading(false);
       toast.error('Failed to load camera feed');
     }

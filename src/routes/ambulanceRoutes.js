@@ -101,9 +101,10 @@ router.post(
   AmbulanceDeviceController.create
 );
 
-router.get('/:ambulanceId/devices', AmbulanceDeviceController.getByAmbulance);
-router.get('/devices/:id', AmbulanceDeviceController.getById);
-
+// Device API proxy endpoints - MUST come before /devices/:id to avoid route conflicts
+router.get('/devices/:id/location', AmbulanceDeviceController.getDeviceLocation);
+router.get('/devices/:id/stream', AmbulanceDeviceController.getDeviceStream);
+router.get('/devices/:id/data', AmbulanceDeviceController.getDeviceData);
 router.post('/devices/:id/authenticate', AmbulanceDeviceController.authenticate);
 
 router.put(
@@ -127,5 +128,10 @@ router.delete(
   ),
   AmbulanceDeviceController.delete
 );
+
+// Generic device routes - MUST come after specific device routes
+router.get('/devices/:id', AmbulanceDeviceController.getById);
+router.get('/:ambulanceId/devices', AmbulanceDeviceController.getByAmbulance);
+router.get('/:ambulanceId/devices/location', AmbulanceDeviceController.getAmbulanceDevicesLocation);
 
 module.exports = router;
