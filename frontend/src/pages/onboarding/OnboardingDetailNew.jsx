@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {
-  ArrowLeft,
+import {  ArrowLeft,
   Video,
   MessageCircle,
   FileText,
@@ -10,7 +9,8 @@ import {
   Trash2,
   Paperclip,
   Power,
-  Info
+  Info,
+  MapPin
 } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
@@ -22,6 +22,7 @@ import socketService from '../../services/socketService';
 import { useToast } from '../../hooks/useToast';
 import { useAuthStore } from '../../store/authStore';
 import { CameraFeedModal } from './CameraFeedModal';
+import { GPSLocationModal } from './GPSLocationModal';
 import CameraCard from '../../components/onboarding/CameraCard';
 import NewVitalsCard from '../../components/onboarding/NewVitalsCard';
 import MedicalReportsCard from '../../components/onboarding/MedicalReportsCard';
@@ -40,6 +41,7 @@ export default function OnboardingDetail() {
   const [loading, setLoading] = useState(true);
   const [selectedCamera, setSelectedCamera] = useState(null);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showGPSModal, setShowGPSModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [showVehicleInfo, setShowVehicleInfo] = useState(false);
@@ -391,6 +393,14 @@ export default function OnboardingDetail() {
             </button>
             
             <button
+              onClick={() => setShowGPSModal(true)}
+              className="p-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors shadow-sm"
+              title="GPS Tracking"
+            >
+              <MapPin className="w-4 h-4" />
+            </button>
+            
+            <button
               onClick={() => setShowChat(true)}
               className="p-2 rounded-lg bg-primary hover:bg-primary-hover text-white transition-colors shadow-sm"
               title="Group Chat"
@@ -439,7 +449,12 @@ export default function OnboardingDetail() {
             
             {/* GPS Location */}
             <div className="min-h-[200px] lg:min-h-0">
-              <DevicesCard sosAlerts={sosAlerts} type="location" />
+              <DevicesCard 
+                sosAlerts={sosAlerts} 
+                type="location" 
+                ambulance={ambulance}
+                onOpenGPSModal={() => setShowGPSModal(true)}
+              />
             </div>
             
             {/* SOS Alerts */}
@@ -626,6 +641,14 @@ export default function OnboardingDetail() {
           )}
         </div>
       </Modal>
+
+      {/* GPS Location Modal */}
+      <GPSLocationModal
+        isOpen={showGPSModal}
+        onClose={() => setShowGPSModal(false)}
+        session={session}
+        ambulance={ambulance}
+      />
     </div>
   );
 }

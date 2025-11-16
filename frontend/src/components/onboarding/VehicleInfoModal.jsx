@@ -76,22 +76,24 @@ export default function VehicleInfoModal({ isOpen, onClose, session, ambulance }
             >
               <Card className="bg-white dark:bg-gray-900 shadow-2xl max-h-[85vh] flex flex-col">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 rounded-t-lg flex-shrink-0">
+                <div className="bg-gradient-to-r from-slate-700 to-slate-800 dark:from-slate-800 dark:to-slate-900 px-6 py-5 flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-white/20 rounded-lg backdrop-blur-sm">
+                      <div className="p-2.5 bg-white/10 rounded-lg backdrop-blur-sm">
                         <Truck className="w-6 h-6 text-white" />
                       </div>
                       <div>
                         <h2 className="text-xl font-bold text-white">Vehicle & Crew Information</h2>
-                        <p className="text-sm text-blue-100 mt-0.5">Real-time ambulance details</p>
+                        <p className="text-sm text-slate-300 mt-0.5">
+                          Real-time ambulance details
+                        </p>
                       </div>
                     </div>
                     <button
                       onClick={onClose}
-                      className="p-2 hover:bg-white/20 rounded-lg transition-colors group"
+                      className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                     >
-                      <X className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
+                      <X className="w-5 h-5 text-white" />
                     </button>
                   </div>
                 </div>
@@ -100,27 +102,27 @@ export default function VehicleInfoModal({ isOpen, onClose, session, ambulance }
                 <div className="p-6 overflow-y-auto flex-1">
                   {/* Vehicle Details */}
                   <div className="mb-6">
-                    <h3 className="text-lg font-semibold text-text mb-4 flex items-center gap-2">
-                      <div className="p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                        <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                        <Truck className="w-5 h-5 text-slate-700 dark:text-slate-300" />
                       </div>
-                      Ambulance Details
-                    </h3>
+                      <h3 className="text-lg font-semibold text-text">Ambulance Details</h3>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl border border-blue-200 dark:border-blue-800 hover:shadow-md transition-shadow">
-                        <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1.5">Ambulance Code</p>
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Ambulance Code</p>
                         <p className="text-lg font-bold text-text">{ambulanceInfo.code}</p>
                       </div>
-                      <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl border border-purple-200 dark:border-purple-800 hover:shadow-md transition-shadow">
-                        <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-1.5">Registration Number</p>
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Registration Number</p>
                         <p className="text-lg font-bold text-text">{ambulanceInfo.registration}</p>
                       </div>
-                      <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl border border-green-200 dark:border-green-800 hover:shadow-md transition-shadow">
-                        <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1.5">Vehicle Model</p>
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Vehicle Model</p>
                         <p className="text-lg font-bold text-text">{ambulanceInfo.model}</p>
                       </div>
-                      <div className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 rounded-xl border border-orange-200 dark:border-orange-800 hover:shadow-md transition-shadow">
-                        <p className="text-xs font-medium text-orange-600 dark:text-orange-400 mb-1.5">Type</p>
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">Type</p>
                         <p className="text-lg font-bold text-text">{ambulanceInfo.type}</p>
                       </div>
                     </div>
@@ -128,12 +130,18 @@ export default function VehicleInfoModal({ isOpen, onClose, session, ambulance }
 
                   {/* Crew Members */}
                   <div>
-                    <h3 className="text-lg font-semibold text-text mb-4 flex items-center gap-2">
-                      <div className="p-1.5 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                        <Users className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                        <Users className="w-5 h-5 text-slate-700 dark:text-slate-300" />
                       </div>
-                      Crew Members
-                    </h3>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-text">Crew Members</h3>
+                        <p className="text-xs text-text-secondary">Medical team on board</p>
+                      </div>
+                      <div className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-semibold">
+                        {crewMembers.length}
+                      </div>
+                    </div>
                     {crewMembers.length === 0 ? (
                       <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
                         <Users className="w-16 h-16 text-gray-400 mx-auto mb-3" />
@@ -145,17 +153,17 @@ export default function VehicleInfoModal({ isOpen, onClose, session, ambulance }
                         {crewMembers.map((member) => (
                           <div
                             key={member.id}
-                            className="p-4 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-all hover:-translate-y-1"
+                            className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md transition-all"
                           >
                             <div className="flex items-center gap-3 mb-3">
-                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
-                                <span className="text-lg font-bold text-white">
+                              <div className="w-12 h-12 rounded-full bg-slate-700 dark:bg-slate-600 flex items-center justify-center shadow-md">
+                                <span className="text-base font-bold text-white">
                                   {member.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                                 </span>
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-base font-bold text-text truncate">{member.name}</p>
-                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${
                                   member.role === 'Doctor' 
                                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                                     : member.role === 'Paramedic'
@@ -168,10 +176,10 @@ export default function VehicleInfoModal({ isOpen, onClose, session, ambulance }
                             </div>
                             <a
                               href={`tel:${member.phone}`}
-                              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium transition-all shadow-md hover:shadow-lg"
+                              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-700 text-white rounded-lg font-medium transition-colors shadow-sm"
                             >
                               <Phone className="w-4 h-4" />
-                              {member.phone}
+                              <span>{member.phone}</span>
                             </a>
                           </div>
                         ))}

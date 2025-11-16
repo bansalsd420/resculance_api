@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Ambulance as AmbulanceIcon, MapPin, User, Trash2, X, UserPlus, UserMinus, Users, AlertCircle } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
@@ -53,6 +54,17 @@ export const Ambulances = () => {
   const { user } = useAuthStore();
   const { toast } = useToast();
   const runWithLoader = useWithGlobalLoader();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open create modal if coming from quick actions
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setIsModalOpen(true);
+      // Remove the param from URL
+      searchParams.delete('create');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Load cache from sessionStorage on mount (non-blocking)
   useEffect(() => {
@@ -246,15 +258,12 @@ export const Ambulances = () => {
         status: ambulance.status || '',
         organizationId: ambulance.organization_id || ambulance.organizationId,
         devices: ambulanceDevices.map(d => ({
-          id: d.id,
+          dbId: d.id, // Store database ID separately
           deviceName: d.device_name || d.deviceName,
           deviceType: d.device_type || d.deviceType,
           deviceId: d.device_id || d.deviceId,
           deviceUsername: d.device_username || d.deviceUsername,
-          devicePassword: d.device_password || d.devicePassword,
-          deviceApi: d.device_api || d.deviceApi,
-          manufacturer: d.manufacturer,
-          model: d.model
+          devicePassword: d.device_password || d.devicePassword
         }))
       });
 
@@ -360,28 +369,44 @@ export const Ambulances = () => {
 
   // Handle devices
       if (deviceData && deviceData.length > 0) {
-        // Delete existing devices that are not in the new list
-        const existingDeviceIds = devices.map(d => d.id);
-        const newDeviceIds = deviceData.filter(d => d.id).map(d => d.id);
-        const devicesToDelete = existingDeviceIds.filter(id => !newDeviceIds.includes(id));
-        
-        for (const deviceId of devicesToDelete) {
-          try {
-            await ambulanceService.deleteDevice(deviceId);
-          } catch (error) {
-            console.error('Failed to delete device:', error);
+        // Only handle device deletion when editing an existing ambulance
+        if (selectedAmbulance && devices.length > 0) {
+          // Delete existing devices that are not in the new list
+          const existingDeviceIds = devices.map(d => d.id);
+          const newDeviceIds = deviceData.filter(d => d.dbId).map(d => d.dbId);
+          const devicesToDelete = existingDeviceIds.filter(id => !newDeviceIds.includes(id));
+          
+          for (const deviceId of devicesToDelete) {
+            try {
+              await ambulanceService.deleteDevice(deviceId);
+            } catch (error) {
+              console.error('Failed to delete device:', error);
+            }
           }
         }
 
         // Create or update devices
         for (const device of deviceData) {
           try {
-            if (device.id) {
+            // Clean up device data - only send fields we need
+            const cleanDevice = {
+              deviceName: device.deviceName,
+              deviceType: device.deviceType,
+              deviceId: device.deviceId,
+              deviceUsername: device.deviceUsername || '',
+              devicePassword: device.devicePassword || ''
+            };
+            
+            // Use dbId to check if this is an existing device from database
+            if (device.dbId) {
               // Update existing device
-              await ambulanceService.updateDevice(device.id, device);
+              console.log('Updating existing device:', device.dbId, cleanDevice);
+              await ambulanceService.updateDevice(device.dbId, cleanDevice);
             } else {
               // Create new device
-              await ambulanceService.createDevice(ambulanceId, device);
+              console.log('Creating new device for ambulance:', ambulanceId, cleanDevice);
+              const result = await ambulanceService.createDevice(ambulanceId, cleanDevice);
+              console.log('Device created successfully:', result);
             }
           } catch (error) {
             console.error('Failed to save device:', error);
@@ -467,10 +492,7 @@ export const Ambulances = () => {
       deviceType: '',
       deviceId: '',
       deviceUsername: '',
-      devicePassword: '',
-      deviceApi: '',
-      manufacturer: '',
-      model: ''
+      devicePassword: ''
     });
   };
 
@@ -1158,23 +1180,29 @@ export const Ambulances = () => {
 
             <div className="space-y-4">
               {fields.map((field, index) => (
-                <div key={field.id} className="border rounded-lg p-4 bg-background-card relative">
+                <div key={field.id} className="border-2 border-border rounded-xl p-5 bg-slate-50 dark:bg-slate-900 relative hover:border-primary/30 transition-colors">
                   <button
                     type="button"
                     onClick={() => remove(index)}
-                    className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                    className="absolute top-3 right-3 p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                    title="Remove Device"
                   >
                     <X className="w-5 h-5" />
                   </button>
 
-                  <h4 className="font-medium mb-3">Device {index + 1}</h4>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <span className="text-sm font-bold text-primary">{index + 1}</span>
+                    </div>
+                    <h4 className="font-semibold text-text">Device {index + 1}</h4>
+                  </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-4">
                     <Input
                       label="Device Name *"
                       {...register(`devices.${index}.deviceName`, { required: 'Device name is required' })}
                       error={errors.devices?.[index]?.deviceName?.message}
-                      placeholder="Front Camera"
+                      placeholder="e.g., Front Camera, GPS Tracker"
                     />
 
                     <div>
@@ -1193,7 +1221,7 @@ export const Ambulances = () => {
                               options={options}
                               value={value}
                               onChange={(opt) => f.onChange(opt ? opt.value : '')}
-                              placeholder="Select Type"
+                              placeholder="Select device type"
                             />
                           );
                         }}
@@ -1203,42 +1231,26 @@ export const Ambulances = () => {
                       )}
                     </div>
 
-                    <Input
-                      label="Device ID *"
-                      {...register(`devices.${index}.deviceId`, { required: 'Device ID is required' })}
-                      error={errors.devices?.[index]?.deviceId?.message}
-                      placeholder="100000000001"
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="Device ID *"
+                        {...register(`devices.${index}.deviceId`, { required: 'Device ID is required' })}
+                        error={errors.devices?.[index]?.deviceId?.message}
+                        placeholder="e.g., 100000000001"
+                      />
 
-                    <Input
-                      label="Device Username"
-                      {...register(`devices.${index}.deviceUsername`)}
-                      placeholder="testing"
-                    />
+                      <Input
+                        label="Device Username"
+                        {...register(`devices.${index}.deviceUsername`)}
+                        placeholder="Optional username"
+                      />
+                    </div>
 
                     <Input
                       label="Device Password"
                       type="password"
                       {...register(`devices.${index}.devicePassword`)}
-                      placeholder="Testing@123"
-                    />
-
-                    <Input
-                      label="Device API URL"
-                      {...register(`devices.${index}.deviceApi`)}
-                      placeholder="http://205.147.109.152"
-                    />
-
-                    <Input
-                      label="Manufacturer"
-                      {...register(`devices.${index}.manufacturer`)}
-                      placeholder="Sony"
-                    />
-
-                    <Input
-                      label="Model"
-                      {...register(`devices.${index}.model`)}
-                      placeholder="XYZ-2000"
+                      placeholder="Optional password"
                     />
                   </div>
                 </div>

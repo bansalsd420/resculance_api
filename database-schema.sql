@@ -105,7 +105,6 @@ CREATE TABLE `ambulance_devices` (
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `device_id` (`device_id`),
   KEY `idx_ambulance` (`ambulance_id`),
   KEY `idx_device_type` (`device_type`),
   KEY `idx_device_id` (`device_id`),

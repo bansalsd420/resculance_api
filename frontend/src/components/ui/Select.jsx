@@ -43,6 +43,7 @@ const Select = (props) => {
   return (
     <ReactSelect
       {...props}
+      isSearchable={props.isSearchable !== false}
       menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
       menuPosition="fixed"
       classNamePrefix={props.classNamePrefix || 'react-select'}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, UserCheck, UserX, User, Ambulance as AmbulanceIcon, Info } from 'lucide-react';
 import Tooltip from '../../components/ui/Tooltip';
@@ -42,6 +43,17 @@ export const Users = () => {
   const [unassigningAmbulanceId, setUnassigningAmbulanceId] = useState(null);
   const { user } = useAuthStore();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open create modal if coming from quick actions
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setIsModalOpen(true);
+      // Remove the param from URL
+      searchParams.delete('create');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const { register, control, handleSubmit, reset, setValue, setError, clearErrors, watch, formState: { errors } } = useForm();
   const watchRole = watch('role');

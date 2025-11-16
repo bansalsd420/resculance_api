@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useForm, Controller } from 'react-hook-form';
 import Select from '../../components/ui/Select';
@@ -71,6 +72,17 @@ export const Collaborations = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const { user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open create modal if coming from quick actions
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setShowModal(true);
+      // Remove the param from URL
+      searchParams.delete('create');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const {
     register,

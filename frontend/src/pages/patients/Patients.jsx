@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 import { motion } from 'framer-motion';
 import { useForm, Controller } from 'react-hook-form';
@@ -20,6 +21,9 @@ import {
   Clock,
   Ambulance as AmbulanceIcon,
   MapPin,
+  Phone,
+  Mail,
+  X,
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -72,6 +76,17 @@ export const Patients = () => {
   const { user } = useAuthStore();
   const { toast } = useToast();
   const runWithLoader = useWithGlobalLoader();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open create modal if coming from quick actions
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      setShowModal(true);
+      // Remove the param from URL
+      searchParams.delete('create');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const {
     register,
@@ -926,141 +941,209 @@ export const Patients = () => {
       </Modal>
 
       {/* Patient Details Modal */}
-      <Modal
-        isOpen={showDetailsModal}
-        onClose={() => setShowDetailsModal(false)}
-        title="Patient Details"
-        size="xl"
-      >
-        {selectedPatient && (
-          <div className="space-y-6">
-            {/* Patient Info Card */}
-            <Card className="p-6 bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                  {selectedPatient.firstName?.[0]}{selectedPatient.lastName?.[0]}
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-text">
-                    {selectedPatient.firstName} {selectedPatient.lastName}
-                  </h3>
-                  <p className="text-sm text-text-secondary">{selectedPatient.email}</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
-                  <p className="text-xs font-medium text-text-secondary mb-1">Blood Group</p>
-                  <p className="text-lg font-bold text-text">{selectedPatient.bloodGroup || selectedPatient.blood_group || 'N/A'}</p>
-                </div>
-                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
-                  <p className="text-xs font-medium text-text-secondary mb-1">Age / Gender</p>
-                  <p className="text-lg font-bold text-text">
-                    {selectedPatient.age || 'N/A'} / {selectedPatient.gender || 'N/A'}
-                  </p>
-                </div>
-                <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
-                  <p className="text-xs font-medium text-text-secondary mb-1">Phone</p>
-                  <p className="text-lg font-bold text-text">{selectedPatient.phone || 'N/A'}</p>
-                </div>
-              </div>
-
-              {selectedPatient.address && (
-                <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
-                  <p className="text-xs font-medium text-text-secondary mb-1">Address</p>
-                  <p className="text-sm text-text">{selectedPatient.address}</p>
-                </div>
-              )}
-
-              {(selectedPatient.emergencyContactName || selectedPatient.emergency_contact_name) && (
-                <div className="mt-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-border">
-                  <p className="text-xs font-medium text-text-secondary mb-2">Emergency Contact</p>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-text">
-                        {selectedPatient.emergencyContactName || selectedPatient.emergency_contact_name}
-                      </p>
-                      <p className="text-xs text-text-secondary">
-                        {selectedPatient.emergencyContactRelation || selectedPatient.emergency_contact_relation || 'Relation not specified'}
-                      </p>
+      {showDetailsModal && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowDetailsModal(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          />
+          
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', duration: 0.5 }}
+              className="w-full max-w-5xl max-h-[90vh] bg-background rounded-2xl shadow-2xl overflow-hidden pointer-events-auto"
+            >
+            {selectedPatient && (
+              <div className="flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-primary to-primary/80 px-6 py-5 flex-shrink-0">
+                  <div className="">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                          {selectedPatient.firstName?.[0]}{selectedPatient.lastName?.[0]}
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-bold text-white mb-1">
+                            {selectedPatient.firstName} {selectedPatient.lastName}
+                          </h2>
+                          <p className="text-sm text-white/80 flex items-center gap-2">
+                            <Mail className="w-4 h-4" />
+                            {selectedPatient.email}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowDetailsModal(false)}
+                        className="p-2 hover:bg-white/20 rounded-xl transition-colors group"
+                      >
+                        <X className="w-5 h-5 text-white group-hover:scale-110 transition-transform" />
+                      </button>
                     </div>
-                    <p className="text-sm font-medium text-text">
-                      {selectedPatient.emergencyContactPhone || selectedPatient.emergency_contact_phone || 'N/A'}
-                    </p>
                   </div>
                 </div>
-              )}
-            </Card>
 
-            {/* Sessions History */}
-            <div>
-              <h3 className="text-xl font-bold text-text mb-4 flex items-center gap-2">
-                <Activity className="w-6 h-6 text-blue-600" />
-                Patient Sessions
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto">
-                  <thead>
-                    <tr className="text-left text-sm text-text-secondary border-b border-border">
-                      <th className="px-4 py-3">Ambulance</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Duration</th>
-                      <th className="px-4 py-3">Onboarded At</th>
-                      <th className="px-4 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(!Array.isArray(sessions) || sessions.length === 0) ? (
-                      <tr>
-                        <td colSpan={5} className="text-center p-8 text-text-secondary">
-                          <Activity className="w-12 h-12 text-text-secondary mx-auto mb-2 opacity-50" />
-                          <p>No sessions found for this patient</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      sessions.map((session) => {
-                        const start = session.onboarded_at || session.onboardedAt || session.created_at || session.createdAt;
-                        const end = session.offboarded_at || session.offboardedAt || session.actual_arrival_time;
-                        const duration = formatDuration(start, end);
-                        const ambulanceLabel = session.registration_number || session.ambulance_code || session.ambulance?.registration_number || 'N/A';
-                        return (
-                          <tr key={session.id} className="border-b border-border hover:bg-background-card transition-colors">
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-md">
-                                  <AmbulanceIcon className="w-5 h-5 text-white" />
+                {/* Quick Stats Bar */}
+                <div className="bg-background-card border-b border-border px-6 py-4 grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-text-secondary mb-1">Blood Group</p>
+                    <p className="text-2xl font-bold text-primary">{selectedPatient.bloodGroup || selectedPatient.blood_group || 'N/A'}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-text-secondary mb-1">Age</p>
+                    <p className="text-2xl font-bold text-text">{selectedPatient.age || 'N/A'}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-text-secondary mb-1">Gender</p>
+                    <p className="text-2xl font-bold text-text">{selectedPatient.gender || 'N/A'}</p>
+                  </div>
+                </div>
+
+                {/* Content - Scrollable */}
+                <div className="flex-1 p-6 space-y-5 overflow-y-auto">
+                  {/* Contact Information */}
+                  <div className="bg-background-card rounded-2xl p-5 border border-border shadow-sm">
+                    <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+                      <Phone className="w-5 h-5 text-primary" />
+                      Contact Information
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 p-3 bg-background rounded-xl">
+                        <Phone className="w-5 h-5 text-text-secondary" />
+                        <div className="flex-1">
+                          <p className="text-xs text-text-secondary">Phone Number</p>
+                          <p className="text-sm font-semibold text-text">{selectedPatient.phone || 'Not provided'}</p>
+                        </div>
+                      </div>
+                      {selectedPatient.address && (
+                        <div className="flex items-start gap-3 p-3 bg-background rounded-xl">
+                          <MapPin className="w-5 h-5 text-text-secondary mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs text-text-secondary">Address</p>
+                            <p className="text-sm font-medium text-text leading-relaxed">{selectedPatient.address}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact */}
+                  {(selectedPatient.emergencyContactName || selectedPatient.emergency_contact_name) && (
+                    <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20 rounded-2xl p-5 border border-red-200 dark:border-red-900/30 shadow-sm">
+                      <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                        Emergency Contact
+                      </h3>
+                      <div className="bg-white/50 dark:bg-black/20 rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-base font-bold text-text">
+                              {selectedPatient.emergencyContactName || selectedPatient.emergency_contact_name}
+                            </p>
+                            <p className="text-xs text-text-secondary mt-0.5">
+                              {selectedPatient.emergencyContactRelation || selectedPatient.emergency_contact_relation || 'Relation not specified'}
+                            </p>
+                          </div>
+                          <a 
+                            href={`tel:${selectedPatient.emergencyContactPhone || selectedPatient.emergency_contact_phone}`}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors flex items-center gap-2"
+                          >
+                            <Phone className="w-4 h-4" />
+                            Call
+                          </a>
+                        </div>
+                        <div className="pt-2 border-t border-red-200 dark:border-red-900/30">
+                          <p className="text-sm font-mono font-semibold text-text">
+                            {selectedPatient.emergencyContactPhone || selectedPatient.emergency_contact_phone || 'N/A'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sessions History */}
+                  <div className="bg-background-card rounded-2xl p-5 border border-border shadow-sm">
+                    <h3 className="text-lg font-bold text-text mb-4 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-primary" />
+                      Patient Sessions
+                      <span className="ml-auto text-xs font-semibold px-2.5 py-1 bg-primary/10 text-primary rounded-full">
+                        {Array.isArray(sessions) ? sessions.length : 0}
+                      </span>
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {(!Array.isArray(sessions) || sessions.length === 0) ? (
+                        <div className="text-center py-12">
+                          <div className="w-16 h-16 bg-background rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <Activity className="w-8 h-8 text-text-secondary opacity-50" />
+                          </div>
+                          <p className="text-sm text-text-secondary">No sessions found for this patient</p>
+                        </div>
+                      ) : (
+                        sessions.map((session) => {
+                          const start = session.onboarded_at || session.onboardedAt || session.created_at || session.createdAt;
+                          const end = session.offboarded_at || session.offboardedAt || session.actual_arrival_time;
+                          const duration = formatDuration(start, end);
+                          const ambulanceLabel = session.registration_number || session.ambulance_code || session.ambulance?.registration_number || 'N/A';
+                          return (
+                            <div 
+                              key={session.id} 
+                              className="bg-background rounded-xl p-4 border border-border hover:border-primary/50 transition-all group"
+                            >
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md">
+                                  <AmbulanceIcon className="w-6 h-6 text-white" />
                                 </div>
-                                <div className="font-medium text-sm text-text">{ambulanceLabel}</div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-bold text-text mb-0.5">{ambulanceLabel}</p>
+                                  <div className="flex items-center gap-2">
+                                    {getStatusBadge(session.status)}
+                                  </div>
+                                </div>
                               </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              {getStatusBadge(session.status)}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-text-secondary font-medium">{duration}</td>
-                            <td className="px-4 py-3 text-sm text-text-secondary">
-                              {start ? new Date(start).toLocaleString() : 'N/A'}
-                            </td>
-                            <td className="px-4 py-3">
+                              
+                              <div className="grid grid-cols-2 gap-3 mb-3">
+                                <div className="bg-background-card rounded-lg p-2">
+                                  <p className="text-xs text-text-secondary mb-0.5">Duration</p>
+                                  <p className="text-sm font-semibold text-text">{duration}</p>
+                                </div>
+                                <div className="bg-background-card rounded-lg p-2">
+                                  <p className="text-xs text-text-secondary mb-0.5">Onboarded</p>
+                                  <p className="text-sm font-semibold text-text">
+                                    {start ? new Date(start).toLocaleDateString() : 'N/A'}
+                                  </p>
+                                </div>
+                              </div>
+                              
                               <Button 
                                 size="sm" 
-                                variant="outline" 
+                                className="w-full"
                                 onClick={() => window.open(`/sessions/${session.id}`, '_blank')}
                               >
-                                <Eye className="w-4 h-4 mr-1" />
-                                View
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Session Details
                               </Button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+          </motion.div>
           </div>
-        )}
-      </Modal>
+        </>
+      )}
     </div>
   );
 };

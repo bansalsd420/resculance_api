@@ -38,6 +38,7 @@ import logo from '../assets/logo.png';
 const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }) => {
   const location = useLocation();
   const { user } = useAuthStore();
+  const [searchQuery, setSearchQuery] = useState('');
   
   // All possible menu items
   const allMenuItems = [
@@ -55,7 +56,15 @@ const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }
 
   // Filter menu items based on user role permissions
   const allowedItems = getAllowedSidebarItems(user?.role || '');
-  const menuItems = allMenuItems.filter(item => allowedItems.includes(item.key));
+  let menuItems = allMenuItems.filter(item => allowedItems.includes(item.key));
+  
+  // Filter by search query
+  if (searchQuery.trim()) {
+    menuItems = menuItems.filter(item => 
+      item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.key.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }
 
   // Small SidebarLink wrapper to provide anchorRef for the portal tooltip and handle collapsed layout
   const SidebarLink = ({ item }) => {
@@ -132,7 +141,9 @@ const Sidebar = ({ isOpen, toggleSidebar, collapsed, toggleCollapse, isDesktop }
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text-secondary" />
                 <input
                   type="text"
-                  placeholder="Search"
+                  placeholder="Search menu..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-sm text-text placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                 />
               </div>
@@ -285,9 +296,9 @@ const Topbar = ({ toggleSidebar }) => {
   };
 
   const quickActions = [
-    { label: 'New User', path: '/users', icon: Users },
-    { label: 'New Ambulance', path: '/ambulances', icon: Ambulance },
-    { label: 'New Patient', path: '/patients', icon: UserSquare2 },
+    { label: 'New User', path: '/users?create=true', icon: Users },
+    { label: 'New Ambulance', path: '/ambulances?create=true', icon: Ambulance },
+    { label: 'New Patient', path: '/patients?create=true', icon: UserSquare2 },
     { label: 'New Onboarding', path: '/onboarding', icon: Activity },
   ];
 

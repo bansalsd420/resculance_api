@@ -337,7 +337,7 @@ export const Dashboard = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <Link 
-                    to="/patients" 
+                    to="/patients?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
                     <Heart className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
@@ -345,7 +345,7 @@ export const Dashboard = () => {
                   </Link>
 
                   <Link 
-                    to="/ambulances" 
+                    to="/ambulances?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
                     <Ambulance className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
@@ -353,7 +353,7 @@ export const Dashboard = () => {
                   </Link>
 
                   <Link 
-                    to="/users" 
+                    to="/users?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
                     <Users className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
@@ -361,7 +361,7 @@ export const Dashboard = () => {
                   </Link>
 
                   <Link 
-                    to="/collaborations" 
+                    to="/collaborations?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
                     <Building2 className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
