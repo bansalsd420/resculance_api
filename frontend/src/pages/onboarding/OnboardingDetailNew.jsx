@@ -430,8 +430,7 @@ export default function OnboardingDetail() {
                 session={session}
                 ambulance={ambulance}
                 isActive={isActive}
-                onCameraClick={(device) => {
-                  setSelectedCamera(device);
+                onCameraClick={() => {
                   setShowCameraModal(true);
                 }}
                 onRefresh={fetchSessionDetails}
