@@ -1,4 +1,5 @@
 const ActivityLog = require('../models/ActivityLog');
+const { hasPermission, PERMISSIONS } = require('../config/permissions');
 
 /**
  * Activity Controller
@@ -33,6 +34,14 @@ class ActivityController {
         page: parseInt(page),
         limit: parseInt(limit)
       };
+
+      // If the requesting user does not have permission to view full activity logs,
+      // restrict results to their own organization. Superadmins (and any role with
+      // VIEW_ACTIVITY_LOGS) will not be restricted.
+      if (!hasPermission(req.user?.role, PERMISSIONS.VIEW_ACTIVITY_LOGS)) {
+        // override any provided organizationId with the user's organization
+        filters.organizationId = req.user?.organizationId;
+      }
 
       const [activities, total] = await Promise.all([
         ActivityLog.findAll(filters),

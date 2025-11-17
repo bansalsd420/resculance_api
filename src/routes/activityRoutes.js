@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 const ActivityController = require('../controllers/activityController');
 const { authenticate } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireAnyPermission } = require('../middleware/permissions');
 const { PERMISSIONS } = require('../middleware/permissions');
 
-// All activity routes require authentication and superadmin role
+// Allow users who can view the dashboard to fetch recent activities for their org,
+// while keeping the full activity log access restricted to users with VIEW_ACTIVITY_LOGS.
 router.use(authenticate);
-router.use(requirePermission(PERMISSIONS.VIEW_ACTIVITY_LOGS));
+router.use(requireAnyPermission(PERMISSIONS.VIEW_ACTIVITY_LOGS, PERMISSIONS.VIEW_DASHBOARD));
 
 // Get all activities with filters and pagination
 router.get('/', ActivityController.getAll);

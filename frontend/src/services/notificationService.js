@@ -2,8 +2,8 @@ import api from './api';
 
 const notificationService = {
   // Get all notifications
-  async getNotifications(limit = 50) {
-    const response = await api.get('/notifications', { params: { limit } });
+  async getNotifications(limit = 50, offset = 0) {
+    const response = await api.get('/notifications', { params: { limit, offset } });
     return response.data;
   },
 

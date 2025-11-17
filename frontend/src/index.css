@@ -186,5 +186,28 @@
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
+
+  /* Custom nice scrollbar used for dropdowns like notifications
+     Uses CSS variables (rgb(var(--...))) so it follows theme changes (.dark overrides) */
+  .nice-scrollbar {
+    scrollbar-color: rgb(var(--color-primary)) rgb(var(--color-border));
+    scrollbar-width: thin;
+  }
+  .nice-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .nice-scrollbar::-webkit-scrollbar-track {
+    background: rgb(var(--color-background-card));
+    border-radius: 12px;
+  }
+  .nice-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(var(--color-primary)) 0%, rgb(var(--color-primary-hover)) 100%);
+    border-radius: 12px;
+    border: 2px solid rgb(var(--color-background-card));
+  }
+  .nice-scrollbar::-webkit-scrollbar-thumb:hover {
+    filter: brightness(0.9);
+  }
 }
 

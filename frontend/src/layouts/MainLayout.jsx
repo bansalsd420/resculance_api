@@ -488,7 +488,7 @@ const Topbar = ({ toggleSidebar }) => {
                       </button>
                   </div>
                 </div>
-                <div className="max-h-96 overflow-y-auto">
+                <div className="max-h-96 overflow-y-auto nice-scrollbar">
                   {notifications.length > 0 ? (
                     notifications.map((notif) => (
                       <div

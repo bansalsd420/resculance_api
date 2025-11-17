@@ -20,7 +20,7 @@ export const Notifications = () => {
   const fetch = async (replace = false) => {
     setLoading(true);
     try {
-      const resp = await notificationService.getNotifications(limit);
+      const resp = await notificationService.getNotifications(limit, 0);
       // service returns response.data, which is { notifications }
       const items = resp.notifications || [];
       setNotifications(items);
@@ -82,11 +82,12 @@ export const Notifications = () => {
 
   const loadMore = async () => {
     try {
-      const resp = await notificationService.getNotifications(limit);
+      const resp = await notificationService.getNotifications(limit, offset);
       const items = resp.notifications || [];
-      // naive: replace for now (service lacks offset param)
-      setNotifications(items);
+      // append new items
+      setNotifications(prev => [...prev, ...items]);
       setHasMore(items.length === limit);
+      setOffset(prev => prev + items.length);
     } catch (err) {
       console.error('Load more failed', err);
       toast.error('Failed to load more');
@@ -133,7 +134,7 @@ export const Notifications = () => {
           )}
 
           {notifications.map(n => (
-            <motion.div key={n.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`p-4 flex items-start gap-4 ${n.is_read ? 'bg-transparent' : 'bg-primary/5'}`}>
+            <motion.div key={n.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={`relative p-4 flex items-start gap-4 ${n.is_read ? 'bg-transparent' : 'bg-primary/5'}`}>
               <div className="w-10 h-10 bg-background-card rounded-full flex items-center justify-center">
                 <Bell className="w-5 h-5 text-primary" />
               </div>
@@ -143,7 +144,7 @@ export const Notifications = () => {
                     <div className="font-medium text-text">{n.title}</div>
                     <div className="text-sm text-text-secondary mt-1">{n.message}</div>
                   </div>
-                  <div className="text-right text-xs text-text-secondary">
+                  <div className="text-right text-xs text-text-secondary pr-12">
                     {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
                   </div>
                 </div>
@@ -154,10 +155,16 @@ export const Notifications = () => {
                       <Check className="w-4 h-4 mr-2" /> Mark read
                     </Button>
                   )}
-                  <Button size="sm" variant="danger" onClick={() => del(n.id)}>
-                    <X className="w-4 h-4 mr-2" /> Delete
-                  </Button>
                 </div>
+
+                {/* small delete icon at the right end */}
+                <button
+                  onClick={() => del(n.id)}
+                  aria-label="Delete notification"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-error/10 text-error hover:bg-error hover:text-white p-2 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
             </motion.div>
           ))}

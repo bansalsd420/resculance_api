@@ -22,12 +22,25 @@ import { useToast } from '../../hooks/useToast';
 import getErrorMessage from '../../utils/getErrorMessage';
 import useWithGlobalLoader from '../../hooks/useWithGlobalLoader';
 
+// Return a Tailwind text color class for stat icons (icon-only coloring)
+const getStatColor = (title) => {
+  const key = (title || '').toString().toLowerCase();
+  if (key.includes('organization')) return 'text-primary';
+  if (key.includes('hospital')) return 'text-success';
+  if (key.includes('fleet')) return 'text-purple-500';
+  if (key.includes('user')) return 'text-indigo-500';
+  if (key.includes('ambulance')) return 'text-rose-500';
+  if (key.includes('patient')) return 'text-pink-500';
+  if (key.includes('collaboration')) return 'text-yellow-500';
+  return 'text-gray-700 dark:text-gray-300';
+};
+
 const QuickStatItem = ({ title, value, icon: Icon, to }) => {
   const content = (
-    <div className="p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-between transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer">
+    <div className="mb-3 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-between transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 cursor-pointer">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Icon className="text-gray-700 dark:text-gray-300 w-5 h-5" />
+          <Icon className={`w-5 h-5 ${getStatColor(title)}`} />
         </div>
         <div>
           <p className="text-gray-600 dark:text-gray-400 text-xs font-medium">{title}</p>
@@ -72,6 +85,17 @@ export const Dashboard = () => {
     if (key.includes('patient') || key.includes('onboard')) return Heart;
     if (key.includes('collaboration') || key.includes('approve') || key.includes('link')) return Building2;
     return MapPin;
+  };
+
+  // Return a Tailwind text color class for activity icons (icon-only coloring)
+  const getActivityColor = (activity) => {
+    const key = (activity || '').toString().toLowerCase();
+    if (key.includes('ambulance') || key.includes('dispatch')) return 'text-rose-500';
+    if (key.includes('user') || key.includes('register') || key.includes('invite')) return 'text-indigo-500';
+    if (key.includes('patient') || key.includes('onboard')) return 'text-pink-500';
+    if (key.includes('collaboration') || key.includes('approve') || key.includes('link')) return 'text-yellow-500';
+    if (key.includes('organization') || key.includes('hospital') || key.includes('fleet')) return 'text-primary';
+    return 'text-gray-500 dark:text-gray-300';
   };
 
   useEffect(() => {
@@ -147,39 +171,72 @@ export const Dashboard = () => {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           className="lg:col-span-1"
-        >
-          <Card className="h-full p-4 space-y-3 overflow-y-auto">
+          >
+            <Card className="h-full p-4 space-y-0 overflow-y-auto">
             <div className="pb-3 border-b border-border">
               <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">Quick Stats</h2>
             </div>
-            
-            <QuickStatItem
-              title="Organizations"
-              value={loading ? '...' : stats.totalOrganizations || 0}
-              icon={Building2}
-              to="/organizations"
-            />
 
-            <QuickStatItem
-              title="Hospitals"
-              value={loading ? '...' : stats.totalHospitals || 0}
-              icon={Building2}
-              to="/organizations"
-            />
+            <div className="pt-3">
+            {
+              (() => {
+                const roleKey = (user?.role || '').toString().toLowerCase();
+                const orgType = (user?.organizationType || '').toString().toLowerCase();
 
-            <QuickStatItem
-              title="Fleets"
-              value={loading ? '...' : stats.totalFleets || 0}
-              icon={Truck}
-              to="/organizations"
-            />
+                const isHospitalOrFleetAdmin = (orgType === 'hospital' || orgType === 'fleet_owner') && roleKey.includes('admin');
+                const isStaff = ['doctor', 'paramedic', 'staff', 'driver', 'nurse'].some(k => roleKey.includes(k));
 
-            <QuickStatItem
-              title="Users"
-              value={loading ? '...' : stats.totalUsers || 0}
-              icon={Users}
-              to="/users"
-            />
+                const nodes = [];
+
+                // Organizations / Hospitals / Fleets: hide for hospital/fleet admins and staff
+                if (!isHospitalOrFleetAdmin && !isStaff) {
+                  nodes.push(
+                    <QuickStatItem
+                      key="orgs"
+                      title="Organizations"
+                      value={loading ? '...' : stats.totalOrganizations || 0}
+                      icon={Building2}
+                      to="/organizations"
+                    />
+                  );
+
+                  nodes.push(
+                    <QuickStatItem
+                      key="hospitals"
+                      title="Hospitals"
+                      value={loading ? '...' : stats.totalHospitals || 0}
+                      icon={Building2}
+                      to="/organizations"
+                    />
+                  );
+
+                  nodes.push(
+                    <QuickStatItem
+                      key="fleets"
+                      title="Fleets"
+                      value={loading ? '...' : stats.totalFleets || 0}
+                      icon={Truck}
+                      to="/organizations"
+                    />
+                  );
+                }
+
+                // Users: hide for staff roles, visible for others (including superadmin and non-org admins)
+                if (!isStaff) {
+                  nodes.push(
+                    <QuickStatItem
+                      key="users"
+                      title="Users"
+                      value={loading ? '...' : stats.totalUsers || 0}
+                      icon={Users}
+                      to="/users"
+                    />
+                  );
+                }
+
+                return nodes;
+              })()
+            }
 
             <QuickStatItem
               title="Ambulances"
@@ -195,12 +252,25 @@ export const Dashboard = () => {
               to="/patients"
             />
 
-            <QuickStatItem
-              title="Collaborations"
-              value={loading ? '...' : stats.totalCollaborations || 0}
-              icon={Activity}
-              to="/collaborations"
-            />
+            {
+              // Collaborations: hide for staff roles
+              (() => {
+                const roleKey = (user?.role || '').toString().toLowerCase();
+                const isStaff = ['doctor', 'paramedic', 'staff', 'driver', 'nurse'].some(k => roleKey.includes(k));
+                if (!isStaff) {
+                  return (
+                    <QuickStatItem
+                      title="Collaborations"
+                      value={loading ? '...' : stats.totalCollaborations || 0}
+                      icon={Activity}
+                      to="/collaborations"
+                    />
+                  );
+                }
+                return null;
+              })()
+            }
+            </div>
           </Card>
         </motion.div>
 
@@ -296,7 +366,7 @@ export const Dashboard = () => {
                       return (
                         <div key={act.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-background dark:hover:bg-gray-800/50 transition-colors cursor-pointer">
                           <div className={`w-10 h-10 rounded-lg bg-background-2 dark:bg-gray-800 flex items-center justify-center flex-shrink-0`}>
-                            <Icon className="w-5 h-5 text-text-secondary" />
+                            <Icon className={`w-5 h-5 ${getActivityColor(act.activity)}`} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-text">{act.activity || act.comments || 'Activity'}</p>
@@ -340,7 +410,7 @@ export const Dashboard = () => {
                     to="/patients?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Heart className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
+                    <Heart className={`w-8 h-8 mb-2 ${getStatColor('patient')}`} />
                     <p className="font-semibold text-sm">Add Patient</p>
                   </Link>
 
@@ -348,7 +418,7 @@ export const Dashboard = () => {
                     to="/ambulances?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Ambulance className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
+                    <Ambulance className={`w-8 h-8 mb-2 ${getStatColor('ambulance')}`} />
                     <p className="font-semibold text-sm">Add Ambulance</p>
                   </Link>
 
@@ -356,7 +426,7 @@ export const Dashboard = () => {
                     to="/users?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Users className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
+                    <Users className={`w-8 h-8 mb-2 ${getStatColor('user')}`} />
                     <p className="font-semibold text-sm">Invite User</p>
                   </Link>
 
@@ -364,7 +434,7 @@ export const Dashboard = () => {
                     to="/collaborations?create=true" 
                     className="p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 transition-all hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 flex flex-col items-start"
                   >
-                    <Building2 className="w-8 h-8 mb-2 text-gray-700 dark:text-gray-300" />
+                    <Building2 className={`w-8 h-8 mb-2 ${getStatColor('collaboration')}`} />
                     <p className="font-semibold text-sm">New Collaboration</p>
                   </Link>
                 </div>
