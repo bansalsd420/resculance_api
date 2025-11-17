@@ -31,7 +31,7 @@ const authenticate = async (req, res, next) => {
       `SELECT u.*, o.type as org_type, o.code as org_code, o.name as org_name, o.status as org_status, o.is_active as org_is_active
        FROM users u
        JOIN organizations o ON u.organization_id = o.id
-       WHERE u.id = ? AND u.status IN ('active', 'pending_approval')`,
+       WHERE u.id = ? AND u.status IN ('active', 'approved', 'pending_approval')`,
       [decoded.id]
     );
 

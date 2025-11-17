@@ -2,6 +2,12 @@ const AmbulanceDeviceModel = require('../models/AmbulanceDevice');
 const AmbulanceModel = require('../models/Ambulance');
 const { AppError } = require('../middleware/auth');
 const axios = require('axios');
+const https = require('https');
+
+// Create HTTPS agent that bypasses SSL verification for vehicleview.live
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false
+});
 
 class AmbulanceDeviceController {
   static async create(req, res, next) {
@@ -177,28 +183,15 @@ class AmbulanceDeviceController {
         return next(new AppError('Device ID not configured', 400));
       }
 
-      // Fetch location from 808GPS API
-      const apiUrl = 'http://205.147.109.152/StandardApiAction_getDeviceStatus.action';
-      
-      try {
-        const response = await axios.get(apiUrl, {
-          params: {
-            jsession: device.device_password || device.device_username || '',
-            devIdno: device.device_id,
-            toMap: '1',
-            language: 'zh'
-          },
-          timeout: 10000
-        });
-
-        res.json({
-          success: true,
-          data: response.data
-        });
-      } catch (apiError) {
-        console.error('GPS API error:', apiError);
-        return next(new AppError('Failed to fetch device location: ' + (apiError.message || 'Unknown error'), 500));
-      }
+      // Return device credentials for frontend to make direct API call
+      res.json({
+        success: true,
+        data: {
+          deviceId: device.device_id,
+          jsession: device.device_password || device.device_username || '',
+          apiUrl: 'https://vehicleview.live/808gps/StandardApiAction_getDeviceStatus.action'
+        }
+      });
     } catch (error) {
       next(error);
     }
@@ -223,7 +216,7 @@ class AmbulanceDeviceController {
       }
 
       // Fetch location for all GPS devices
-      const apiUrl = 'http://205.147.109.152/StandardApiAction_getDeviceStatus.action';
+      const apiUrl = 'https://vehicleview.live/808gps/StandardApiAction_getDeviceStatus.action';
       const locationPromises = gpsDevices.map(async (device) => {
         try {
           const response = await axios.get(apiUrl, {
@@ -233,7 +226,8 @@ class AmbulanceDeviceController {
               toMap: '1',
               language: 'zh'
             },
-            timeout: 10000
+            timeout: 10000,
+            httpsAgent
           });
 
           return {
@@ -282,51 +276,20 @@ class AmbulanceDeviceController {
         return next(new AppError('Device credentials not configured', 400));
       }
 
-      // Authenticate with 808GPS API to get jsession
-      const apiBase = device.device_api || 'http://205.147.109.152';
-      const loginUrl = `${apiBase}/StandardApiAction_login.action`;
+      // Return device credentials for frontend to authenticate and get stream
+      const apiBase = device.device_api || 'https://vehicleview.live/808gps';
       
-      try {
-        const response = await axios.get(loginUrl, {
-          params: {
-            account: device.device_username,
-            password: device.device_password
-          },
-          timeout: 10000
-        });
-
-        console.log('808GPS login response:', response.data);
-        
-        // Check for login failure
-        if (response.data?.result !== 0) {
-          const errorMsg = response.data?.message || 'Authentication failed';
-          console.error('808GPS authentication failed:', errorMsg);
-          return next(new AppError(`Camera authentication failed: ${errorMsg}. Please check device username and password.`, 401));
+      res.json({
+        success: true,
+        data: {
+          deviceId: device.device_id,
+          deviceName: device.device_name,
+          username: device.device_username,
+          password: device.device_password,
+          apiBase: apiBase,
+          loginUrl: `${apiBase}/StandardApiAction_login.action`
         }
-        
-        const jsession = response.data?.jsession || response.data?.JSESSIONID;
-        
-        if (!jsession) {
-          console.error('No jsession in response:', response.data);
-          return next(new AppError('Failed to obtain camera session', 500));
-        }
-
-        // Build camera stream URL
-        const streamUrl = `${apiBase}/808gps/open/player/video.html?lang=en&devIdno=${encodeURIComponent(device.device_id)}&jsession=${encodeURIComponent(jsession)}`;
-
-        res.json({
-          success: true,
-          data: {
-            streamUrl,
-            jsession,
-            deviceId: device.device_id,
-            deviceName: device.device_name
-          }
-        });
-      } catch (apiError) {
-        console.error('Camera API error:', apiError);
-        return next(new AppError('Failed to authenticate camera: ' + (apiError.message || 'Unknown error'), 500));
-      }
+      });
     } catch (error) {
       next(error);
     }
@@ -347,7 +310,7 @@ class AmbulanceDeviceController {
         case 'LIVE_LOCATION':
           // Fetch GPS location
           try {
-            const apiUrl = 'http://205.147.109.152/StandardApiAction_getDeviceStatus.action';
+            const apiUrl = 'https://vehicleview.live/808gps/StandardApiAction_getDeviceStatus.action';
             const response = await axios.get(apiUrl, {
               params: {
                 jsession: device.device_password || device.device_username || '',
@@ -355,7 +318,8 @@ class AmbulanceDeviceController {
                 toMap: '1',
                 language: 'zh'
               },
-              timeout: 10000
+              timeout: 10000,
+              httpsAgent
             });
 
             return res.json({
@@ -370,7 +334,7 @@ class AmbulanceDeviceController {
         case 'CAMERA':
           // Fetch camera stream URL
           try {
-            const apiBase = device.device_api || 'http://205.147.109.152';
+            const apiBase = device.device_api || 'https://vehicleview.live/808gps';
             const loginUrl = `${apiBase}/StandardApiAction_login.action`;
             
             const response = await axios.get(loginUrl, {
@@ -378,7 +342,8 @@ class AmbulanceDeviceController {
                 account: device.device_username,
                 password: device.device_password
               },
-              timeout: 10000
+              timeout: 10000,
+              httpsAgent
             });
 
             // Check for login failure
@@ -446,7 +411,7 @@ class AmbulanceDeviceController {
       }
 
       // Authenticate with 808gps API
-      // Format: http://205.147.109.152/StandardApiAction_login.action?account=testing&password=Testing@123
+      // Format: https://vehicleview.live/808gps/StandardApiAction_login.action?account=testing&password=Testing@123
       const loginUrl = `${device.device_api}/StandardApiAction_login.action`;
       
       try {
@@ -455,7 +420,8 @@ class AmbulanceDeviceController {
             account: device.device_username,
             password: device.device_password
           },
-          timeout: 10000
+          timeout: 10000,
+          httpsAgent
         });
 
         // 808gps API returns jsession in response

@@ -1014,6 +1014,79 @@ class PatientController {
         createdAt: new Date()
       });
 
+      // Create notifications for users who have access to this session but are not currently connected
+      try {
+        const sessionId = session.id;
+        const usersToNotify = new Set();
+        
+        // Get ambulance crew
+        if (session.ambulance_id) {
+          const [ambulanceCrew] = await db.query(
+            `SELECT user_id FROM ambulance_assignments 
+             WHERE ambulance_id = ? AND is_active = TRUE`,
+            [session.ambulance_id]
+          );
+          ambulanceCrew.forEach(row => usersToNotify.add(row.user_id));
+        }
+
+        // Get hospital staff
+        if (session.destination_hospital_id) {
+          const [hospitalStaff] = await db.query(
+            `SELECT id FROM users 
+             WHERE organization_id = ? AND role IN ('hospital_admin', 'doctor') AND status = 'approved'`,
+            [session.destination_hospital_id]
+          );
+          hospitalStaff.forEach(row => usersToNotify.add(row.id));
+        }
+
+        // Get org users
+        if (session.organization_id) {
+          const [orgUsers] = await db.query(
+            `SELECT id FROM users 
+             WHERE organization_id = ? AND status = 'approved'`,
+            [session.organization_id]
+          );
+          orgUsers.forEach(row => usersToNotify.add(row.id));
+        }
+
+        usersToNotify.delete(req.user.id);
+
+        // Filter out connected users
+        const sessionRoom = io.sockets.adapter.rooms.get(`session_${sessionId}`);
+        const connectedUserIds = new Set();
+        if (sessionRoom) {
+          for (const socketId of sessionRoom) {
+            const socket = io.sockets.sockets.get(socketId);
+            if (socket && socket.user) {
+              connectedUserIds.add(socket.user.id);
+            }
+          }
+        }
+
+        const usersToNotifyFiltered = Array.from(usersToNotify).filter(
+          userId => !connectedUserIds.has(userId)
+        );
+
+        if (usersToNotifyFiltered.length > 0) {
+          const notifications = usersToNotifyFiltered.map(userId => ({
+            userId,
+            type: 'new_message',
+            title: 'New Message',
+            message: `${req.user.firstName} ${req.user.lastName}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
+            data: { 
+              sessionId,
+              messageId: communicationId,
+              senderId: req.user.id,
+              senderName: `${req.user.firstName} ${req.user.lastName}`
+            }
+          }));
+
+          await NotificationService.createBulkNotifications(notifications);
+        }
+      } catch (notifError) {
+        console.error('[addCommunication] Failed to create notifications:', notifError);
+      }
+
       res.status(201).json({
         success: true,
         message: 'Message sent successfully',
@@ -1176,6 +1249,83 @@ class PatientController {
       });
 
       console.log(`[sendSessionMessage] Message ${communicationId} emitted to session ${sessionId} by user ${req.user?.id}`);
+
+      // Create notifications for users who have access to this session but are not currently connected
+      try {
+        // Get all users who should have access to this session
+        const usersToNotify = new Set();
+        
+        // Get ambulance crew assigned to this session's ambulance
+        if (session.ambulance_id) {
+          const [ambulanceCrew] = await db.query(
+            `SELECT user_id FROM ambulance_assignments 
+             WHERE ambulance_id = ? AND is_active = TRUE`,
+            [session.ambulance_id]
+          );
+          ambulanceCrew.forEach(row => usersToNotify.add(row.user_id));
+        }
+
+        // Get hospital staff from destination hospital
+        if (session.destination_hospital_id) {
+          const [hospitalStaff] = await db.query(
+            `SELECT id FROM users 
+             WHERE organization_id = ? AND role IN ('hospital_admin', 'doctor') AND status = 'approved'`,
+            [session.destination_hospital_id]
+          );
+          hospitalStaff.forEach(row => usersToNotify.add(row.id));
+        }
+
+        // Get users from the session owner organization
+        if (session.organization_id) {
+          const [orgUsers] = await db.query(
+            `SELECT id FROM users 
+             WHERE organization_id = ? AND status = 'approved'`,
+            [session.organization_id]
+          );
+          orgUsers.forEach(row => usersToNotify.add(row.id));
+        }
+
+        // Remove the sender from notification list
+        usersToNotify.delete(req.user.id);
+
+        // Get currently connected users in the session room
+        const sessionRoom = io.sockets.adapter.rooms.get(`session_${sessionId}`);
+        const connectedUserIds = new Set();
+        if (sessionRoom) {
+          for (const socketId of sessionRoom) {
+            const socket = io.sockets.sockets.get(socketId);
+            if (socket && socket.user) {
+              connectedUserIds.add(socket.user.id);
+            }
+          }
+        }
+
+        // Only notify users who are NOT currently in the session room
+        const usersToNotifyFiltered = Array.from(usersToNotify).filter(
+          userId => !connectedUserIds.has(userId)
+        );
+
+        if (usersToNotifyFiltered.length > 0) {
+          const notifications = usersToNotifyFiltered.map(userId => ({
+            userId,
+            type: 'new_message',
+            title: 'New Message',
+            message: `${req.user.firstName} ${req.user.lastName}: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
+            data: { 
+              sessionId,
+              messageId: communicationId,
+              senderId: req.user.id,
+              senderName: `${req.user.firstName} ${req.user.lastName}`
+            }
+          }));
+
+          await NotificationService.createBulkNotifications(notifications);
+          console.log(`[sendSessionMessage] Created ${notifications.length} notifications for offline users`);
+        }
+      } catch (notifError) {
+        console.error('[sendSessionMessage] Failed to create notifications:', notifError);
+        // Don't fail the message send if notification creation fails
+      }
 
       res.status(201).json({
         success: true,

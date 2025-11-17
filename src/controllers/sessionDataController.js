@@ -48,8 +48,9 @@ class SessionDataController {
       // Emit socket event for real-time updates
       const io = req.app.get('io');
       if (io) {
+        console.log(`[SessionData] Emitting session_data_added for session ${sessionId}`);
         io.to(`session_${sessionId}`).emit('session_data_added', {
-          sessionId,
+          sessionId: parseInt(sessionId), // Ensure it's a number
           data: sessionData
         });
       }
@@ -114,8 +115,9 @@ class SessionDataController {
       // Emit socket event for real-time updates
       const io = req.app.get('io');
       if (io) {
+        console.log(`[SessionData] Emitting session_data_added for file upload in session ${sessionId}`);
         io.to(`session_${sessionId}`).emit('session_data_added', {
-          sessionId,
+          sessionId: parseInt(sessionId), // Ensure it's a number
           data: sessionData
         });
       }

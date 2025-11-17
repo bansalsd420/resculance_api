@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {  ArrowLeft,
@@ -78,15 +78,50 @@ export default function OnboardingDetail() {
 
   const isActive = ['active', 'onboarded', 'in_transit'].includes((session?.status || '').toLowerCase());
 
+  // Define fetchSessionData with useCallback before using it in effects
+  const fetchSessionData = useCallback(async () => {
+    if (!sessionId) return;
+    console.log('🔄 Fetching session data for session:', sessionId);
+    setLoadingData(true);
+    try {
+      const response = await sessionService.getData(sessionId);
+      const data = response?.data?.data || response?.data || {};
+      console.log('✅ Session data fetched:', data);
+      setSessionData({
+        notes: data.notes || [],
+        medications: data.medications || [],
+        files: data.files || [],
+        counts: data.counts || { notes: 0, medications: 0, files: 0 }
+      });
+    } catch (error) {
+      console.error('❌ Failed to fetch session data:', error);
+      // Don't show error toast for initial load
+    } finally {
+      setLoadingData(false);
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     // connect sockets when token available
-    if (token) socketService.connect(token);
+    if (token) {
+      console.log('🔌 Connecting socket with token...');
+      socketService.connect(token);
+    }
     if (sessionId) {
       fetchSessionDetails();
       fetchSessionData();
       // Join the session room to receive socket events
       console.log('🔌 Joining session room:', sessionId);
       socketService.joinSession(sessionId);
+      
+      // Check socket connection status
+      setTimeout(() => {
+        if (socketService.socket?.connected) {
+          console.log('✅ Socket is connected, ID:', socketService.socket.id);
+        } else {
+          console.warn('⚠️ Socket is not connected yet');
+        }
+      }, 1000);
     }
 
     return () => {
@@ -101,17 +136,33 @@ export default function OnboardingDetail() {
 
   // Listen for session data updates (no longer listen for video calls - video room model)
   useEffect(() => {
+    // Set up a one-time listener to confirm we joined the session room
+    const handleJoinedSession = (data) => {
+      console.log('✅ Confirmed joined session room:', data);
+    };
+    
+    socketService.on('joined_session', handleJoinedSession);
+
     const handleSessionDataAdded = (data) => {
-      console.log('📩 Session data added:', data);
-      if (data.sessionId === parseInt(sessionId)) {
+      console.log('📩 Session data added event received:', data);
+      console.log('📩 Current sessionId:', sessionId, 'Event sessionId:', data.sessionId);
+      console.log('📩 Types - current:', typeof sessionId, 'event:', typeof data.sessionId);
+      
+      // Compare both as strings to handle type differences
+      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
+        console.log('✅ Session IDs match! Refreshing data...');
         // Re-fetch session data
         fetchSessionData();
+      } else {
+        console.log('❌ Session IDs do not match. No refresh.');
       }
     };
 
     const handleSessionDataDeleted = (data) => {
-      console.log('🗑️ Session data deleted:', data);
-      if (data.sessionId === parseInt(sessionId)) {
+      console.log('🗑️ Session data deleted event received:', data);
+      // Compare both as strings to handle type differences
+      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
+        console.log('✅ Session IDs match! Refreshing data...');
         // Re-fetch session data
         fetchSessionData();
       }
@@ -119,21 +170,24 @@ export default function OnboardingDetail() {
 
     const handleSessionStatusUpdate = (data) => {
       console.log('📊 Session status update:', data);
-      if (data.sessionId === parseInt(sessionId)) {
+      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
         setSession(prev => ({ ...prev, status: data.status }));
       }
     };
 
+    console.log('🎧 Setting up socket listeners for session:', sessionId);
     socketService.on('session_data_added', handleSessionDataAdded);
     socketService.on('session_data_deleted', handleSessionDataDeleted);
     socketService.on('session_status_update', handleSessionStatusUpdate);
 
     return () => {
+      console.log('🎧 Cleaning up socket listeners for session:', sessionId);
+      socketService.off('joined_session', handleJoinedSession);
       socketService.off('session_data_added', handleSessionDataAdded);
       socketService.off('session_data_deleted', handleSessionDataDeleted);
       socketService.off('session_status_update', handleSessionStatusUpdate);
     };
-  }, [sessionId, user?.id, toast]);
+  }, [sessionId, fetchSessionData]);
 
   async function fetchSessionDetails() {
     setLoading(true);
@@ -159,26 +213,6 @@ export default function OnboardingDetail() {
       toast.error(error.response?.data?.message || error.message || 'Failed to load session details');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function fetchSessionData() {
-    if (!sessionId) return;
-    setLoadingData(true);
-    try {
-      const response = await sessionService.getData(sessionId);
-      const data = response?.data?.data || response?.data || {};
-      setSessionData({
-        notes: data.notes || [],
-        medications: data.medications || [],
-        files: data.files || [],
-        counts: data.counts || { notes: 0, medications: 0, files: 0 }
-      });
-    } catch (error) {
-      console.error('Failed to fetch session data:', error);
-      // Don't show error toast for initial load
-    } finally {
-      setLoadingData(false);
     }
   }
 

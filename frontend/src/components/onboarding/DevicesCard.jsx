@@ -35,14 +35,21 @@ export default function DevicesCard({ sosAlerts, type = 'location', ambulance, o
       );
       
       if (gpsDevice) {
-        // Fetch location data from backend proxy
-        const token = localStorage.getItem('accessToken');
-        const apiUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/ambulances/devices/${gpsDevice.id}/location`;
+        // Get device credentials from backend
+        const credsResponse = await ambulanceService.getDeviceLocation(gpsDevice.id);
         
-        const gpsResponse = await fetch(apiUrl, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        if (!credsResponse.data?.success) {
+          console.error('Failed to get device credentials:', credsResponse);
+          setLoading(false);
+          return;
+        }
+
+        const { deviceId, jsession, apiUrl } = credsResponse.data.data;
+        
+        // Make direct API call to 808GPS
+        const gpsResponse = await fetch(`${apiUrl}?jsession=${encodeURIComponent(jsession)}&devIdno=${encodeURIComponent(deviceId)}&toMap=1&language=zh`, {
+          method: 'GET',
+          mode: 'cors'
         });
         
         if (!gpsResponse.ok) {
@@ -51,15 +58,7 @@ export default function DevicesCard({ sosAlerts, type = 'location', ambulance, o
           return;
         }
         
-        const result = await gpsResponse.json();
-        
-        if (!result.success || !result.data) {
-          console.error('Invalid GPS response:', result);
-          setLoading(false);
-          return;
-        }
-        
-        const data = result.data;
+        const data = await gpsResponse.json();
 
         if (data.result === 0 && data.status && data.status.length > 0) {
           const deviceData = data.status[0];

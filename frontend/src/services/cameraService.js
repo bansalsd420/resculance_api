@@ -1,11 +1,9 @@
 /**
  * Camera Service
- * Handles camera feed authentication and streaming via backend proxy
+ * Handles camera feed authentication and streaming with direct API calls
  */
 
 import api from './api';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 class CameraService {
   constructor() {
@@ -13,46 +11,74 @@ class CameraService {
   }
 
   /**
-   * Get camera stream URL through backend proxy
+   * Get camera stream URL by authenticating directly with 808GPS API
    * @param {Object} device - Device object
    * @param {string} device.id - Database device ID
-   * @param {string} device.deviceId - Device hardware ID
    * @returns {Promise<string>} - Authenticated camera stream URL
    */
   async getCameraStreamUrl(device) {
-    const { id, deviceId } = device;
+    const { id } = device;
 
     if (!id) {
       throw new Error('Device database ID is required');
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const response = await fetch(`${API_BASE_URL}/ambulances/devices/${id}/stream`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      console.log('[CameraService] Fetching device credentials for device:', id);
+      
+      // Get device credentials from backend
+      const response = await api.get(`/ambulances/devices/${id}/stream`);
+      
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Failed to get device credentials');
+      }
+
+      const { deviceId, username, password, apiBase, loginUrl } = response.data.data;
+      
+      console.log('[CameraService] Got credentials, authenticating with 808GPS...');
+      console.log('[CameraService] Login URL:', loginUrl);
+
+      // Authenticate directly with 808GPS API using fetch (to avoid CORS issues with axios)
+      const loginParams = new URLSearchParams({
+        account: username,
+        password: password
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMsg = errorData.message || response.statusText;
-        const error = new Error(errorMsg);
-        error.response = { data: errorData, status: response.status };
-        throw error;
+      const loginResponse = await fetch(`${loginUrl}?${loginParams.toString()}`, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit'
+      });
+
+      if (!loginResponse.ok) {
+        throw new Error(`Failed to authenticate with camera API: ${loginResponse.status} ${loginResponse.statusText}`);
       }
 
-      const result = await response.json();
+      const loginData = await loginResponse.json();
+      console.log('[CameraService] Login response:', loginData);
+
+      // Check for login failure
+      if (loginData.result !== 0) {
+        const errorMsg = loginData.message || 'Authentication failed';
+        throw new Error(`Camera authentication failed: ${errorMsg}`);
+      }
+
+      const jsession = loginData.jsession || loginData.JSESSIONID;
+
+      if (!jsession) {
+        throw new Error('Failed to obtain camera session (no jsession in response)');
+      }
+
+      console.log('[CameraService] Authentication successful, jsession:', jsession);
+
+      // Build camera stream URL - this is the actual player URL
+      const streamUrl = `${apiBase}/open/player/video.html?lang=en&devIdno=${encodeURIComponent(deviceId)}&jsession=${encodeURIComponent(jsession)}`;
       
-      if (!result.success || !result.data?.streamUrl) {
-        const error = new Error(result.message || 'Invalid response from server');
-        error.response = { data: result, status: response.status };
-        throw error;
-      }
+      console.log('[CameraService] Stream URL:', streamUrl);
 
-      return result.data.streamUrl;
+      return streamUrl;
     } catch (error) {
-      console.error('Failed to get camera stream URL:', error);
+      console.error('[CameraService] Failed to get camera stream URL:', error);
       throw error;
     }
   }

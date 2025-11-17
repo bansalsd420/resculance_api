@@ -74,15 +74,28 @@ export const GPSLocationModal = ({ isOpen, onClose, session, ambulance }) => {
         return;
       }
 
-      // Call backend proxy endpoint instead of direct HTTP call
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/ambulances/devices/${device.id}/location`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
+      // Get device credentials from backend
+      const credsResponse = await ambulanceService.getDeviceLocation(device.id);
+      
+      if (!credsResponse.data?.success) {
+        setDeviceStatus(prev => ({ ...prev, [device.id]: 'auth_failed' }));
+        return;
+      }
+
+      const { deviceId, jsession, apiUrl } = credsResponse.data.data;
+      
+      // Make direct API call to 808GPS
+      const response = await fetch(`${apiUrl}?jsession=${encodeURIComponent(jsession)}&devIdno=${encodeURIComponent(deviceId)}&toMap=1&language=zh`, {
+        method: 'GET',
+        mode: 'cors'
       });
       
-      const result = await response.json();
-      const data = result.data;
+      if (!response.ok) {
+        setDeviceStatus(prev => ({ ...prev, [device.id]: 'error' }));
+        return;
+      }
+
+      const data = await response.json();
 
       if (data.result === 0 && data.status && data.status.length > 0) {
         const deviceData = data.status[0];

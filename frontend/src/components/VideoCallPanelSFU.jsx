@@ -286,17 +286,33 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
   useEffect(() => {
     console.log('[VideoCallSFU] Remote streams updated:', remoteStreams.size);
     
-    remoteStreams.forEach((stream, userId) => {
-      const videoElement = document.querySelector(`[data-user-id="${userId}"]`);
-      if (videoElement && stream) {
-        console.log(`[VideoCallSFU] Attaching stream for user ${userId}`);
-        videoElement.srcObject = stream;
-        videoElement.play().catch(err => {
-          console.error(`[VideoCallSFU] Failed to play remote video for user ${userId}:`, err);
-        });
-      }
-    });
-  }, [remoteStreams]);
+    // Use a slight delay to ensure DOM elements are rendered
+    const timer = setTimeout(() => {
+      remoteStreams.forEach((stream, userId) => {
+        // Try both video and audio elements
+        const videoElement = document.querySelector(`video[data-user-id="${userId}"]`);
+        const audioElement = document.querySelector(`audio[data-user-id="audio-${userId}"]`);
+        
+        if (videoElement && stream) {
+          console.log(`[VideoCallSFU] Attaching stream to VIDEO for user ${userId}, tracks:`, stream.getTracks().length);
+          videoElement.srcObject = stream;
+          videoElement.play().catch(err => {
+            console.error(`[VideoCallSFU] Failed to play remote video for user ${userId}:`, err);
+          });
+        }
+        
+        if (audioElement && stream) {
+          console.log(`[VideoCallSFU] Attaching stream to AUDIO for user ${userId}`);
+          audioElement.srcObject = stream;
+          audioElement.play().catch(err => {
+            console.error(`[VideoCallSFU] Failed to play remote audio for user ${userId}:`, err);
+          });
+        }
+      });
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [remoteStreams, participants]);
 
   // Consume a producer (receive remote stream)
   const consumeProducer = async (producerInfo) => {
@@ -347,6 +363,11 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
       consumedProducers.current.add(producerId); // Mark as consumed
       addDebug(`Consumer created: ${consumer.id} for ${kind} from user ${userId}`);
 
+      // Listen for track events
+      consumer.on('trackended', () => {
+        addDebug(`Track ended for consumer ${consumer.id}`);
+      });
+
       // Resume consumer
       socketService.socket.emit('resumeConsumer', { consumerId: consumer.id }, (res) => {
         if (res.success) {
@@ -360,14 +381,21 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
         // If already exists, add track to existing stream
         if (copy.has(userId)) {
           const stream = copy.get(userId);
-          stream.addTrack(consumer.track);
+          // Check if track already exists in stream
+          const existingTrack = stream.getTracks().find(t => t.kind === consumer.track.kind);
+          if (!existingTrack) {
+            stream.addTrack(consumer.track);
+            addDebug(`Added ${kind} track to existing stream for user ${userId}, total tracks: ${stream.getTracks().length}`);
+          } else {
+            addDebug(`Track ${kind} already exists in stream for user ${userId}`);
+          }
           copy.set(userId, stream);
         } else {
           // Create new stream for this user
           const newStream = new MediaStream([consumer.track]);
           copy.set(userId, newStream);
+          addDebug(`Created new stream with ${kind} track for user ${userId}`);
         }
-        addDebug(`Added ${kind} track to stream for user ${userId}`);
         return copy;
       });
 
@@ -650,7 +678,11 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
               </div>
 
               {/* Remote participants */}
-              {participants.map((participant) => (
+              {participants.map((participant) => {
+                const hasStream = remoteStreams.has(participant.userId);
+                const stream = remoteStreams.get(participant.userId);
+                
+                return (
                 <div
                   key={participant.userId}
                   className={
@@ -660,30 +692,33 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                   }
                 >
                   {/* Render remote video and audio for each participant except self */}
-                  {remoteStreams.get(participant.userId) ? (
+                  {hasStream ? (
                     <>
                       <video
+                        key={`video-${participant.userId}-${stream?.id || 'stream'}`}
                         autoPlay
                         playsInline
                         muted={false}
                         className="w-full h-full object-cover"
                         data-user-id={participant.userId}
                         ref={(el) => {
-                          if (el && remoteStreams.get(participant.userId)) {
-                            el.srcObject = remoteStreams.get(participant.userId);
+                          if (el && stream) {
+                            console.log(`[VideoCallSFU] Setting srcObject for ${participant.userId}`);
+                            el.srcObject = stream;
                             el.play().catch(err => console.error('Play error:', err));
                           }
                         }}
                       />
                       {/* Attach audio for remote participant (not self) */}
                       <audio
+                        key={`audio-${participant.userId}-${stream?.id || 'stream'}`}
                         autoPlay
                         controls={false}
                         muted={false}
                         data-user-id={`audio-${participant.userId}`}
                         ref={(el) => {
-                          if (el && remoteStreams.get(participant.userId)) {
-                            el.srcObject = remoteStreams.get(participant.userId);
+                          if (el && stream) {
+                            el.srcObject = stream;
                             el.play().catch(err => {});
                           }
                         }}
@@ -739,7 +774,8 @@ const VideoCallPanelSFU = ({ sessionId, isOpen, onClose, session }) => {
                     }>{participant.userName}</p>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
         </div>
