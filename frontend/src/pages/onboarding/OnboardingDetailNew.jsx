@@ -16,7 +16,7 @@ import {  ArrowLeft,
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import ChatPanel from '../../components/ChatPanel';
-import VideoCallPanelSFU from '../../components/VideoCallPanelSFU';
+import VideoCallPanelJitsi from '../../components/VideoCallPanelJitsi';
 import { patientService, ambulanceService, sessionService } from '../../services';
 import socketService from '../../services/socketService';
 import { useToast } from '../../hooks/useToast';
@@ -539,12 +539,11 @@ export default function OnboardingDetail() {
 
       {/* Chat and Video Call Panels */}
       <ChatPanel sessionId={sessionId} isOpen={showChat} onClose={() => setShowChat(false)} />
-      <VideoCallPanelSFU 
-        sessionId={sessionId} 
-        isOpen={showVideoCall} 
+      <VideoCallPanelJitsi
+        sessionId={sessionId}
+        isOpen={showVideoCall}
         onClose={() => setShowVideoCall(false)}
         session={session}
-        isAmbulanceView={false}
       />
 
       {/* Vehicle Info Modal */}
