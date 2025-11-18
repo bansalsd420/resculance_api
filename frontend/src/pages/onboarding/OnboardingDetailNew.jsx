@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {  ArrowLeft,
+import {
+  ArrowLeft,
   Video,
   MessageCircle,
   FileText,
@@ -26,11 +27,11 @@ import { GPSLocationModal } from './GPSLocationModal';
 import CameraCard from '../../components/onboarding/CameraCard';
 import NewVitalsCard from '../../components/onboarding/NewVitalsCard';
 import MedicalReportsCard from '../../components/onboarding/MedicalReportsCard';
-import DevicesCard from '../../components/onboarding/DevicesCard';
 import ControlsCard from '../../components/onboarding/ControlsCard';
+import VideoCallCard from '../../components/VideoCallCard';
 import VehicleInfoModal from '../../components/onboarding/VehicleInfoModal';
 
-export default function OnboardingDetail() {
+export default function OnboardingDetailNew() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -44,17 +45,11 @@ export default function OnboardingDetail() {
   const [showGPSModal, setShowGPSModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
-  const [showVehicleInfo, setShowVehicleInfo] = useState(false);
-  const [controls, setControls] = useState({
-    mainPower: false,
-    emergencyLights: false,
-    siren: false,
-    airConditioning: false,
-    oxygenSupply: false,
-    cabinCamera: false,
-  });
+  const videoPaneRef = useRef(null);
 
-  // Session data state
+  const [showVehicleInfo, setShowVehicleInfo] = useState(false);
+  const [controls, setControls] = useState({});
+
   const [sessionData, setSessionData] = useState({ notes: [], medications: [], files: [], counts: {} });
   const [loadingData, setLoadingData] = useState(false);
   const [newNote, setNewNote] = useState('');
@@ -63,254 +58,341 @@ export default function OnboardingDetail() {
   const [loadingNote, setLoadingNote] = useState(false);
   const [loadingMedication, setLoadingMedication] = useState(false);
 
-  // Confirmation modal states
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showOffboardModal, setShowOffboardModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-
-  // Mock vitals & sos for demo (replace with real data in production)
-  const [vitals, setVitals] = useState({ heartRate: 98, bloodPressure: '120/78', spo2: 94, temp: 37.1 });
-  const [sosAlerts, setSosAlerts] = useState([
-    { id: 1012, time: '10:22', level: 'Critical', note: 'Patient seizure detected', action: 'Ack' },
-    { id: 1011, time: '10:09', level: 'Warning', note: 'O2 below threshold', action: 'Ack' },
-    { id: 1010, time: '09:55', level: 'Info', note: 'Door opened', action: 'Ack' },
-  ]);
-
   const isActive = ['active', 'onboarded', 'in_transit'].includes((session?.status || '').toLowerCase());
 
-  // Define fetchSessionData with useCallback before using it in effects
+  const fetchSessionDetails = useCallback(async () => {
+    if (!sessionId) return;
+    setLoading(true);
+    try {
+      const res = await patientService.getSessionById(sessionId);
+      const data = res?.data?.data?.session || res?.data?.session || res?.data;
+      if (!data || !data.id) throw new Error('Session not found');
+      setSession(data);
+      const ambId = data.ambulance_id || data.ambulanceId;
+      if (ambId) {
+        try {
+          const ambRes = await ambulanceService.getById(ambId);
+          setAmbulance(ambRes?.data?.data?.ambulance || ambRes?.data?.ambulance || ambRes?.data || null);
+        } catch (e) {
+          setAmbulance(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load session', err);
+      toast.error(err.response?.data?.message || err.message || 'Failed to load session');
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, toast]);
+
+  useEffect(() => {
+    // Connection is handled by the global layout; only join/leave the session room here.
+    if (sessionId) {
+      fetchSessionDetails();
+      socketService.joinSession(sessionId);
+    }
+    return () => {
+      if (sessionId) socketService.leaveSession(sessionId);
+    };
+  }, [sessionId, fetchSessionDetails]);
+
+  // Listen for session data socket events and merge into local state (optimistic, avoids full refetch)
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const handleSessionDataAdded = (payload) => {
+      try {
+        const data = payload?.data || payload;
+        if (!data || (data.sessionId && String(data.sessionId) !== String(sessionId))) return;
+
+        const item = data.data || data; // support differing shapes
+        const type = item.dataType || item.type || item.data_type;
+
+        if (!type) return;
+
+        setSessionData((prev) => {
+          const notes = prev.notes || [];
+          const medications = prev.medications || [];
+          const files = prev.files || [];
+
+          // normalize id
+          const id = item.id || item.dataId || item._id || item.data?.id;
+
+          if (type === 'note' || type === 'notes') {
+            if (notes.some(n => String(n.id) === String(id))) return prev;
+            return { ...prev, notes: [item, ...notes] };
+          }
+
+          if (type === 'medication' || type === 'medications') {
+            if (medications.some(m => String(m.id) === String(id))) return prev;
+            return { ...prev, medications: [item, ...medications] };
+          }
+
+          if (type === 'file' || type === 'files') {
+            if (files.some(f => String(f.id) === String(id))) return prev;
+            return { ...prev, files: [item, ...files] };
+          }
+
+          return prev;
+        });
+      } catch (err) {
+        console.error('handleSessionDataAdded error', err);
+      }
+    };
+
+    const handleSessionDataDeleted = (payload) => {
+      try {
+        const data = payload?.data || payload;
+        if (!data || (data.sessionId && String(data.sessionId) !== String(sessionId))) return;
+        const id = data.id || data.dataId || data.deletedId || data.data?.id;
+        if (!id) return;
+        setSessionData((prev) => ({
+          ...prev,
+          notes: (prev.notes || []).filter(i => String(i.id) !== String(id)),
+          medications: (prev.medications || []).filter(i => String(i.id) !== String(id)),
+          files: (prev.files || []).filter(i => String(i.id) !== String(id)),
+        }));
+      } catch (err) {
+        console.error('handleSessionDataDeleted error', err);
+      }
+    };
+
+    // Attach listeners (use socketService.socket if available)
+    try {
+      if (socketService.socket) {
+        socketService.socket.on('session_data_added', handleSessionDataAdded);
+        socketService.socket.on('session_data_deleted', handleSessionDataDeleted);
+      } else {
+        socketService.on('session_data_added', handleSessionDataAdded);
+        socketService.on('session_data_deleted', handleSessionDataDeleted);
+      }
+    } catch (err) {
+      console.warn('Failed to attach session data socket listeners', err);
+    }
+
+    return () => {
+      try {
+        if (socketService.socket) {
+          socketService.socket.off('session_data_added', handleSessionDataAdded);
+          socketService.socket.off('session_data_deleted', handleSessionDataDeleted);
+        } else {
+          socketService.off('session_data_added', handleSessionDataAdded);
+          socketService.off('session_data_deleted', handleSessionDataDeleted);
+        }
+      } catch (err) {
+        console.warn('Failed to detach session data socket listeners', err);
+      }
+    };
+  }, [sessionId]);
+
   const fetchSessionData = useCallback(async () => {
     if (!sessionId) return;
-    console.log('🔄 Fetching session data for session:', sessionId);
     setLoadingData(true);
     try {
-      const response = await sessionService.getData(sessionId);
-      const data = response?.data?.data || response?.data || {};
-      console.log('✅ Session data fetched:', data);
-      setSessionData({
-        notes: data.notes || [],
-        medications: data.medications || [],
-        files: data.files || [],
-        counts: data.counts || { notes: 0, medications: 0, files: 0 }
-      });
-    } catch (error) {
-      console.error('❌ Failed to fetch session data:', error);
-      // Don't show error toast for initial load
+      const res = await sessionService.getData(sessionId);
+      const d = res?.data?.data || res?.data || {};
+      setSessionData({ notes: d.notes || [], medications: d.medications || [], files: d.files || [], counts: d.counts || {} });
+    } catch (e) {
+      console.error('Failed to fetch session data', e);
     } finally {
       setLoadingData(false);
     }
   }, [sessionId]);
 
   useEffect(() => {
-    // connect sockets when token available
-    if (token) {
-      console.log('🔌 Connecting socket with token...');
-      socketService.connect(token);
-    }
-    if (sessionId) {
-      fetchSessionDetails();
-      fetchSessionData();
-      // Join the session room to receive socket events
-      console.log('🔌 Joining session room:', sessionId);
-      socketService.joinSession(sessionId);
-      
-      // Check socket connection status
-      setTimeout(() => {
-        if (socketService.socket?.connected) {
-          console.log('✅ Socket is connected, ID:', socketService.socket.id);
-        } else {
-          console.warn('⚠️ Socket is not connected yet');
-        }
-      }, 1000);
-    }
+    fetchSessionData();
+  }, [fetchSessionData]);
 
-    return () => {
-      // Leave the session room on component unmount
-      if (sessionId) {
-        console.log('🔌 Leaving session room:', sessionId);
-        socketService.leaveSession(sessionId);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, token]);
-
-  // Listen for session data updates (no longer listen for video calls - video room model)
+  // Ensure modal is closed if inline video exists
   useEffect(() => {
-    // Set up a one-time listener to confirm we joined the session room
-    const handleJoinedSession = (data) => {
-      console.log('✅ Confirmed joined session room:', data);
-    };
-    
-    socketService.on('joined_session', handleJoinedSession);
-
-    const handleSessionDataAdded = (data) => {
-      console.log('📩 Session data added event received:', data);
-      console.log('📩 Current sessionId:', sessionId, 'Event sessionId:', data.sessionId);
-      console.log('📩 Types - current:', typeof sessionId, 'event:', typeof data.sessionId);
-      
-      // Compare both as strings to handle type differences
-      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
-        console.log('✅ Session IDs match! Refreshing data...');
-        // Re-fetch session data
-        fetchSessionData();
-      } else {
-        console.log('❌ Session IDs do not match. No refresh.');
-      }
-    };
-
-    const handleSessionDataDeleted = (data) => {
-      console.log('🗑️ Session data deleted event received:', data);
-      // Compare both as strings to handle type differences
-      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
-        console.log('✅ Session IDs match! Refreshing data...');
-        // Re-fetch session data
-        fetchSessionData();
-      }
-    };
-
-    const handleSessionStatusUpdate = (data) => {
-      console.log('📊 Session status update:', data);
-      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
-        setSession(prev => ({ ...prev, status: data.status }));
-      }
-    };
-
-    console.log('🎧 Setting up socket listeners for session:', sessionId);
-    socketService.on('session_data_added', handleSessionDataAdded);
-    socketService.on('session_data_deleted', handleSessionDataDeleted);
-    socketService.on('session_status_update', handleSessionStatusUpdate);
-
-    return () => {
-      console.log('🎧 Cleaning up socket listeners for session:', sessionId);
-      socketService.off('joined_session', handleJoinedSession);
-      socketService.off('session_data_added', handleSessionDataAdded);
-      socketService.off('session_data_deleted', handleSessionDataDeleted);
-      socketService.off('session_status_update', handleSessionStatusUpdate);
-    };
-  }, [sessionId, fetchSessionData]);
-
-  async function fetchSessionDetails() {
-    setLoading(true);
-    try {
-      const sessionRes = await patientService.getSessionById(sessionId);
-      const sessionData = sessionRes?.data?.data?.session || sessionRes?.data?.session || sessionRes?.data;
-      if (!sessionData || !sessionData.id) throw new Error('Session data not found or invalid');
-      setSession(sessionData);
-
-      const ambulanceId = sessionData.ambulance_id || sessionData.ambulanceId;
-      if (ambulanceId) {
-        try {
-          const ambulanceRes = await ambulanceService.getById(ambulanceId);
-          const ambulanceData = ambulanceRes?.data?.data?.ambulance || ambulanceRes?.data?.ambulance || ambulanceRes?.data;
-          setAmbulance(ambulanceData || null);
-        } catch (err) {
-          console.error('Failed to fetch ambulance details:', err);
-          setAmbulance(null);
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error(error.response?.data?.message || error.message || 'Failed to load session details');
-    } finally {
-      setLoading(false);
-    }
-  }
+    if (videoPaneRef?.current) setShowVideoCall(false);
+  }, [videoPaneRef]);
 
   async function handleAddNote() {
-    console.log('handleAddNote called with:', newNote);
-    if (!newNote.trim()) {
-      toast.error('Please enter a note');
-      return;
-    }
-
+    if (!newNote.trim()) return toast.error('Enter a note');
     setLoadingNote(true);
-    console.log('Calling sessionService.addNote...');
     try {
-      const response = await sessionService.addNote(sessionId, { text: newNote });
-      console.log('sessionService.addNote response:', response);
+      const res = await sessionService.addNote(sessionId, { text: newNote });
+      const created = res?.data?.data || res?.data || null;
+      // append to local sessionData to avoid full reload
+      if (created && created.id) {
+        setSessionData((prev) => ({ ...prev, notes: [created, ...(prev.notes || [])] }));
+      } else {
+        const temp = {
+          id: `temp-note-${Date.now()}`,
+          dataType: 'note',
+          content: { text: newNote },
+          addedBy: user || { name: 'You' },
+          addedAt: new Date().toISOString(),
+        };
+        setSessionData((prev) => ({ ...prev, notes: [temp, ...(prev.notes || [])] }));
+      }
       setNewNote('');
-      toast.success('Note added successfully');
-      // Data will be refreshed via socket event
-    } catch (error) {
-      console.error('Failed to add note:', error);
-      toast.error(error.response?.data?.message || 'Failed to add note');
-    } finally {
-      setLoadingNote(false);
-    }
+      toast.success('Note added');
+    } catch (e) {
+      toast.error('Failed to add note');
+    } finally { setLoadingNote(false); }
   }
 
   async function handleAddMedication() {
-    console.log('handleAddMedication called with:', newMedication);
-    if (!newMedication.name.trim() || !newMedication.dosage.trim()) {
-      toast.error('Please enter medication name and dosage');
-      return;
-    }
-
+    if (!newMedication.name || !newMedication.dosage) return toast.error('Enter medication');
     setLoadingMedication(true);
-    console.log('Calling sessionService.addMedication...');
     try {
-      const response = await sessionService.addMedication(sessionId, newMedication);
-      console.log('sessionService.addMedication response:', response);
+      const res = await sessionService.addMedication(sessionId, newMedication);
+      const created = res?.data?.data || res?.data || null;
+      if (created && created.id) {
+        setSessionData((prev) => ({ ...prev, medications: [created, ...(prev.medications || [])] }));
+      } else {
+        const temp = {
+          id: `temp-med-${Date.now()}`,
+          dataType: 'medication',
+          content: { ...newMedication },
+          addedBy: user || { name: 'You' },
+          addedAt: new Date().toISOString(),
+        };
+        setSessionData((prev) => ({ ...prev, medications: [temp, ...(prev.medications || [])] }));
+      }
       setNewMedication({ name: '', dosage: '', route: 'oral' });
-      toast.success('Medication added successfully');
-      // Data will be refreshed via socket event
-    } catch (error) {
-      console.error('Failed to add medication:', error);
-      toast.error(error.response?.data?.message || 'Failed to add medication');
-    } finally {
-      setLoadingMedication(false);
+      toast.success('Medication added');
+    } catch (e) { toast.error('Failed to add medication'); } finally { setLoadingMedication(false); }
+  }
+
+
+  async function handleDeleteData(id) {
+    if (!id) return;
+    try {
+      await sessionService.deleteData(sessionId, id);
+      setSessionData((prev) => ({
+        ...prev,
+        notes: (prev.notes || []).filter((i) => i.id !== id),
+        medications: (prev.medications || []).filter((i) => i.id !== id),
+        files: (prev.files || []).filter((i) => i.id !== id),
+      }));
+      toast.success('Deleted');
+    } catch (err) {
+      console.error('Failed to delete data', err);
+      toast.error('Failed to delete');
     }
   }
 
-  async function handleFileUpload(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Check file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be less than 10MB');
-      return;
-    }
-
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return toast.error('File too large');
     setUploadingFile(true);
     try {
-      await sessionService.uploadFile(sessionId, file);
-      toast.success('File uploaded successfully');
-      event.target.value = ''; // Reset file input
-      // Data will be refreshed via socket event
-    } catch (error) {
-      console.error('Failed to upload file:', error);
-      toast.error(error.response?.data?.message || 'Failed to upload file');
-    } finally {
-      setUploadingFile(false);
-    }
+      const res = await sessionService.uploadFile(sessionId, file);
+      const created = res?.data?.data || res?.data || null;
+      if (created && created.id) {
+        setSessionData((prev) => ({ ...prev, files: [created, ...(prev.files || [])] }));
+      } else {
+        const temp = {
+          id: `temp-file-${Date.now()}`,
+          dataType: 'file',
+          content: { filename: file.name, size: file.size },
+          addedBy: user || { name: 'You' },
+          addedAt: new Date().toISOString(),
+        };
+        setSessionData((prev) => ({ ...prev, files: [temp, ...(prev.files || [])] }));
+      }
+      toast.success('Uploaded');
+    } catch (e) {
+      console.error('Upload failed', e);
+      toast.error('Upload failed');
+    } finally { setUploadingFile(false); }
   }
 
-  async function handleDeleteData(dataId) {
-    // Find the data entry to show in modal
-    const allData = [...sessionData.notes, ...sessionData.medications, ...sessionData.files];
-    const dataEntry = allData.find(item => item.id === dataId);
-    if (dataEntry) {
-      setDeleteTarget(dataEntry);
-      setShowDeleteModal(true);
-    }
+  
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-text-secondary">Loading session details...</p>
+        </div>
+      </div>
+    );
   }
 
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-text mb-2">Session Not Found</h2>
+          <p className="text-text-secondary mb-4">The requested session could not be found.</p>
+          <Button onClick={() => navigate('/onboarding')}>Back to Sessions</Button>
+        </div>
+      </div>
+    );
+  }
 
-    try {
-      await sessionService.deleteData(sessionId, deleteTarget.id);
-      toast.success('Entry deleted successfully');
-      // Data will be refreshed via socket event
-    } catch (error) {
-      console.error('Failed to delete data:', error);
-      toast.error(error.response?.data?.message || 'Failed to delete entry');
-    } finally {
-      setShowDeleteModal(false);
-      setDeleteTarget(null);
-    }
-  };
+  return (
+    <div className="min-h-screen bg-background pb-28">
+      <div className="bg-background-card border-b border-border px-3 md:px-6 py-2 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Button variant="outline" size="sm" onClick={() => navigate('/onboarding')}>
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-sm md:text-base font-bold text-text">Ambulance Console</h1>
+            <p className="text-xs text-text-secondary hidden md:block">Live • {session.ambulance_code || session.ambulanceCode || 'Unknown'}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 rounded-lg bg-error/10 text-error text-xs font-medium flex items-center gap-1 md:gap-2">
+              <span className="w-2 h-2 rounded-full bg-error animate-pulse" />
+              <span className="hidden sm:inline">{session.ambulance_code || 'AMB-204'}</span>
+            </span>
+            <button onClick={() => setShowChat(true)} className="p-2 rounded-lg bg-primary hover:bg-primary-hover text-white transition-colors shadow-sm" title="Group Chat">
+              <MessageCircle className="w-4 h-4" />
+            </button>
+            <button onClick={() => { if (videoPaneRef?.current) { try { setShowVideoCall(false); } catch (e) {} try { videoPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} } else { setShowVideoCall(true); } }} className="p-2 rounded-lg bg-success hover:bg-green-700 text-white transition-colors shadow-sm" title="Video Call">
+              <Video className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-3 md:px-6 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+          <div className="lg:col-span-2 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0">
+              <CameraCard session={session} ambulance={ambulance} isActive={isActive} onCameraClick={() => setShowCameraModal(true)} onRefresh={fetchSessionDetails} />
+            </div>
+          </div>
+          <div ref={videoPaneRef} className="lg:col-span-2 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0">
+              <VideoCallCard sessionId={sessionId} session={session} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="min-h-0 flex flex-col md:col-span-1">
+            <div className="flex-1 min-h-0">
+              <NewVitalsCard vitals={{ heartRate: 98, bloodPressure: '120/78', spo2: 94, temp: 37.1 }} />
+            </div>
+          </div>
+
+          <div className="min-h-0 flex flex-col md:col-span-2">
+            <div className="flex-1 min-h-0">
+              <MedicalReportsCard isActive={isActive} user={user} sessionData={sessionData} loadingData={loadingData} newNote={newNote} setNewNote={setNewNote} newMedication={newMedication} setNewMedication={setNewMedication} loadingNote={loadingNote} loadingMedication={loadingMedication} uploadingFile={uploadingFile} handleAddNote={handleAddNote} handleAddMedication={handleAddMedication} handleFileUpload={handleFileUpload} handleDeleteData={handleDeleteData} handleDownloadFile={() => {}} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ControlsCard controls={controls} onToggleControl={toggleControl} horizontal />
+      <ChatPanel sessionId={sessionId} isOpen={showChat} onClose={() => setShowChat(false)} />
+      {(!videoPaneRef?.current) && (<VideoCallPanelJitsi sessionId={sessionId} isOpen={showVideoCall} onClose={() => setShowVideoCall(false)} session={session} />)}
+
+      <VehicleInfoModal isOpen={showVehicleInfo} onClose={() => setShowVehicleInfo(false)} session={session} ambulance={ambulance} />
+      <CameraFeedModal isOpen={showCameraModal} onClose={() => setShowCameraModal(false)} session={session} ambulance={ambulance} selectedCamera={selectedCamera} />
+      <GPSLocationModal isOpen={showGPSModal} onClose={() => setShowGPSModal(false)} session={session} ambulance={ambulance} />
+    </div>
+  );
 
   const handleCancelDelete = () => {
     setShowDeleteModal(false);
@@ -395,7 +477,7 @@ export default function OnboardingDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-8">
+    <div className="min-h-screen bg-background pb-28">
       {/* Header */}
       <div className="bg-background-card border-b border-border px-3 md:px-6 py-2 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3">
@@ -443,7 +525,16 @@ export default function OnboardingDetail() {
             </button>
             
             <button
-              onClick={() => setShowVideoCall(true)}
+              onClick={() => {
+                // Scroll to inline video pane if present, otherwise open modal
+                if (videoPaneRef?.current) {
+                  // ensure modal is closed so it doesn't overlay the inline pane
+                  try { setShowVideoCall(false); } catch (e) { /* noop */ }
+                  try { videoPaneRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* noop */ }
+                } else {
+                  setShowVideoCall(true);
+                }
+              }}
               className="p-2 rounded-lg bg-success hover:bg-green-700 text-white transition-colors shadow-sm"
               title="Video Call"
             >
@@ -464,12 +555,12 @@ export default function OnboardingDetail() {
       </div>
 
       {/* Grid Layout - Responsive */}
-      <div className="px-2 md:px-4 py-2 h-[calc(100vh-56px)] md:h-[calc(100vh-72px)] overflow-hidden">
-        <div className="grid grid-rows-1 lg:grid-rows-[50%_50%] gap-2 md:gap-3 h-full overflow-y-auto lg:overflow-hidden">
+      <div className="px-2 md:px-4 py-2">
+        <div className="grid grid-rows-1 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2 md:gap-3">
           {/* Top Row - Responsive: stacked on mobile, 4 cols on desktop */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 min-h-0">
             {/* Camera Feed - Takes 2 columns on large screens */}
-            <div className="sm:col-span-2 min-h-[300px] lg:min-h-0">
+            <div className="sm:col-span-2 pane-top">
               <CameraCard
                 session={session}
                 ambulance={ambulance}
@@ -481,26 +572,16 @@ export default function OnboardingDetail() {
               />
             </div>
             
-            {/* GPS Location */}
-            <div className="min-h-[200px] lg:min-h-0">
-              <DevicesCard 
-                sosAlerts={sosAlerts} 
-                type="location" 
-                ambulance={ambulance}
-                onOpenGPSModal={() => setShowGPSModal(true)}
-              />
-            </div>
-            
-            {/* SOS Alerts */}
-            <div className="min-h-[200px] lg:min-h-0">
-              <DevicesCard sosAlerts={sosAlerts} type="sos" />
+            {/* Video Call Pane (replaces GPS & SOS panes) */}
+            <div ref={videoPaneRef} className="sm:col-span-2 pane-top">
+              <VideoCallCard sessionId={sessionId} session={session} />
             </div>
           </div>
           
           {/* Bottom Row - Responsive: stacked on mobile, 3 cols on desktop */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 min-h-0">
             {/* Medical Reports */}
-            <div className="min-h-[300px] lg:min-h-0">
+            <div className="pane-bottom-med lg:min-h-0">
               <MedicalReportsCard
                 isActive={isActive}
                 user={user}
@@ -521,16 +602,10 @@ export default function OnboardingDetail() {
               />
             </div>
             
-            {/* Controls */}
-            <div className="min-h-[250px] lg:min-h-0">
-              <ControlsCard
-                controls={controls}
-                onToggleControl={toggleControl}
-              />
-            </div>
+            {/* Controls moved to fixed footer */}
             
             {/* Patient Vitals */}
-            <div className="min-h-[250px] lg:min-h-0">
+            <div className="pane-bottom-small lg:min-h-0">
               <NewVitalsCard vitals={vitals} />
             </div>
           </div>
@@ -539,12 +614,15 @@ export default function OnboardingDetail() {
 
       {/* Chat and Video Call Panels */}
       <ChatPanel sessionId={sessionId} isOpen={showChat} onClose={() => setShowChat(false)} />
-      <VideoCallPanelJitsi
-        sessionId={sessionId}
-        isOpen={showVideoCall}
-        onClose={() => setShowVideoCall(false)}
-        session={session}
-      />
+      {/* Only render the modal if the inline video pane is not present to avoid overlapping UIs */}
+      {(!videoPaneRef?.current) && (
+        <VideoCallPanelJitsi
+          sessionId={sessionId}
+          isOpen={showVideoCall}
+          onClose={() => setShowVideoCall(false)}
+          session={session}
+        />
+      )}
 
       {/* Vehicle Info Modal */}
       <VehicleInfoModal

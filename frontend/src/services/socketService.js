@@ -5,6 +5,7 @@ class SocketService {
     this.socket = null;
     this.connected = false;
     this.listeners = new Map();
+    this._joinedRooms = new Set();
   }
 
   connect(token) {
@@ -26,6 +27,15 @@ class SocketService {
     this.socket.on('connect', () => {
       console.log('✅ Socket connected:', this.socket.id);
       this.connected = true;
+      // Re-join any rooms we were tracking (useful after a reconnect)
+      try {
+        for (const sessionId of Array.from(this._joinedRooms)) {
+          this.socket.emit('join_session', { sessionId });
+          console.log(`Re-joining session room after reconnect: ${sessionId}`);
+        }
+      } catch (err) {
+        console.warn('Failed to rejoin rooms after socket connect', err);
+      }
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -49,14 +59,34 @@ class SocketService {
 
   // Join a session room for real-time updates
   joinSession(sessionId) {
-    if (!this.socket) return;
+    if (!sessionId) return;
+    // Track room locally and emit only if not already joined
+    if (this._joinedRooms.has(String(sessionId))) {
+      console.log(`Already joined session room: ${sessionId}`);
+      return;
+    }
+    this._joinedRooms.add(String(sessionId));
+    if (!this.socket) {
+      console.log(`Socket not ready; queued join for session: ${sessionId}`);
+      return;
+    }
     this.socket.emit('join_session', { sessionId });
     console.log(`Joining session room: ${sessionId}`);
   }
 
   // Leave a session room
   leaveSession(sessionId) {
-    if (!this.socket) return;
+    if (!sessionId) return;
+    // Only leave if we had previously joined
+    if (!this._joinedRooms.has(String(sessionId))) {
+      console.log(`Not a joined session (skip leave): ${sessionId}`);
+      return;
+    }
+    this._joinedRooms.delete(String(sessionId));
+    if (!this.socket) {
+      console.log(`Socket not ready; queued leave for session: ${sessionId}`);
+      return;
+    }
     this.socket.emit('leave_session', { sessionId });
     console.log(`Leaving session room: ${sessionId}`);
   }

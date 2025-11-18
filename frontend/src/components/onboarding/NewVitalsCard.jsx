@@ -38,7 +38,7 @@ export default function NewVitalsCard({ vitals }) {
   ];
 
   return (
-    <Card className="p-3 h-full flex flex-col overflow-hidden">
+    <Card className="p-3 h-[380px] flex flex-col overflow-hidden">
       <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
         <Activity className="w-4 h-4" /> Patient Vitals
       </h3>

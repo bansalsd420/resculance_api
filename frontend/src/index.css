@@ -19,6 +19,11 @@
     --color-warning: 251 146 60;
     --color-error: 239 68 68;
     --color-info: 59 130 246;
+    /* Layout pane heights (easily tunable) */
+    --pane-min-h-top: 380px; /* mobile / small */
+    --pane-min-h-top-lg: 460px; /* large screens */
+    --pane-min-h-bottom: 250px;
+    --pane-min-h-med: 300px;
   }
 
   .dark {
@@ -75,6 +80,8 @@
   .card {
     @apply rounded-2xl shadow-soft p-6 transition-all duration-200;
     background-color: rgb(var(--color-background-card));
+    /* Prevent children (iframes, absolute elements) from overflowing the card bounds */
+    overflow: hidden;
   }
   
   .card:hover {
@@ -208,6 +215,27 @@
   }
   .nice-scrollbar::-webkit-scrollbar-thumb:hover {
     filter: brightness(0.9);
+  }
+
+  /* Pane utility classes use CSS variables for easy tuning */
+  .pane-top {
+    min-height: var(--pane-min-h-top);
+  }
+
+  @media (min-width: 1024px) {
+    .pane-top { min-height: var(--pane-min-h-top-lg); }
+  }
+
+  .pane-bottom-med { min-height: var(--pane-min-h-med); }
+  .pane-bottom-small { min-height: var(--pane-min-h-bottom); }
+
+  /* Utility: hide scrollbar but keep scrolling functional */
+  .hidden-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .hidden-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
   }
 }
 

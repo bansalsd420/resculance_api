@@ -8,7 +8,7 @@ import { useToast } from '../hooks/useToast';
  * LiveCameraFeed Component
  * Displays 808GPS camera player from ambulance device API
  */
-export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
+export const LiveCameraFeed = ({ ambulance, session, onCameraClick, cameraIndex = 0 }) => {
   const [cameraUrl, setCameraUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -86,6 +86,20 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
     }
   };
 
+  // Normalize stream URL by removing any existing channel/chns params
+  const normalizeStreamUrl = (url) => {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      parsed.searchParams.delete('channel');
+      parsed.searchParams.delete('chns');
+      return parsed.toString();
+    } catch (e) {
+      // Fallback for non-absolute URLs or unexpected formats
+      return url.replace(/[?&](?:channel|chns)=[^&]*/g, '').replace(/\?&/, '?').replace(/[?&]$/, '');
+    }
+  };
+
   if (loading) {
     return (
       <div className="relative w-full aspect-video bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center">
@@ -143,16 +157,26 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
       </div>
 
       {/* Camera feed iframe - properly contained */}
-      <div className="absolute inset-0 w-full h-full">
-        <iframe
-          src={cameraUrl}
-          className="absolute inset-0 w-full h-full"
-          frameBorder="0"
-          allow="camera; microphone; autoplay; fullscreen"
-          title="808GPS Live Camera Feed"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-          style={{ border: 'none', objectFit: 'contain' }}
-        />
+      <div className="absolute inset-0 w-full h-full overflow-hidden">
+        {cameraUrl ? (
+          (() => {
+            const normalized = normalizeStreamUrl(cameraUrl);
+            const src = normalized ? `${normalized}${normalized.includes('?') ? '&' : '?'}channel=1&chns=${cameraIndex}` : '';
+            return (
+              <iframe
+                src={src}
+                className="absolute inset-0 w-full h-full"
+                frameBorder="0"
+                scrolling="no"
+                allow="camera; microphone; autoplay; fullscreen"
+                allowFullScreen
+                title={`808GPS Live Camera Feed ${cameraIndex}`}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
+              />
+            );
+          })()
+        ) : null}
       </div>
     </div>
   );

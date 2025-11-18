@@ -100,17 +100,68 @@ export default function OnboardingDetail() {
 
     // Listen for session data updates
     const handleSessionDataAdded = (data) => {
-      if (data.sessionId === sessionId) {
-        console.log('📝 Session data added:', data);
-        fetchSessionData(); // Refresh data
-        toast.success('New data added to session');
+      try {
+        if (!data) return;
+        const eventSessionId = data.sessionId || data.data?.sessionId || data.data?.session_id;
+        if (String(eventSessionId) !== String(sessionId)) return;
+        console.log('📝 Session data added (merging):', data);
+
+        const item = data.data || data;
+        const type = item.dataType || item.type || item.data_type;
+        const id = item.id || item.dataId || item._id || item.data?.id;
+
+        setSessionData((prev) => {
+          const notes = prev.notes || [];
+          const medications = prev.medications || [];
+          const files = prev.files || [];
+
+          if (!type) return prev;
+
+          if (type === 'note' || type === 'notes') {
+            if (notes.some(n => String(n.id) === String(id))) return prev;
+            const newNotes = [item, ...notes];
+            toast.success('New note added');
+            return { ...prev, notes: newNotes, counts: { ...(prev.counts || {}), notes: newNotes.length } };
+          }
+
+          if (type === 'medication' || type === 'medications') {
+            if (medications.some(m => String(m.id) === String(id))) return prev;
+            const newMeds = [item, ...medications];
+            toast.success('New medication added');
+            return { ...prev, medications: newMeds, counts: { ...(prev.counts || {}), medications: newMeds.length } };
+          }
+
+          if (type === 'file' || type === 'files') {
+            if (files.some(f => String(f.id) === String(id))) return prev;
+            const newFiles = [item, ...files];
+            toast.success('New file uploaded');
+            return { ...prev, files: newFiles, counts: { ...(prev.counts || {}), files: newFiles.length } };
+          }
+
+          return prev;
+        });
+      } catch (err) {
+        console.error('Error in handleSessionDataAdded merge:', err);
       }
     };
 
     const handleSessionDataDeleted = (data) => {
-      if (data.sessionId === sessionId) {
-        console.log('🗑️ Session data deleted:', data);
-        fetchSessionData(); // Refresh data
+      try {
+        if (!data) return;
+        const eventSessionId = data.sessionId || data.data?.sessionId || data.data?.session_id;
+        if (String(eventSessionId) !== String(sessionId)) return;
+        console.log('🗑️ Session data deleted (merging):', data);
+        const id = data.id || data.dataId || data.deletedId || data.data?.id;
+        if (!id) return;
+        setSessionData((prev) => {
+          const notes = (prev.notes || []).filter(i => String(i.id) !== String(id));
+          const medications = (prev.medications || []).filter(i => String(i.id) !== String(id));
+          const files = (prev.files || []).filter(i => String(i.id) !== String(id));
+          toast.success('Entry deleted');
+          return { ...prev, notes, medications, files, counts: { notes: notes.length, medications: medications.length, files: files.length } };
+        });
+      } catch (err) {
+        console.error('Error in handleSessionDataDeleted merge:', err);
       }
     };
 

@@ -7,6 +7,17 @@ import cameraService from '../../services/cameraService';
 import { useToast } from '../../hooks/useToast';
 
 export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prev || '';
+      };
+    }
+    return undefined;
+  }, [isOpen]);
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeCamera, setActiveCamera] = useState(null);
@@ -69,6 +80,19 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
       setDevices([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Normalize stream URL by removing any existing channel/chns params
+  const normalizeStreamUrl = (url) => {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      parsed.searchParams.delete('channel');
+      parsed.searchParams.delete('chns');
+      return parsed.toString();
+    } catch (e) {
+      return url.replace(/[?&](?:channel|chns)=[^&]*/g, '').replace(/\?&/, '?').replace(/[?&]$/, '');
     }
   };
 
@@ -177,7 +201,7 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-hidden"
+          className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -217,74 +241,140 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
                 <p className="text-lg font-medium">No cameras configured</p>
                 <p className="text-sm">Add camera devices to this ambulance to view live feeds</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {devices.slice(0, 4).map((device, index) => (
-                  <div
-                    key={device.id}
-                    className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-border"
-                  >
-                    {/* Camera Header */}
-                    <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <Camera className="w-4 h-4 text-primary" />
-                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {getCameraLabel(device, index)}
-                        </h4>
+              ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {devices.length === 1 && videoUrls[devices[0].id] ? (
+                  // Single camera device: expose 4 channel outputs (chns=0..3)
+                  Array.from({ length: 4 }).map((_, chIndex) => {
+                    const device = devices[0];
+                    const normalized = normalizeStreamUrl(videoUrls[device.id]);
+                    const src = normalized ? `${normalized}${normalized.includes('?') ? '&' : '?'}channel=1&chns=${chIndex}` : '';
+                    return (
+                      <div key={`${device.id}-${chIndex}`} className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-border flex flex-col">
+                        <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-border">
+                          <div className="flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-primary" />
+                            <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                              {getCameraLabel(device, chIndex)}
+                            </h4>
+                          </div>
+                          {getStatusIndicator(device.id)}
+                        </div>
+
+                        <div className="relative bg-slate-900 aspect-video overflow-hidden">
+                          {src ? (
+                            <iframe
+                              src={src}
+                              className="w-full h-full block"
+                              frameBorder="0"
+                              scrolling="no"
+                              allow="camera; microphone; autoplay; fullscreen"
+                              allowFullScreen
+                              title={getCameraLabel(device, chIndex)}
+                              style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
+                            />
+                          ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                              <WifiOff className="w-12 h-12 mb-3 text-gray-500" />
+                              <p className="text-sm">Channel Unavailable</p>
+                            </div>
+                          )}
+
+                          {src && (
+                            <button
+                              onClick={() => setActiveCamera(`${device.id}-${chIndex}`)}
+                              className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-lg transition-colors"
+                            >
+                              <Maximize2 className="w-4 h-4 text-white" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="p-3 bg-white dark:bg-slate-800 text-xs text-gray-600 dark:text-gray-400">
+                          <div className="flex items-center justify-between">
+                            <span>Device ID: {device.device_id}</span>
+                            {device.manufacturer && (
+                              <span>{device.manufacturer} {device.model}</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      {getStatusIndicator(device.id)}
-                    </div>
+                    );
+                  })
+                ) : (
+                  devices.slice(0, 4).map((device, index) => (
+                    <div key={device.id} className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-border flex flex-col">
+                      {/* Camera Header */}
+                      <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-primary" />
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {getCameraLabel(device, index)}
+                          </h4>
+                        </div>
+                        {getStatusIndicator(device.id)}
+                      </div>
 
-                    {/* Camera Feed */}
-                    <div className="relative bg-slate-900 aspect-video">
-                      {videoUrls[device.id] ? (
-                        <iframe
-                          src={videoUrls[device.id]}
-                          className="w-full h-full"
-                          frameBorder="0"
-                          allow="camera; microphone"
-                          title={getCameraLabel(device, index)}
-                        />
-                      ) : deviceStatus[device.id] === 'needs_auth' ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                          <AlertCircle className="w-12 h-12 mb-3 text-amber-500" />
-                          <p className="text-sm mb-3">Authentication Required</p>
-                          <Button
-                            size="sm"
-                            onClick={() => handleAuthenticateDevice(device)}
+                      {/* Camera Feed */}
+                      <div className="relative bg-slate-900 aspect-video overflow-hidden">
+                        {videoUrls[device.id] ? (
+                          (() => {
+                            const normalized = normalizeStreamUrl(videoUrls[device.id]);
+                            const src = normalized ? `${normalized}${normalized.includes('?') ? '&' : '?'}channel=1&chns=${index}` : '';
+                            return (
+                              <iframe
+                                src={src}
+                                className="w-full h-full block"
+                                frameBorder="0"
+                                scrolling="no"
+                                allow="camera; microphone; autoplay; fullscreen"
+                                allowFullScreen
+                                title={getCameraLabel(device, index)}
+                                style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
+                              />
+                            );
+                          })()
+                        ) : deviceStatus[device.id] === 'needs_auth' ? (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                            <AlertCircle className="w-12 h-12 mb-3 text-amber-500" />
+                            <p className="text-sm mb-3">Authentication Required</p>
+                            <Button
+                              size="sm"
+                              onClick={() => handleAuthenticateDevice(device)}
+                            >
+                              Authenticate Camera
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                            <WifiOff className="w-12 h-12 mb-3 text-gray-500" />
+                            <p className="text-sm">Camera Unavailable</p>
+                          </div>
+                        )}
+
+                        {/* Fullscreen Button */}
+                        {videoUrls[device.id] && (
+                          <button
+                            onClick={() => setActiveCamera(device.id)}
+                            className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-lg transition-colors"
                           >
-                            Authenticate Camera
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                          <WifiOff className="w-12 h-12 mb-3 text-gray-500" />
-                          <p className="text-sm">Camera Unavailable</p>
-                        </div>
-                      )}
-
-                      {/* Fullscreen Button */}
-                      {videoUrls[device.id] && (
-                        <button
-                          onClick={() => setActiveCamera(device.id)}
-                          className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-lg transition-colors"
-                        >
-                          <Maximize2 className="w-4 h-4 text-white" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Camera Info */}
-                    <div className="p-3 bg-white dark:bg-slate-800 text-xs text-gray-600 dark:text-gray-400">
-                      <div className="flex items-center justify-between">
-                        <span>Device ID: {device.device_id}</span>
-                        {device.manufacturer && (
-                          <span>{device.manufacturer} {device.model}</span>
+                            <Maximize2 className="w-4 h-4 text-white" />
+                          </button>
                         )}
                       </div>
+
+                      {/* Camera Info */}
+                      <div className="p-3 bg-white dark:bg-slate-800 text-xs text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center justify-between">
+                          <span>Device ID: {device.device_id}</span>
+                          {device.manufacturer && (
+                            <span>{device.manufacturer} {device.model}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>

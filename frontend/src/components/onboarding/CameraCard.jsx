@@ -1,6 +1,7 @@
 import { Camera, RefreshCw, Maximize2 } from 'lucide-react';
 import { Card } from '../ui/Card';
 import LiveCameraFeed from '../LiveCameraFeed';
+import { useState } from 'react';
 
 export default function CameraCard({
   session,
@@ -9,6 +10,7 @@ export default function CameraCard({
   onCameraClick,
   onRefresh,
 }) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const handleCameraClick = () => {
     if (onCameraClick) {
       onCameraClick();
@@ -16,7 +18,7 @@ export default function CameraCard({
   };
 
   return (
-    <Card className="p-3 h-full flex flex-col overflow-hidden">
+    <Card className="p-3 h-full flex flex-col">
       <div className="flex items-center justify-between mb-2 flex-shrink-0">
         <h3 className="text-sm font-semibold text-text flex items-center gap-2">
           <Camera className="w-4 h-4" /> Live Camera Feed
@@ -45,11 +47,16 @@ export default function CameraCard({
         onClick={handleCameraClick}
       >
         {isActive && session && ambulance ? (
-          <LiveCameraFeed 
-            ambulance={ambulance}
-            session={session}
-            onCameraClick={handleCameraClick}
-          />
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full max-h-full">
+              <LiveCameraFeed 
+                ambulance={ambulance}
+                session={session}
+                onCameraClick={handleCameraClick}
+                cameraIndex={selectedIndex}
+              />
+            </div>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <div className="text-center">
@@ -61,10 +68,17 @@ export default function CameraCard({
       </div>
 
       {/* Click hint */}
-      <div className="mt-2 flex-shrink-0">
-        <p className="text-xs text-center text-text-secondary">
-          Click to view all camera feeds
-        </p>
+      <div className="mt-2 flex-shrink-0 flex items-center justify-center gap-2">
+        {[0,1,2,3].map((i) => (
+          <button
+            key={i}
+            onClick={() => setSelectedIndex(i)}
+            className={`px-3 py-1 rounded-md text-sm border ${selectedIndex===i ? 'bg-primary text-white border-primary' : 'bg-white dark:bg-gray-100 text-text-secondary'}`}
+            title={`Show camera ${i+1}`}
+          >
+            {i+1}
+          </button>
+        ))}
       </div>
     </Card>
   );
