@@ -248,6 +248,17 @@ class SocketService {
     this.socket.on('location_update', callback);
   }
 
+  // Session ended event
+  onSessionEnded(callback) {
+    if (!this.socket) return;
+    this.socket.on('session_ended', callback);
+  }
+
+  offSessionEnded(callback) {
+    if (!this.socket) return;
+    this.socket.off('session_ended', callback);
+  }
+
   // Notifications
   onNotification(callback) {
     if (!this.socket) return;

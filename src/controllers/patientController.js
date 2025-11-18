@@ -642,6 +642,13 @@ class PatientController {
       if (io) {
         io.to(`ambulance_${session.ambulance_id}`).emit('patient_offboarded', { sessionId });
         io.to(`session_${sessionId}`).emit('session_offboarded', { sessionId });
+        // Notify all users viewing this session to redirect to onboarding page
+        io.to(`session_${sessionId}`).emit('session_ended', { 
+          sessionId, 
+          status: 'offboarded',
+          message: 'This session has been ended',
+          timestamp: new Date().toISOString()
+        });
       }
 
       res.json({

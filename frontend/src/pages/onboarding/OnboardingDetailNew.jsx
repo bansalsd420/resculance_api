@@ -197,10 +197,24 @@ export default function OnboardingDetail() {
       }
     };
 
+    const handleSessionEnded = (data) => {
+      console.log('🛑 Session ended event received:', data);
+      // Check if this event is for the current session
+      if (String(data.sessionId) === String(sessionId) || data.sessionId === parseInt(sessionId)) {
+        console.log('✅ This session has been ended. Redirecting to onboarding page...');
+        toast.info(data.message || 'This session has been ended');
+        // Small delay to allow user to see the message before redirect
+        setTimeout(() => {
+          navigate('/onboarding');
+        }, 1500);
+      }
+    };
+
     console.log('🎧 Setting up socket listeners for session:', sessionId);
     socketService.on('session_data_added', handleSessionDataAdded);
     socketService.on('session_data_deleted', handleSessionDataDeleted);
     socketService.on('session_status_update', handleSessionStatusUpdate);
+    socketService.onSessionEnded(handleSessionEnded);
 
     return () => {
       console.log('🎧 Cleaning up socket listeners for session:', sessionId);
@@ -208,6 +222,7 @@ export default function OnboardingDetail() {
       socketService.off('session_data_added', handleSessionDataAdded);
       socketService.off('session_data_deleted', handleSessionDataDeleted);
       socketService.off('session_status_update', handleSessionStatusUpdate);
+      socketService.offSessionEnded(handleSessionEnded);
     };
   }, [sessionId, fetchSessionData]);
 
