@@ -7,72 +7,92 @@ import cameraService from '../../services/cameraService';
 import { useToast } from '../../hooks/useToast';
 
 export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
-  const [devices, setDevices] = useState([]);
+  const [device, setDevice] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [activeCamera, setActiveCamera] = useState(null);
-  const [videoUrls, setVideoUrls] = useState({});
-  const [deviceStatus, setDeviceStatus] = useState({});
+  const [baseUrl, setBaseUrl] = useState('');
+  const [deviceStatus, setDeviceStatus] = useState('loading');
   const { toast } = useToast();
+
+  // Camera channel configuration (0-3 for 4 cameras)
+  const channels = [0, 1, 2, 3];
+  const channelLabels = [
+    'Patient Bay Camera',
+    'Driver View Camera', 
+    'Equipment Monitor',
+    'External View'
+  ];
 
   useEffect(() => {
     if (isOpen && ambulance?.id) {
-      fetchDevices();
+      fetchDevice();
     }
   }, [isOpen, ambulance]);
 
-  const fetchDevices = async () => {
+  // Lock body scrolling while modal is open so page doesn't scroll instead
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
+  const fetchDevice = async () => {
     try {
       setLoading(true);
       const response = await ambulanceService.getDevices(ambulance.id);
       const devicesList = response.data?.data || response.data || [];
       
-      // Filter for camera devices
-      const cameraDevices = devicesList.filter(
+      // Get the first active camera device
+      const cameraDevice = devicesList.find(
         (device) => device.device_type === 'CAMERA' && device.status === 'active'
       );
       
-      setDevices(cameraDevices);
-      
-      // Generate video URLs using new 808GPS authentication flow
-      const urls = {};
-      const statuses = {};
-      
-      for (const device of cameraDevices) {
-        try {
-          // Check if device has required credentials
-          if (!device.device_id || !device.device_username || !device.device_password) {
-            statuses[device.id] = 'not_configured';
-            continue;
-          }
-
-          // Get authenticated stream URL using camera service
-          const streamUrl = await cameraService.getCameraStreamUrl({
-            id: device.id, // Database ID
-            deviceId: device.device_id,
-            username: device.device_username,
-            password: device.device_password,
-          });
-
-          urls[device.id] = streamUrl;
-          statuses[device.id] = 'connected';
-        } catch (error) {
-          console.error(`Failed to get stream for device ${device.id}:`, error);
-          statuses[device.id] = 'auth_failed';
-        }
+      if (!cameraDevice) {
+        setDeviceStatus('no_device');
+        return;
       }
+
+      setDevice(cameraDevice);
       
-      setVideoUrls(urls);
-      setDeviceStatus(statuses);
+      // Check if device has required credentials
+      if (!cameraDevice.device_id || !cameraDevice.device_username || !cameraDevice.device_password) {
+        setDeviceStatus('not_configured');
+        return;
+      }
+
+      // Get authenticated base stream URL using camera service
+      const streamUrl = await cameraService.getCameraStreamUrl({
+        id: cameraDevice.id,
+        deviceId: cameraDevice.device_id,
+        username: cameraDevice.device_username,
+        password: cameraDevice.device_password,
+      });
+
+      setBaseUrl(streamUrl);
+      setDeviceStatus('connected');
     } catch (error) {
-      console.error('Failed to fetch devices:', error);
+      console.error('Failed to fetch camera device:', error);
       toast.error('Failed to load camera feeds');
-      setDevices([]);
+      setDeviceStatus('auth_failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAuthenticateDevice = async (device) => {
+  const buildChannelUrl = (baseUrl, channelIndex) => {
+    if (!baseUrl) return '';
+    
+    // Add channel query parameters
+    // channel=1 means single-output mode, chns=N selects which camera (0-3)
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${separator}channel=1&chns=${channelIndex}`;
+  };
+
+  const handleAuthenticateDevice = async () => {
+    if (!device) return;
+    
     try {
       if (!device.device_id || !device.device_username || !device.device_password) {
         toast.error('Device credentials not configured');
@@ -81,49 +101,24 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
 
       // Get authenticated stream URL using camera service
       const streamUrl = await cameraService.getCameraStreamUrl({
-        id: device.id, // Database ID
+        id: device.id,
         deviceId: device.device_id,
         username: device.device_username,
         password: device.device_password,
       });
 
-      setVideoUrls({
-        ...videoUrls,
-        [device.id]: streamUrl,
-      });
-      setDeviceStatus({
-        ...deviceStatus,
-        [device.id]: 'connected',
-      });
+      setBaseUrl(streamUrl);
+      setDeviceStatus('connected');
       toast.success('Camera authenticated successfully');
     } catch (error) {
       console.error('Failed to authenticate device:', error);
       toast.error('Failed to authenticate camera');
-      setDeviceStatus({
-        ...deviceStatus,
-        [device.id]: 'auth_failed',
-      });
+      setDeviceStatus('auth_failed');
     }
   };
 
-  const getCameraLabel = (device, index) => {
-    if (device.device_name) return device.device_name;
-    
-    // Default camera names based on index
-    const defaultNames = [
-      'Patient Bay Camera',
-      'Driver View Camera',
-      'Equipment Monitor',
-      'External View',
-    ];
-    
-    return defaultNames[index] || `Camera ${index + 1}`;
-  };
-
-  const getStatusIndicator = (deviceId) => {
-    const status = deviceStatus[deviceId];
-    
-    switch (status) {
+  const getStatusIndicator = () => {
+    switch (deviceStatus) {
       case 'connected':
         return (
           <div className="flex items-center gap-2">
@@ -132,12 +127,6 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
           </div>
         );
       case 'needs_auth':
-        return (
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-500" />
-            <span className="text-xs text-amber-600">Auth Required</span>
-          </div>
-        );
       case 'auth_failed':
         return (
           <div className="flex items-center gap-2">
@@ -150,6 +139,13 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
           <div className="flex items-center gap-2">
             <WifiOff className="w-4 h-4 text-red-500" />
             <span className="text-xs text-red-600">Not Configured</span>
+          </div>
+        );
+      case 'no_device':
+        return (
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-gray-500" />
+            <span className="text-xs text-gray-600">No Camera</span>
           </div>
         );
       default:
@@ -206,12 +202,12 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
           </div>
 
           {/* Camera Grid */}
-          <div className="p-6">
+          <div className="p-6 max-h-[75vh] overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center h-96">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
               </div>
-            ) : devices.length === 0 ? (
+            ) : deviceStatus === 'no_device' ? (
               <div className="flex flex-col items-center justify-center h-96 text-gray-500">
                 <Camera className="w-16 h-16 mb-4 opacity-50" />
                 <p className="text-lg font-medium">No cameras configured</p>
@@ -219,72 +215,68 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
-                {devices.slice(0, 4).map((device, index) => (
-                  <div
-                    key={device.id}
-                    className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-border"
-                  >
-                    {/* Camera Header */}
-                    <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-border">
-                      <div className="flex items-center gap-2">
-                        <Camera className="w-4 h-4 text-primary" />
-                        <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                          {getCameraLabel(device, index)}
-                        </h4>
+                {channels.map((channelIndex) => {
+                  const channelUrl = buildChannelUrl(baseUrl, channelIndex);
+                  
+                  return (
+                    <div
+                      key={channelIndex}
+                      className="bg-slate-50 dark:bg-slate-900 rounded-xl overflow-hidden border border-border"
+                    >
+                      {/* Camera Header */}
+                      <div className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border-b border-border">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4 text-primary" />
+                          <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {channelLabels[channelIndex]}
+                          </h4>
+                        </div>
+                        {getStatusIndicator()}
                       </div>
-                      {getStatusIndicator(device.id)}
-                    </div>
 
-                    {/* Camera Feed */}
-                    <div className="relative bg-slate-900 aspect-video">
-                      {videoUrls[device.id] ? (
-                        <iframe
-                          src={videoUrls[device.id]}
-                          className="w-full h-full"
-                          frameBorder="0"
-                          allow="camera; microphone"
-                          title={getCameraLabel(device, index)}
-                        />
-                      ) : deviceStatus[device.id] === 'needs_auth' ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                          <AlertCircle className="w-12 h-12 mb-3 text-amber-500" />
-                          <p className="text-sm mb-3">Authentication Required</p>
-                          <Button
-                            size="sm"
-                            onClick={() => handleAuthenticateDevice(device)}
-                          >
-                            Authenticate Camera
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                          <WifiOff className="w-12 h-12 mb-3 text-gray-500" />
-                          <p className="text-sm">Camera Unavailable</p>
-                        </div>
-                      )}
-
-                      {/* Fullscreen Button */}
-                      {videoUrls[device.id] && (
-                        <button
-                          onClick={() => setActiveCamera(device.id)}
-                          className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/70 rounded-lg transition-colors"
-                        >
-                          <Maximize2 className="w-4 h-4 text-white" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Camera Info */}
-                    <div className="p-3 bg-white dark:bg-slate-800 text-xs text-gray-600 dark:text-gray-400">
-                      <div className="flex items-center justify-between">
-                        <span>Device ID: {device.device_id}</span>
-                        {device.manufacturer && (
-                          <span>{device.manufacturer} {device.model}</span>
+                      {/* Camera Feed */}
+                      <div className="relative bg-slate-900 aspect-video">
+                        {deviceStatus === 'connected' && channelUrl ? (
+                          <iframe
+                            src={channelUrl}
+                            className="w-full h-full"
+                            frameBorder="0"
+                            scrolling="no"
+                            allow="camera; microphone"
+                            title={channelLabels[channelIndex]}
+                            style={{ objectFit: 'contain' }}
+                          />
+                        ) : deviceStatus === 'needs_auth' || deviceStatus === 'auth_failed' ? (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                            <AlertCircle className="w-12 h-12 mb-3 text-amber-500" />
+                            <p className="text-sm mb-3">Authentication Required</p>
+                            <Button
+                              size="sm"
+                              onClick={handleAuthenticateDevice}
+                            >
+                              Authenticate Camera
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                            <WifiOff className="w-12 h-12 mb-3 text-gray-500" />
+                            <p className="text-sm">Camera Unavailable</p>
+                          </div>
                         )}
                       </div>
+
+                      {/* Camera Info */}
+                      <div className="p-3 bg-white dark:bg-slate-800 text-xs text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center justify-between">
+                          <span>Channel: {channelIndex}</span>
+                          {device && (
+                            <span>Device ID: {device.device_id}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -295,7 +287,7 @@ export const CameraFeedModal = ({ isOpen, onClose, session, ambulance }) => {
               Recording: <span className="font-medium text-gray-900 dark:text-white">Active</span>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={fetchDevices}>
+              <Button variant="outline" onClick={fetchDevice}>
                 Refresh Feeds
               </Button>
               <Button variant="outline" onClick={onClose}>

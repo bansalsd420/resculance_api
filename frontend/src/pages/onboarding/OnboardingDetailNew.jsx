@@ -10,7 +10,12 @@ import {  ArrowLeft,
   Paperclip,
   Power,
   Info,
-  MapPin
+  MapPin,
+  Mic,
+  MicOff,
+  VideoOff,
+  Share2,
+  PhoneOff
 } from 'lucide-react';
 
 import { Button } from '../../components/ui/Button';
@@ -49,6 +54,11 @@ export default function OnboardingDetail() {
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [showInlineVideo, setShowInlineVideo] = useState(false);
   const [showVehicleInfo, setShowVehicleInfo] = useState(false);
+  
+  // Video call control states
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  
   const [controls, setControls] = useState({
     mainPower: false,
     emergencyLights: false,
@@ -85,6 +95,10 @@ export default function OnboardingDetail() {
   const inlineJitsiApiRef = useRef(null);
   const [inlineJitsiJoined, setInlineJitsiJoined] = useState(false);
   const [inlineJitsiLoading, setInlineJitsiLoading] = useState(false);
+
+  const footerVisible = !(
+    showCameraModal || showGPSModal || showChat || showVideoCall || showVehicleInfo || showDeleteModal || showOffboardModal || showInlineVideo
+  );
 
   // Define fetchSessionData with useCallback before using it in effects
   const fetchSessionData = useCallback(async () => {
@@ -501,12 +515,12 @@ export default function OnboardingDetail() {
       </div>
 
       {/* Grid Layout - Responsive */}
-      <div className="px-2 md:px-4 py-2 h-[calc(100vh-56px)] md:h-[calc(100vh-72px)] overflow-auto">
-        <div className="grid grid-rows-1 lg:grid-rows-[50%_50%] gap-2 md:gap-3 h-full overflow-y-auto lg:overflow-hidden">
+      <div className="px-2 md:px-4 py-2 overflow-auto">
+        <div className="grid grid-rows-auto gap-3 md:gap-4">
           {/* Top Row - Responsive: stacked on mobile, 4 cols on desktop */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 min-h-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             {/* Camera Feed - Takes 2 columns on large screens */}
-            <div className="sm:col-span-2 h-[380px] lg:min-h-0">
+            <div className="sm:col-span-2">
               <CameraCard
                 session={session}
                 ambulance={ambulance}
@@ -519,41 +533,47 @@ export default function OnboardingDetail() {
             </div>
             
             {/* Video Call Panel (replaces GPS + SOS) */}
-            <div className="sm:col-span-2 h-[380px] lg:min-h-0">
-              <div className="h-full bg-white dark:bg-slate-800 rounded-lg border border-border p-3 flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between mb-2">
+            <div className="sm:col-span-2">
+              <div className="bg-white dark:bg-slate-800 rounded-lg border border-border overflow-hidden flex flex-col h-full">
+                {/* Header */}
+                <div className="flex items-center justify-between p-3 border-b border-border bg-white dark:bg-slate-800">
                   <h3 className="text-sm font-semibold text-text flex items-center gap-2">
                     <Video className="w-4 h-4" /> Video Call
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowVideoCall(true)}
-                      className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
-                    >
-                      Open Modal
-                    </button>
+                  <div className="flex items-center gap-2 text-xs text-secondary">
+                    <span>Room: {generateRoomName(sessionId)}</span>
+                    <span>•</span>
+                    <span>Participants: 0</span>
                   </div>
+                  <button
+                    onClick={() => setShowVideoCall(true)}
+                    className="px-2 py-1 text-xs rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600"
+                  >
+                    Not connected
+                  </button>
                 </div>
 
-                <div className="flex-1 bg-gray-50 dark:bg-slate-900 rounded-md p-3 flex flex-col">
+                {/* Video Container */}
+                <div className="flex-1 bg-slate-900 dark:bg-slate-950 relative min-h-[300px]">
                   {!showInlineVideo ? (
-                    <div className="flex-1 flex flex-col items-center justify-center">
-                      <p className="text-sm text-secondary mb-3">Room: {generateRoomName(sessionId)}</p>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
+                      <p className="text-white text-lg font-semibold mb-2">Room: {generateRoomName(sessionId)}</p>
+                      <p className="text-gray-400 text-sm mb-1">Participants: 0</p>
                       <button
                         onClick={() => setShowInlineVideo(true)}
-                        className="px-4 py-2 bg-primary text-white rounded-md"
+                        className="mt-4 px-6 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-md font-medium"
                       >
                         Join Meeting
                       </button>
-                      <p className="text-xs text-secondary mt-2">The meeting will only start when you click Join.</p>
+                      <p className="text-xs text-gray-400 mt-3">The meeting will only start when you click Join.</p>
                     </div>
                   ) : (
-                    <div className="flex-1 relative">
+                    <div className="absolute inset-0 w-full h-full">
                       {inlineJitsiLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/70">
+                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-slate-900/70">
                           <div className="text-center">
-                            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                            <p className="text-sm text-secondary">Connecting...</p>
+                            <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                            <p className="text-sm text-white">Connecting...</p>
                           </div>
                         </div>
                       )}
@@ -572,32 +592,97 @@ export default function OnboardingDetail() {
                         getIFrameRef={(iframeRef) => {
                           iframeRef.style.width = '100%';
                           iframeRef.style.height = '100%';
+                          iframeRef.style.border = 'none';
                         }}
                       />
-
-                      <div className="absolute top-2 right-2 flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            if (inlineJitsiApiRef.current) inlineJitsiApiRef.current.executeCommand('hangup');
-                            setShowInlineVideo(false);
-                            setInlineJitsiJoined(false);
-                          }}
-                          className="px-3 py-1 bg-red-500 text-white rounded-md text-sm"
-                        >
-                          Leave
-                        </button>
-                      </div>
                     </div>
                   )}
+                </div>
+
+                {/* Control Buttons - ALWAYS visible at bottom */}
+                <div className="flex items-center justify-center gap-2 p-3 bg-white dark:bg-slate-800 border-t border-border">
+                  <button
+                    onClick={() => {
+                      if (inlineJitsiApiRef.current) {
+                        inlineJitsiApiRef.current.executeCommand('toggleAudio');
+                        setIsMuted(!isMuted);
+                      }
+                    }}
+                    disabled={!showInlineVideo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={isMuted ? "Unmute" : "Mute"}
+                  >
+                    {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    <span>Mute</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (inlineJitsiApiRef.current) {
+                        inlineJitsiApiRef.current.executeCommand('toggleVideo');
+                        setIsVideoOff(!isVideoOff);
+                      }
+                    }}
+                    disabled={!showInlineVideo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Turn Off Video"
+                  >
+                    <VideoOff className="w-3.5 h-3.5" />
+                    <span>Turn Off</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (inlineJitsiApiRef.current) {
+                        inlineJitsiApiRef.current.executeCommand('toggleShareScreen');
+                      }
+                    }}
+                    disabled={!showInlineVideo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Share Screen"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Share</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => setShowChat(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
+                    title="Open Chat"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Chat</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (inlineJitsiApiRef.current) inlineJitsiApiRef.current.executeCommand('hangup');
+                      setShowInlineVideo(false);
+                      setInlineJitsiJoined(false);
+                      setIsMuted(false);
+                      setIsVideoOff(false);
+                    }}
+                    disabled={!showInlineVideo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Leave Meeting"
+                  >
+                    <PhoneOff className="w-3.5 h-3.5" />
+                    <span>Leave</span>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
           
           {/* Bottom Row - Responsive: stacked on mobile, 3 cols on desktop */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3 min-h-0">
-            {/* Medical Reports */}
-            <div className="min-h-[300px] lg:min-h-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+            {/* Patient Vitals - Leftmost */}
+            <div>
+              <NewVitalsCard vitals={vitals} />
+            </div>
+            
+            {/* Medical Reports - Stretched to right (2 columns) */}
+            <div className="md:col-span-2">
               <MedicalReportsCard
                 isActive={isActive}
                 user={user}
@@ -616,16 +701,6 @@ export default function OnboardingDetail() {
                 handleDeleteData={handleDeleteData}
                 handleDownloadFile={handleDownloadFile}
               />
-            </div>
-            
-            {/* Controls: moved to fixed footer below */}
-            <div className="min-h-[250px] lg:min-h-0">
-              <div className="h-full flex items-center justify-center text-sm text-secondary">Ambulance controls moved to footer</div>
-            </div>
-            
-            {/* Patient Vitals */}
-            <div className="min-h-[250px] lg:min-h-0">
-              <NewVitalsCard vitals={vitals} />
             </div>
           </div>
         </div>
@@ -778,13 +853,15 @@ export default function OnboardingDetail() {
       />
 
       {/* Fixed footer with Ambulance Controls (moved out of grid) */}
-      <div className="fixed left-0 right-0 bottom-4 z-40 px-4 pointer-events-none">
-        <div className="max-w-7xl mx-auto pointer-events-auto">
-          <div className="flex items-center justify-center">
-            <ControlsFooterBar controls={controls} onToggleControl={toggleControl} />
+      {footerVisible && (
+        <div className="fixed left-0 right-0 bottom-4 z-40 px-4 pointer-events-none">
+          <div className="max-w-7xl mx-auto pointer-events-auto">
+            <div className="flex items-center justify-center">
+              <ControlsFooterBar controls={controls} onToggleControl={toggleControl} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
