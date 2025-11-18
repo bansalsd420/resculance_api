@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {  ArrowLeft,
@@ -17,6 +17,8 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import ChatPanel from '../../components/ChatPanel';
 import VideoCallPanelJitsi from '../../components/VideoCallPanelJitsi';
+import { JitsiMeeting } from '@jitsi/react-sdk';
+import { JITSI_CONFIG, generateRoomName } from '../../config/jitsiConfig';
 import { patientService, ambulanceService, sessionService } from '../../services';
 import socketService from '../../services/socketService';
 import { useToast } from '../../hooks/useToast';
@@ -28,6 +30,7 @@ import NewVitalsCard from '../../components/onboarding/NewVitalsCard';
 import MedicalReportsCard from '../../components/onboarding/MedicalReportsCard';
 import DevicesCard from '../../components/onboarding/DevicesCard';
 import ControlsCard from '../../components/onboarding/ControlsCard';
+import ControlsFooterBar from '../../components/onboarding/ControlsFooterBar';
 import VehicleInfoModal from '../../components/onboarding/VehicleInfoModal';
 
 export default function OnboardingDetail() {
@@ -44,6 +47,7 @@ export default function OnboardingDetail() {
   const [showGPSModal, setShowGPSModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [showInlineVideo, setShowInlineVideo] = useState(false);
   const [showVehicleInfo, setShowVehicleInfo] = useState(false);
   const [controls, setControls] = useState({
     mainPower: false,
@@ -77,6 +81,10 @@ export default function OnboardingDetail() {
   ]);
 
   const isActive = ['active', 'onboarded', 'in_transit'].includes((session?.status || '').toLowerCase());
+
+  const inlineJitsiApiRef = useRef(null);
+  const [inlineJitsiJoined, setInlineJitsiJoined] = useState(false);
+  const [inlineJitsiLoading, setInlineJitsiLoading] = useState(false);
 
   // Define fetchSessionData with useCallback before using it in effects
   const fetchSessionData = useCallback(async () => {
@@ -133,6 +141,20 @@ export default function OnboardingDetail() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, token]);
+
+  // cleanup for inline jitsi
+  useEffect(() => {
+    return () => {
+      if (inlineJitsiApiRef.current) {
+        try {
+          inlineJitsiApiRef.current.dispose();
+        } catch (e) {
+          console.warn('Error disposing Jitsi API', e);
+        }
+        inlineJitsiApiRef.current = null;
+      }
+    };
+  }, []);
 
   // Listen for session data updates (no longer listen for video calls - video room model)
   useEffect(() => {
@@ -395,7 +417,7 @@ export default function OnboardingDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-8">
+    <div className="min-h-screen bg-background pb-24">
       {/* Header */}
       <div className="bg-background-card border-b border-border px-3 md:px-6 py-2 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2 md:gap-3">
@@ -464,12 +486,12 @@ export default function OnboardingDetail() {
       </div>
 
       {/* Grid Layout - Responsive */}
-      <div className="px-2 md:px-4 py-2 h-[calc(100vh-56px)] md:h-[calc(100vh-72px)] overflow-hidden">
+      <div className="px-2 md:px-4 py-2 h-[calc(100vh-56px)] md:h-[calc(100vh-72px)] overflow-auto">
         <div className="grid grid-rows-1 lg:grid-rows-[50%_50%] gap-2 md:gap-3 h-full overflow-y-auto lg:overflow-hidden">
           {/* Top Row - Responsive: stacked on mobile, 4 cols on desktop */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 min-h-0">
             {/* Camera Feed - Takes 2 columns on large screens */}
-            <div className="sm:col-span-2 min-h-[300px] lg:min-h-0">
+            <div className="sm:col-span-2 h-[380px] lg:min-h-0">
               <CameraCard
                 session={session}
                 ambulance={ambulance}
@@ -481,19 +503,79 @@ export default function OnboardingDetail() {
               />
             </div>
             
-            {/* GPS Location */}
-            <div className="min-h-[200px] lg:min-h-0">
-              <DevicesCard 
-                sosAlerts={sosAlerts} 
-                type="location" 
-                ambulance={ambulance}
-                onOpenGPSModal={() => setShowGPSModal(true)}
-              />
-            </div>
-            
-            {/* SOS Alerts */}
-            <div className="min-h-[200px] lg:min-h-0">
-              <DevicesCard sosAlerts={sosAlerts} type="sos" />
+            {/* Video Call Panel (replaces GPS + SOS) */}
+            <div className="sm:col-span-2 h-[380px] lg:min-h-0">
+              <div className="h-full bg-white dark:bg-slate-800 rounded-lg border border-border p-3 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+                    <Video className="w-4 h-4" /> Video Call
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowVideoCall(true)}
+                      className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
+                    >
+                      Open Modal
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 bg-gray-50 dark:bg-slate-900 rounded-md p-3 flex flex-col">
+                  {!showInlineVideo ? (
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                      <p className="text-sm text-secondary mb-3">Room: {generateRoomName(sessionId)}</p>
+                      <button
+                        onClick={() => setShowInlineVideo(true)}
+                        className="px-4 py-2 bg-primary text-white rounded-md"
+                      >
+                        Join Meeting
+                      </button>
+                      <p className="text-xs text-secondary mt-2">The meeting will only start when you click Join.</p>
+                    </div>
+                  ) : (
+                    <div className="flex-1 relative">
+                      {inlineJitsiLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/70">
+                          <div className="text-center">
+                            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                            <p className="text-sm text-secondary">Connecting...</p>
+                          </div>
+                        </div>
+                      )}
+                      <JitsiMeeting
+                        roomName={generateRoomName(sessionId)}
+                        displayName={(user && `${user.firstName || ''} ${user.lastName || ''}`) || 'User'}
+                        onApiReady={(api) => {
+                          console.log('Inline Jitsi API ready');
+                          inlineJitsiApiRef.current = api;
+                          setInlineJitsiLoading(false);
+                          api.addEventListener('videoConferenceJoined', () => setInlineJitsiJoined(true));
+                          api.addEventListener('videoConferenceLeft', () => setInlineJitsiJoined(false));
+                        }}
+                        configOverwrite={JITSI_CONFIG.defaultConfig}
+                        interfaceConfigOverwrite={JITSI_CONFIG.interfaceConfig}
+                        getIFrameRef={(iframeRef) => {
+                          iframeRef.style.width = '100%';
+                          iframeRef.style.height = '100%';
+                        }}
+                      />
+
+                      <div className="absolute top-2 right-2 flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (inlineJitsiApiRef.current) inlineJitsiApiRef.current.executeCommand('hangup');
+                            setShowInlineVideo(false);
+                            setInlineJitsiJoined(false);
+                          }}
+                          className="px-3 py-1 bg-red-500 text-white rounded-md text-sm"
+                        >
+                          Leave
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           
@@ -521,12 +603,9 @@ export default function OnboardingDetail() {
               />
             </div>
             
-            {/* Controls */}
+            {/* Controls: moved to fixed footer below */}
             <div className="min-h-[250px] lg:min-h-0">
-              <ControlsCard
-                controls={controls}
-                onToggleControl={toggleControl}
-              />
+              <div className="h-full flex items-center justify-center text-sm text-secondary">Ambulance controls moved to footer</div>
             </div>
             
             {/* Patient Vitals */}
@@ -682,6 +761,15 @@ export default function OnboardingDetail() {
         session={session}
         ambulance={ambulance}
       />
+
+      {/* Fixed footer with Ambulance Controls (moved out of grid) */}
+      <div className="fixed left-0 right-0 bottom-4 z-40 px-4 pointer-events-none">
+        <div className="max-w-7xl mx-auto pointer-events-auto">
+          <div className="flex items-center justify-center">
+            <ControlsFooterBar controls={controls} onToggleControl={toggleControl} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

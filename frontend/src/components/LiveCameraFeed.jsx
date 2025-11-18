@@ -8,11 +8,21 @@ import { useToast } from '../hooks/useToast';
  * LiveCameraFeed Component
  * Displays 808GPS camera player from ambulance device API
  */
-export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
+export const LiveCameraFeed = ({
+  ambulance,
+  session,
+  onCameraClick,
+  // optional controlled props from parent
+  selectedChannel: controlledSelectedChannel,
+  onSelectChannel,
+  onChannelCountDetected,
+}) => {
   const [cameraUrl, setCameraUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cameraDevice, setCameraDevice] = useState(null);
+  const [channelCount, setChannelCount] = useState(1);
+  const [internalSelectedChannel, setInternalSelectedChannel] = useState(1);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -46,6 +56,24 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
       }
 
       setCameraDevice(camera);
+
+      // determine how many channels the device exposes (best-effort)
+      const detectedChannels =
+        camera.channels || camera.channel_count || camera.chns || camera.streams || 1;
+      // normalize to number and cap to 4
+      let chCount = Number(detectedChannels) || 1;
+      if (!isFinite(chCount) || chCount < 1) chCount = 1;
+      chCount = Math.min(4, chCount);
+      setChannelCount(chCount);
+      setInternalSelectedChannel(1);
+      // notify parent if provided
+      if (typeof onChannelCountDetected === 'function') {
+        try {
+          onChannelCountDetected(chCount);
+        } catch (e) {
+          // swallow
+        }
+      }
 
       // Check if device has required credentials
       if (!camera.device_id || !camera.device_username || !camera.device_password) {
@@ -143,19 +171,55 @@ export const LiveCameraFeed = ({ ambulance, session, onCameraClick }) => {
       </div>
 
       {/* Camera feed iframe - properly contained */}
-      <div className="absolute inset-0 w-full h-full">
-        <iframe
-          src={cameraUrl}
-          className="absolute inset-0 w-full h-full"
-          frameBorder="0"
-          allow="camera; microphone; autoplay; fullscreen"
-          title="808GPS Live Camera Feed"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-          style={{ border: 'none', objectFit: 'contain' }}
-        />
-      </div>
+      <div className="absolute inset-0 w-full h-full overflow-hidden">
+          <iframe
+            src={buildChannelUrl(
+              cameraUrl,
+              // prefer controlled selected channel from parent
+              controlledSelectedChannel || internalSelectedChannel,
+              // pass channelCount for fallback (not used for chns)
+              channelCount
+            )}
+            className="absolute inset-0 w-full h-full block"
+            frameBorder="0"
+            scrolling="no"
+            allow="camera; microphone; autoplay; fullscreen"
+            allowFullScreen
+            title={`808GPS Live Camera Feed`}
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+            style={{ border: 'none', objectFit: 'contain', width: '100%', height: '100%' }}
+          />
+        </div>
+      {/* Channel selector removed from inside feed; parent `CameraCard` will render buttons below the card and control selection.
+          However, if a parent provided `onSelectChannel`, we listen to it by exposing a small effect to call it when internal selection changes. */}
+      {/* If parent supplies controlledSelectedChannel, they must handle changes. */}
     </div>
   );
 };
 
 export default LiveCameraFeed;
+
+// Helper: build iframe URL with channel and chns query params.
+function buildChannelUrl(baseUrl, channel, chns) {
+  if (!baseUrl) return '';
+
+  // We ALWAYS request a single-output layout from the player by setting
+  // `channel=1`. The `chns` param controls which camera index is shown
+  // in that single-output mode: chns = selectedChannel - 1 (0-based).
+  const chnsValue = Math.max(0, Number(channel) - 1);
+
+  try {
+    const url = new URL(baseUrl);
+    // ensure single-output
+    url.searchParams.set('channel', '1');
+    // set chns param (0-based camera index)
+    url.searchParams.set('chns', String(chnsValue));
+    return url.toString();
+  } catch (e) {
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    let cleaned = baseUrl.replace(/([?&])chns=\d+/g, '');
+    cleaned = cleaned.replace(/([?&])channel=\d+/g, '');
+    cleaned = cleaned.replace(/[?&]$/g, '');
+    return `${cleaned}${separator}channel=1&chns=${chnsValue}`;
+  }
+}

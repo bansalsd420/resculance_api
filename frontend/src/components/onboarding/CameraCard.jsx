@@ -1,4 +1,5 @@
 import { Camera, RefreshCw, Maximize2 } from 'lucide-react';
+import { useState } from 'react';
 import { Card } from '../ui/Card';
 import LiveCameraFeed from '../LiveCameraFeed';
 
@@ -9,6 +10,9 @@ export default function CameraCard({
   onCameraClick,
   onRefresh,
 }) {
+  const [selectedChannel, setSelectedChannel] = useState(1);
+  const [detectedChannelCount, setDetectedChannelCount] = useState(1);
+
   const handleCameraClick = () => {
     if (onCameraClick) {
       onCameraClick();
@@ -49,6 +53,8 @@ export default function CameraCard({
             ambulance={ambulance}
             session={session}
             onCameraClick={handleCameraClick}
+            selectedChannel={selectedChannel}
+            onChannelCountDetected={(c) => setDetectedChannelCount(c)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -60,11 +66,30 @@ export default function CameraCard({
         )}
       </div>
 
-      {/* Click hint */}
-      <div className="mt-2 flex-shrink-0">
-        <p className="text-xs text-center text-text-secondary">
-          Click to view all camera feeds
-        </p>
+      {/* Channel buttons below the feed — match visual layout from screenshot. */}
+      <div className="mt-2 flex items-center justify-center gap-2">
+        {Array.from({ length: 4 }).map((_, i) => {
+          const num = i + 1;
+          const active = num === selectedChannel;
+          return (
+            <button
+              key={num}
+              onClick={(e) => {
+                e.stopPropagation();
+                // always allow switching channels (user requested buttons active)
+                setSelectedChannel(num);
+              }}
+              className={`px-3 py-1 rounded-md text-sm font-medium transition ${
+                active
+                  ? 'bg-primary text-white shadow'
+                  : 'bg-white dark:bg-slate-800 text-gray-800 dark:text-white border border-border hover:bg-gray-50'
+              }`}
+              title={`View channel ${num}`}
+            >
+              {num}
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
