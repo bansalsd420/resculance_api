@@ -113,7 +113,7 @@ export default function MedicalReportsCard({
               </div>
             ) : (
               <div className="space-y-2">
-                {sessionData.notes.map((note) => (
+                {sessionData.notes.slice().reverse().map((note) => (
                   <div 
                     key={note.id}
                     className="p-3 bg-white dark:bg-gray-800 rounded border-l-2 border-blue-500"
@@ -212,7 +212,7 @@ export default function MedicalReportsCard({
               </div>
             ) : (
               <div className="space-y-2">
-                {sessionData.medications.map((med) => (
+                {sessionData.medications.slice().reverse().map((med) => (
                   <div 
                     key={med.id}
                     className="p-3 bg-white dark:bg-gray-800 rounded border-l-2 border-green-500"
@@ -296,7 +296,7 @@ export default function MedicalReportsCard({
               </div>
             ) : (
               <div className="space-y-2">
-                {sessionData.files.map((file) => (
+                {sessionData.files.slice().reverse().map((file) => (
                   <div 
                     key={file.id}
                     className="p-3 bg-white dark:bg-gray-800 rounded border-l-2 border-purple-500"
